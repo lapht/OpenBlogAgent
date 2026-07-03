@@ -5,7 +5,8 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "@openblog/core": "workspace:*", "@openblog/types": "workspace:*"
+    "@openblog/core": "file:../core",
+    "@openblog/types": "file:../types"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

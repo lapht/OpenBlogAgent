@@ -10,6 +10,7 @@
     "packages/*"
   ],
   "scripts": {
+    "build:article": "npm run build --workspace @openblog/types --workspace @openblog/core --workspace @openblog/logger --workspace @openblog/providers --workspace @openblog/graph --workspace @openblog/cli",
     "build": "npm run build --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",
     "dev": "npm run dev --workspace @openblog/server",
@@ -17,6 +18,7 @@
     "format": "prettier --check .",
     "format:write": "prettier --write .",
     "prepare": "husky",
+    "start": "npm run build:article && node apps/cli/dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "npm run typecheck --workspaces --if-present"
@@ -30,6 +32,7 @@
     ]
   },
   "devDependencies": {
+    "@langchain/langgraph": "^0.2.39",
     "@commitlint/cli": "^19.4.0",
     "@commitlint/config-conventional": "^19.4.0",
     "@types/node": "^22.5.4",
@@ -42,6 +45,7 @@
     "prettier": "^3.3.3",
     "rimraf": "^6.0.1",
     "typescript": "^5.6.2",
-    "vitest": "^2.0.5"
+    "vitest": "^2.0.5",
+    "zod": "^3.23.8"
   }
 }

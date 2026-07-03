@@ -1,5 +1,7 @@
 import type { Identifier } from "@openblog/types";
 
+export * from "./workflows/article-generation-workflow";
+
 export interface WorkflowState {
   values: Record<string, unknown>;
 }

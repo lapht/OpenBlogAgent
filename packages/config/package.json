@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "@openblog/types": "workspace:*",
+    "@openblog/types": "file:../types",
     "dotenv": "^16.4.5",
     "zod": "^3.23.8"
   },

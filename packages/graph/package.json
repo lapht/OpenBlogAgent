@@ -5,7 +5,12 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "@openblog/core": "workspace:*", "@openblog/types": "workspace:*"
+    "@langchain/langgraph": "^0.2.39",
+    "@openblog/core": "file:../core",
+    "@openblog/logger": "file:../logger",
+    "@openblog/providers": "file:../providers",
+    "@openblog/types": "file:../types",
+    "zod": "^3.23.8"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

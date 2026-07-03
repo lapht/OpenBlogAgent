@@ -4,9 +4,15 @@
   "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "dependencies": {
+    "@openblog/graph": "file:../../packages/graph",
+    "@openblog/logger": "file:../../packages/logger",
+    "@openblog/providers": "file:../../packages/providers"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rimraf dist",
+    "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   }
 }
