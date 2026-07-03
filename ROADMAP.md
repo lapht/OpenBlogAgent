@@ -6,7 +6,7 @@ Build a robust, open and extensible platform for automated blog operations.
 
 ## Phase 1 - Foundation (Completed)
 
-- [x] TypeScript monorepo with pnpm workspace
+- [x] TypeScript monorepo with npm workspaces
 - [x] Core contracts package
 - [x] Dependency injection bootstrap (`tsyringe`)
 - [x] Fastify API skeleton (`/health`, `/version`)

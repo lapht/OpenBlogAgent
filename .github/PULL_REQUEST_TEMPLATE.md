@@ -4,7 +4,7 @@ Describe the problem and the implemented solution.
 
 ## Checklist
 
-- [ ] I ran `pnpm lint`
-- [ ] I ran `pnpm test`
-- [ ] I ran `pnpm build`
+- [ ] I ran `npm run lint`
+- [ ] I ran `npm run test`
+- [ ] I ran `npm run build`
 - [ ] I updated docs if required

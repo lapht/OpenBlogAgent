@@ -4,18 +4,22 @@
   "private": true,
   "description": "OpenBlogAgent monorepo foundations",
   "license": "MIT",
-  "packageManager": "pnpm@9.12.2",
+  "packageManager": "npm@10.9.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "build": "pnpm -r --filter ./packages/* --filter ./apps/* run build",
-    "clean": "pnpm -r run clean",
-    "dev": "pnpm --filter @openblog/server dev",
+    "build": "npm run build --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present",
+    "dev": "npm run dev --workspace @openblog/server",
     "lint": "eslint . --ext .ts",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
     "prepare": "husky",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "pnpm -r --filter ./packages/* --filter ./apps/* run typecheck"
+    "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "lint-staged": {
     "*.{ts,tsx,js,json,md,yml,yaml}": [

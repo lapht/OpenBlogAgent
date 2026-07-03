@@ -2,10 +2,10 @@
 
 ## Commands
 
-- `pnpm install`
-- `pnpm lint`
-- `pnpm build`
-- `pnpm test`
+- `npm install`
+- `npm run lint`
+- `npm run build`
+- `npm run test`
 
 ## Local API
 
@@ -14,4 +14,4 @@ The server app exposes:
 - `GET /health`
 - `GET /version`
 
-Run locally with `pnpm dev`.
+Run locally with `npm run dev`.

@@ -48,9 +48,9 @@ examples/
 
 1. Install dependencies:
 
-	```bash
-	pnpm install
-	```
+  ```bash
+  npm install
+  ```
 
 2. Configure environment:
 
@@ -60,22 +60,22 @@ examples/
 
 3. Run quality checks:
 
-	```bash
-	pnpm lint
-	pnpm test
-	pnpm build
-	```
+  ```bash
+  npm run lint
+  npm run test
+  npm run build
+  ```
 
 4. Run local server:
 
-	```bash
-	pnpm dev
-	```
+  ```bash
+  npm run dev
+  ```
 
 ## Tooling
 
 - Node.js LTS + TypeScript
-- pnpm Workspace
+- npm Workspaces
 - Fastify
 - Zod + dotenv
 - Pino

@@ -17,5 +17,5 @@ labels: bug
 ## Environment
 
 - Node.js:
-- pnpm:
+- npm:
 - OS:
