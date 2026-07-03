@@ -1,0 +1,15 @@
+{
+  "name": "@openblog/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "dependencies": {
+    "@openblog/agents": "workspace:*", "@openblog/config": "workspace:*", "@openblog/core": "workspace:*", "@openblog/graph": "workspace:*", "@openblog/logger": "workspace:*", "@openblog/providers": "workspace:*", "@openblog/publishers": "workspace:*", "@openblog/shared": "workspace:*", "@openblog/storage": "workspace:*", "@openblog/tools": "workspace:*", "@openblog/types": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rimraf dist",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

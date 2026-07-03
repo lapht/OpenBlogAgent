@@ -1,121 +1,48 @@
-# OpenBlogAgent -- Roadmap
+# OpenBlogAgent Roadmap
 
-## Obiettivo
+## Vision
 
-Realizzare un sistema di agenti AI che generi, ottimizzi e pubblichi
-automaticamente articoli per un blog.
+Build a robust, open and extensible platform for automated blog operations.
 
-## Fase 1 -- Fondamenta
+## Phase 1 - Foundation (Completed)
 
--   [ ] Repository GitHub
--   [ ] Licenza MIT
--   [ ] TypeScript + Node.js
--   [ ] Docker
--   [ ] Configurazione `.env`
--   [ ] Logging
--   [ ] SQLite
+- [x] TypeScript monorepo with pnpm workspace
+- [x] Core contracts package
+- [x] Dependency injection bootstrap (`tsyringe`)
+- [x] Fastify API skeleton (`/health`, `/version`)
+- [x] Environment configuration (`dotenv` + `zod`)
+- [x] Pino logger facade
+- [x] CI workflow (lint, build, test)
+- [x] Code quality baseline (ESLint, Prettier, Husky, Commitlint)
+- [x] Docker baseline
+- [x] Open-source governance docs
 
-## Fase 2 -- Core
+## Phase 2 - Runtime Contracts
 
--   [ ] LangGraph.js
--   [ ] Orchestratore
--   [ ] Sistema memoria
--   [ ] Adapter LLM
--   [ ] Adapter OpenRouter
--   [ ] Adapter Ollama
+- [ ] Expand provider contracts (OpenRouter, Ollama)
+- [ ] Expand graph runtime contracts and execution abstractions
+- [ ] Finalize plugin contract surface in SDK
 
-## Fase 3 -- Agenti
+## Phase 3 - Infrastructure Adapters
 
--   [ ] Scheduler
--   [ ] Trend Researcher
--   [ ] Keyword Researcher
--   [ ] Content Planner
--   [ ] Writer
--   [ ] Fact Checker
--   [ ] Editor
--   [ ] SEO Optimizer
--   [ ] Image Generator
--   [ ] Image Optimizer
--   [ ] Internal Linker
--   [ ] Tag & Category Manager
--   [ ] Publisher
--   [ ] Social Writer
--   [ ] Analytics Agent
--   [ ] Memory Agent
+- [ ] Storage adapters (database, cache, memory)
+- [ ] Publisher adapters (WordPress, Ghost, Markdown)
+- [ ] Tool adapters and capability registration model
 
-## Fase 4 -- Storage
+## Phase 4 - Orchestration
 
--   [ ] Articoli
--   [ ] Memoria
--   [ ] Cronologia prompt
--   [ ] Cache
+- [ ] Workflow assembly model
+- [ ] Agent role composition model
+- [ ] Execution lifecycle and observability contracts
 
-## Fase 5 -- Publishing
+## Phase 5 - Product Surface
 
--   [ ] WordPress
--   [ ] Ghost
--   [ ] Markdown
--   [ ] API REST
+- [ ] Dashboard implementation
+- [ ] CLI implementation
+- [ ] Plugin developer examples
 
-## Fase 6 -- Dashboard
+## Phase 6 - Production Readiness
 
--   [ ] Stato workflow
--   [ ] Costi token
--   [ ] Cron
--   [ ] Log
--   [ ] Retry
--   [ ] Human Approval
-
-## Fase 7 -- Qualità
-
--   [ ] SEO score
--   [ ] Duplicate detection
--   [ ] Link checker
--   [ ] JSON-LD
--   [ ] FAQ
--   [ ] A/B Titoli
-
-## Fase 8 -- Extra
-
--   [ ] Plugin system
--   [ ] MCP
--   [ ] Multi-lingua
--   [ ] RSS Import
--   [ ] Newsletter
--   [ ] Podcast script
--   [ ] RAG sugli articoli
--   [ ] Test automatici
--   [ ] CI/CD GitHub Actions
-
-## Struttura
-
-    src/
-      agents/
-      graph/
-      providers/
-      storage/
-      publishers/
-      tools/
-      prompts/
-      config/
-      api/
-      dashboard/
-
-## MVP
-
-1.  Ricerca argomento
-2.  Piano articolo
-3.  Scrittura
-4.  SEO
-5.  Immagine
-6.  Pubblicazione Markdown
-7.  Pubblicazione WordPress
-
-## Versione 1.0
-
--   Plugin
--   Dashboard
--   MCP
--   RAG
--   Analytics
--   Multi-provider
+- [ ] Release automation
+- [ ] Versioning policy and package publishing
+- [ ] Security hardening and SLO monitoring
