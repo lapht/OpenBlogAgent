@@ -14,13 +14,16 @@ The current milestone is intentionally narrow: one real end-to-end workflow that
 
 ## Current Scope
 
-This repository currently implements only this flow:
+This repository currently implements this flow:
 
 ```text
 INPUT (topic)
 -> PLANNER (outline)
 -> WRITER (markdown article)
--> OUTPUT (output/article.md)
+-> EDITOR (improved text)
+-> SEO AGENT (metadata)
+-> MARKDOWN ASSEMBLER (final file)
+-> OUTPUT (output/{slug}.md)
 ```
 
 Included in this phase:
@@ -31,6 +34,9 @@ Included in this phase:
 - Ollama fallback provider
 - Zod validation for workflow state and planner output
 - Pino logging
+- Editor Agent for text improvement
+- SEO Agent for metadata generation
+- Markdown Assembler for final output
 
 Not included in this phase:
 
@@ -185,7 +191,7 @@ npm start "How local LLMs change technical writing workflows"
 
 ## Output
 
-The workflow produces two outputs:
+The workflow produces:
 
 1. A returned in-memory result:
 
@@ -193,21 +199,47 @@ The workflow produces two outputs:
    {
      topic: string;
      article: string;
+     editedText: string;
+     seoOutput: {
+       title: string;
+       metaDescription: string;
+       slug: string;
+       h1: string;
+       headings: Array<{ level: "H2" | "H3"; text: string }>;
+     };
    }
    ```
 
 2. A saved file:
 
    ```text
-   output/article.md
+   output/{slug}.md
    ```
 
-The generated article is expected to include:
+The file includes YAML frontmatter:
 
-- a strong H1 title
-- coherent H2 sections
-- readable technical prose
-- a practical conclusion
+```yaml
+---
+title: "{seo.title}"
+description: "{seo.metaDescription}"
+slug: "{seo.slug}"
+date: "{ISO date}"
+---
+```
+
+## Generate Script
+
+Use the `generate` script for a complete end-to-end test:
+
+```bash
+npm run generate -- "AI agents in software development"
+```
+
+This command:
+
+1. Builds all required packages
+2. Runs the full workflow (Planner → Writer → Editor → SEO → Assembler)
+3. Prints the output file path
 
 ## Logging
 

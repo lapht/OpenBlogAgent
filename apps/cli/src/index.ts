@@ -1,9 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-
 import dotenv from "dotenv";
 
 import { createArticleGenerationWorkflow } from "@openblog/graph";
+import { createMarkdownAssembler } from "@openblog/tools";
 import { logger } from "@openblog/logger";
 import {
   createDefaultTextGenerationProvider,
@@ -44,16 +42,6 @@ function resolveTopic(): string {
   throw new Error('Missing article topic. Example: npm start "AI agents in software development"');
 }
 
-async function saveArticle(article: string): Promise<string> {
-  const outputDirectory = path.resolve(process.cwd(), "output");
-  const outputFilePath = path.join(outputDirectory, "article.md");
-
-  await mkdir(outputDirectory, { recursive: true });
-  await writeFile(outputFilePath, article, "utf8");
-
-  return outputFilePath;
-}
-
 async function main(): Promise<void> {
   const topic = resolveTopic();
 
@@ -81,17 +69,30 @@ async function main(): Promise<void> {
     provider
   });
 
-  const result = await workflow.run({
-    article: "",
-    outline: [],
-    topic
-  });
+  try {
+    const result = await workflow.run({
+      article: "",
+      outline: [],
+      topic
+    });
 
-  const outputFilePath = await saveArticle(result.article);
-  logger.info("Article saved", {
-    outputFilePath,
-    topic: result.topic
-  });
+    const assembler = createMarkdownAssembler();
+    const { filePath } = await assembler.assemble({
+      editedText: result.editedText,
+      seoOutput: result.seoOutput
+    });
+
+    logger.info("Article saved", {
+      outputFilePath: filePath,
+      topic: result.topic,
+      slug: result.seoOutput.slug
+    });
+  } catch (error) {
+    logger.error("Article generation failed", {
+      error: error instanceof Error ? error.message : String(error)
+    });
+    process.exit(1);
+  }
 }
 
 main().catch((error: unknown) => {

@@ -14,6 +14,7 @@
     "build": "npm run build --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",
     "dev": "npm run dev --workspace @openblog/server",
+    "generate": "npm run build:article && node apps/cli/dist/index.js",
     "lint": "eslint . --ext .ts",
     "format": "prettier --check .",
     "format:write": "prettier --write .",

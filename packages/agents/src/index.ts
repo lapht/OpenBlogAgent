@@ -6,3 +6,7 @@ export * as publisher from "./publisher";
 export * as planner from "./planner";
 export * as analytics from "./analytics";
 export * as memory from "./memory";
+
+// Re-export agent factories for convenience
+export { createEditorAgent, type EditorAgent, type EditorAgentInput, type EditorOutput, editorOutputSchema } from "./editor/agent";
+export { createSeoAgent, type SeoAgent, type SeoAgentInput, type SeoOutput, seoOutputSchema } from "./seo/agent";

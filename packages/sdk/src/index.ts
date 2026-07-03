@@ -2,7 +2,7 @@ export * from "@openblog/agents";
 export * from "@openblog/config";
 export * from "@openblog/core";
 export * from "@openblog/graph";
-export * from "@openblog/logger";
+export { logger, type ILogger } from "@openblog/logger";
 export * from "@openblog/providers";
 export * from "@openblog/publishers";
 export * from "@openblog/shared";

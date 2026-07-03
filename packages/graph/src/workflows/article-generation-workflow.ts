@@ -1,5 +1,6 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import type { ILogger } from "@openblog/logger";
+import { createEditorAgent, type SeoOutput, createSeoAgent } from "@openblog/agents";
 import type { TextGenerationProvider } from "@openblog/providers";
 import { z } from "zod";
 
@@ -9,6 +10,8 @@ export const plannerOutlineSchema = z.array(z.string().min(1)).min(3);
 
 export const articleWorkflowStateSchema = z.object({
   article: z.string(),
+  editedText: z.string().optional(),
+  seoOutput: z.custom<SeoOutput>().optional(),
   outline: z.array(z.string()),
   topic: z.string().min(1)
 });
@@ -17,6 +20,8 @@ export type ArticleWorkflowState = z.infer<typeof articleWorkflowStateSchema>;
 
 export interface ArticleWorkflowResult {
   article: string;
+  editedText: string;
+  seoOutput: SeoOutput;
   topic: string;
 }
 
@@ -33,6 +38,14 @@ export interface CreateArticleGenerationWorkflowOptions {
 const graphState = Annotation.Root({
   article: Annotation<string>({
     default: () => "",
+    reducer: (_, update) => update
+  }),
+  editedText: Annotation<string>({
+    default: () => "",
+    reducer: (_, update) => update
+  }),
+  seoOutput: Annotation<unknown>({
+    default: () => ({}),
     reducer: (_, update) => update
   }),
   outline: Annotation<string[]>({
@@ -91,6 +104,9 @@ export function createArticleGenerationWorkflow(
 ): ArticleGenerationWorkflow {
   const { logger, provider } = options;
 
+  const editorAgent = createEditorAgent(provider);
+  const seoAgent = createSeoAgent(provider);
+
   const workflow = new StateGraph(graphState)
     .addNode("planner", async (state: ArticleWorkflowState) => {
       const parsedState = articleWorkflowStateSchema.parse(state);
@@ -127,9 +143,36 @@ export function createArticleGenerationWorkflow(
 
       return { article };
     })
+    .addNode("editor", async (state: ArticleWorkflowState) => {
+      const parsedState = articleWorkflowStateSchema.parse(state);
+      const editorOutput = await editorAgent.run({ rawText: parsedState.article });
+
+      logger.info("Editor output ready", {
+        changesSummary: editorOutput.changesSummary,
+        topic: parsedState.topic
+      });
+
+      return { editedText: editorOutput.editedText };
+    })
+    .addNode("seo", async (state: ArticleWorkflowState) => {
+      const parsedState = articleWorkflowStateSchema.parse(state);
+      const seoOutput = await seoAgent.run({
+        outline: parsedState.outline,
+        articleText: parsedState.editedText || parsedState.article
+      });
+
+      logger.info("SEO output ready", {
+        slug: seoOutput.slug,
+        topic: parsedState.topic
+      });
+
+      return { seoOutput };
+    })
     .addEdge(START, "planner")
     .addEdge("planner", "writer")
-    .addEdge("writer", END)
+    .addEdge("writer", "editor")
+    .addEdge("editor", "seo")
+    .addEdge("seo", END)
     .compile();
 
   return {
@@ -141,7 +184,9 @@ export function createArticleGenerationWorkflow(
         workflow: ARTICLE_GENERATION_WORKFLOW_NAME
       });
 
-      const finalState = articleWorkflowStateSchema.parse(await workflow.invoke(initialState));
+      const finalState = articleWorkflowStateSchema.parse(
+        await workflow.invoke(initialState)
+      );
 
       logger.info("Article workflow completed", {
         articleLength: finalState.article.length,
@@ -151,6 +196,8 @@ export function createArticleGenerationWorkflow(
 
       return {
         article: finalState.article,
+        editedText: finalState.editedText || finalState.article,
+        seoOutput: finalState.seoOutput as SeoOutput,
         topic: finalState.topic
       };
     }
