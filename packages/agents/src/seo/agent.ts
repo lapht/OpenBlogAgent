@@ -47,7 +47,12 @@ function buildSeoPrompt(input: SeoAgentInput): string {
     input.articleText,
     "",
     "Return valid JSON only with this exact structure:",
-    JSON.stringify(seoOutputSchema.shape, null, 2)
+    JSON.stringify(seoOutputSchema.shape, null, 2),
+    "",
+    "Important:",
+    "- headings must be an array of objects like {\"level\": \"H2\", \"text\": \"Section title\"}",
+    "- title must be at most 60 characters",
+    "- metaDescription must be at most 155 characters"
   ].join("\n");
 }
 
@@ -62,6 +67,45 @@ function parseSeoOutput(raw: string): SeoOutput {
     throw new Error("SEO agent did not return valid JSON");
   }
 
-  const parsed = JSON.parse(candidate.slice(startIndex, endIndex + 1));
-  return seoOutputSchema.parse(parsed);
+  const parsed = JSON.parse(candidate.slice(startIndex, endIndex + 1)) as Record<string, unknown>;
+  const normalized: Record<string, unknown> = {
+    ...parsed,
+    title: typeof parsed.title === "string" ? parsed.title.trim().slice(0, 60) : "",
+    metaDescription:
+      typeof parsed.metaDescription === "string"
+        ? parsed.metaDescription.trim().slice(0, 155)
+        : "",
+    slug: typeof parsed.slug === "string" ? parsed.slug.trim() : "",
+    h1: typeof parsed.h1 === "string" ? parsed.h1.trim() : "",
+    headings: normalizeHeadings(parsed.headings)
+  };
+
+  return seoOutputSchema.parse(normalized);
+}
+
+function normalizeHeadings(value: unknown): Array<{ level: "H2" | "H3"; text: string }> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((heading) => {
+    if (typeof heading === "string") {
+      const text = heading.trim();
+      return text ? [{ level: "H2" as const, text }] : [];
+    }
+
+    if (heading && typeof heading === "object") {
+      const candidate = heading as Record<string, unknown>;
+      const text = typeof candidate.text === "string" ? candidate.text.trim() : "";
+      const level = typeof candidate.level === "string" ? candidate.level.toUpperCase() : "H2";
+
+      if (!text) {
+        return [];
+      }
+
+      return [{ level: level === "H3" ? "H3" : "H2", text }];
+    }
+
+    return [];
+  });
 }

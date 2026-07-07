@@ -2,7 +2,7 @@
 
 OpenBlogAgent is a TypeScript monorepo for AI-assisted article generation.
 
-The current milestone is intentionally narrow: one real end-to-end workflow that takes a topic, generates an outline, writes a Markdown article, and saves it locally.
+The current milestone is intentionally narrow: one real end-to-end workflow that takes a topic, generates an outline, writes a Markdown article, and publishes it through a modular publishing engine.
 
 ## Goals
 
@@ -11,6 +11,7 @@ The current milestone is intentionally narrow: one real end-to-end workflow that
 - OpenRouter as primary provider
 - Ollama as optional fallback
 - Markdown article output that is easy to inspect locally
+- Modular publishing engine with pluggable publishers
 
 ## Current Scope
 
@@ -37,11 +38,12 @@ Included in this phase:
 - Editor Agent for text improvement
 - SEO Agent for metadata generation
 - Markdown Assembler for final output
+- Publishing engine with Markdown, WordPress, and Ghost publishers
 
 Not included in this phase:
 
 - dashboard
-- publisher integrations
+- publisher integrations beyond the current modular scaffold
 - database
 - memory system
 - plugin system
@@ -135,6 +137,27 @@ Notes:
 - `OLLAMA_BASE_URL` defaults to `http://127.0.0.1:11434`.
 - `OLLAMA_MODEL` defaults to `llama3.1`.
 
+Example publishing settings for WordPress (dummy values only):
+
+```bash
+OPENBLOG_DEFAULT_PUBLISHER=wordpress
+OPENBLOG_OUTPUT_DIR=output/articles
+OPENBLOG_WORDPRESS_ENDPOINT=https://example.com/wp-json/wp/v2/posts
+OPENBLOG_WORDPRESS_USERNAME=demo_user
+OPENBLOG_WORDPRESS_PASSWORD=dummy_password
+OPENBLOG_WORDPRESS_APPLICATION_PASSWORD=dummy_app_password
+OPENBLOG_WORDPRESS_STATUS=draft
+```
+
+The same pattern works for Ghost with:
+
+```bash
+OPENBLOG_DEFAULT_PUBLISHER=ghost
+OPENBLOG_GHOST_ENDPOINT=https://example.ghost.io/ghost/api/content/posts/
+OPENBLOG_GHOST_API_KEY=dummy_ghost_api_key
+OPENBLOG_GHOST_STATUS=draft
+```
+
 3. Build only the packages needed by the article workflow:
 
 ```bash
@@ -193,6 +216,8 @@ npm start "How local LLMs change technical writing workflows"
 
 The workflow produces:
 
+- a publish result object with success/error metadata
+
 1. A returned in-memory result:
 
    ```ts
@@ -213,7 +238,7 @@ The workflow produces:
 2. A saved file:
 
    ```text
-   output/{slug}.md
+   output/articles/{slug}.md
    ```
 
 The file includes YAML frontmatter:
@@ -252,6 +277,7 @@ The workflow logs:
 - writer output
 - workflow completion
 - saved output path
+- publish selection and result
 
 Set a custom log level with:
 

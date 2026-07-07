@@ -9,6 +9,7 @@
     "@openblog/core": "file:../core",
     "@openblog/logger": "file:../logger",
     "@openblog/providers": "file:../providers",
+    "@openblog/publishers": "file:../publishers",
     "@openblog/types": "file:../types",
     "zod": "^3.23.8"
   },

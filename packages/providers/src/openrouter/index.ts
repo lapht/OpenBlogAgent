@@ -37,51 +37,76 @@ export class OpenRouterProvider implements IProvider, TextGenerationProvider {
       baseUrl: this.config.baseUrl ?? "https://openrouter.ai/api/v1"
     });
 
-    // Create HTTPS agent with disabled certificate verification for SSL issues
-    const httpsAgent = new HttpsAgent({
-      rejectUnauthorized: false
-    });
+    const maxAttempts = 3;
+    let lastError: unknown;
 
-    const response = await fetch(
-      `${this.config.baseUrl ?? "https://openrouter.ai/api/v1"}/chat/completions`,
-      {
-        agent: httpsAgent,
-        body: JSON.stringify({
-          messages: [
-            {
-              content: prompt,
-              role: "user"
-            }
-          ],
-          model: this.config.model ?? "openai/gpt-4o-mini"
-        }),
-        headers: {
-          Authorization: `Bearer ${this.config.apiKey}`,
-          "Content-Type": "application/json",
-          ...(this.config.siteName ? { "X-Title": this.config.siteName } : {}),
-          ...(this.config.siteUrl ? { "HTTP-Referer": this.config.siteUrl } : {})
-        },
-        method: "POST"
-      } as unknown as RequestInit
-    ).catch((error) => {
-      console.error("DEBUG OpenRouter fetch error:", {
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      console.log("About to attempt OpenRouter request", {
+        attempt,
+        maxAttempts,
+        model: this.config.model ?? "openai/gpt-4o-mini"
       });
-      throw error;
-    });
 
-    if (!response.ok) {
-      throw new Error(`OpenRouter request failed with status ${response.status}`);
+      try {
+        // Create HTTPS agent with disabled certificate verification for SSL issues
+        const httpsAgent = new HttpsAgent({
+          rejectUnauthorized: false
+        });
+
+        const response = await fetch(
+          `${this.config.baseUrl ?? "https://openrouter.ai/api/v1"}/chat/completions`,
+          {
+            agent: httpsAgent,
+            body: JSON.stringify({
+              messages: [
+                {
+                  content: prompt,
+                  role: "user"
+                }
+              ],
+              model: this.config.model ?? "openai/gpt-4o-mini"
+            }),
+            headers: {
+              Authorization: `Bearer ${this.config.apiKey}`,
+              "Content-Type": "application/json",
+              ...(this.config.siteName ? { "X-Title": this.config.siteName } : {}),
+              ...(this.config.siteUrl ? { "HTTP-Referer": this.config.siteUrl } : {})
+            },
+            method: "POST"
+          } as unknown as RequestInit
+        );
+
+        if (!response.ok) {
+          throw new Error(`OpenRouter request failed with status ${response.status}`);
+        }
+
+        const data = (await response.json()) as OpenRouterChatResponse;
+        const content = data.choices?.[0]?.message?.content?.trim();
+
+        if (!content) {
+          throw new Error("OpenRouter returned an empty response");
+        }
+
+        return content;
+      } catch (error) {
+        lastError = error;
+        console.error("DEBUG OpenRouter fetch error:", {
+          attempt,
+          maxAttempts,
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined
+        });
+
+        if (attempt < maxAttempts) {
+          console.log("Retrying OpenRouter request", {
+            attempt,
+            nextAttempt: attempt + 1,
+            maxAttempts
+          });
+        }
+      }
     }
 
-    const data = (await response.json()) as OpenRouterChatResponse;
-    const content = data.choices?.[0]?.message?.content?.trim();
-
-    if (!content) {
-      throw new Error("OpenRouter returned an empty response");
-    }
-
-    return content;
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 }

@@ -1,18 +1,37 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import type { ILogger } from "@openblog/logger";
-import { createEditorAgent, type SeoOutput, createSeoAgent } from "@openblog/agents";
+import { createEditorAgent, type SeoOutput, createSeoAgent, seoOutputSchema } from "@openblog/agents";
 import type { TextGenerationProvider } from "@openblog/providers";
+import { DefaultPublisherManager, type IPublisher, type PublishArticle, type PublishResult } from "@openblog/publishers";
 import { z } from "zod";
 
 export const ARTICLE_GENERATION_WORKFLOW_NAME = "article-generation-workflow" as const;
 
 export const plannerOutlineSchema = z.array(z.string().min(1)).min(3);
 
+const publishResultSchema = z.object({
+  success: z.boolean(),
+  publisherId: z.string(),
+  publisherName: z.string(),
+  outputPath: z.string().optional(),
+  metadata: z.record(z.unknown()).optional(),
+  error: z
+    .object({
+      code: z.string(),
+      message: z.string(),
+      details: z.record(z.unknown()).optional()
+    })
+    .optional()
+});
+
+const emptySeoOutputSchema = z.object({}).passthrough();
+
 export const articleWorkflowStateSchema = z.object({
   article: z.string(),
   editedText: z.string().optional(),
-  seoOutput: z.custom<SeoOutput>().optional(),
+  seoOutput: z.union([seoOutputSchema, emptySeoOutputSchema]).optional(),
   outline: z.array(z.string()),
+  publishResult: publishResultSchema.optional(),
   topic: z.string().min(1)
 });
 
@@ -23,6 +42,7 @@ export interface ArticleWorkflowResult {
   editedText: string;
   seoOutput: SeoOutput;
   topic: string;
+  publishResult?: PublishResult;
 }
 
 export interface ArticleGenerationWorkflow {
@@ -33,6 +53,8 @@ export interface ArticleGenerationWorkflow {
 export interface CreateArticleGenerationWorkflowOptions {
   logger: ILogger;
   provider: TextGenerationProvider;
+  publishers?: IPublisher[];
+  defaultPublisherId?: string;
 }
 
 const graphState = Annotation.Root({
@@ -45,11 +67,15 @@ const graphState = Annotation.Root({
     reducer: (_, update) => update
   }),
   seoOutput: Annotation<unknown>({
-    default: () => ({}),
+    default: () => undefined,
     reducer: (_, update) => update
   }),
   outline: Annotation<string[]>({
     default: () => [],
+    reducer: (_, update) => update
+  }),
+  publishResult: Annotation<unknown>({
+    default: () => undefined,
     reducer: (_, update) => update
   }),
   topic: Annotation<string>({
@@ -102,14 +128,17 @@ function extractJsonArray(raw: string): string[] {
 export function createArticleGenerationWorkflow(
   options: CreateArticleGenerationWorkflowOptions
 ): ArticleGenerationWorkflow {
-  const { logger, provider } = options;
+  const { logger, provider, publishers = [], defaultPublisherId } = options;
 
   const editorAgent = createEditorAgent(provider);
   const seoAgent = createSeoAgent(provider);
+  const publisherManager = new DefaultPublisherManager(logger, publishers, {
+    defaultPublisherId
+  });
 
   const workflow = new StateGraph(graphState)
     .addNode("planner", async (state: ArticleWorkflowState) => {
-      const parsedState = articleWorkflowStateSchema.parse(state);
+      const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
       const plannerPrompt = buildPlannerPrompt(parsedState.topic);
 
       const plannerRawOutput = await provider.generate(plannerPrompt);
@@ -127,7 +156,7 @@ export function createArticleGenerationWorkflow(
         .extend({
           outline: plannerOutlineSchema
         })
-        .parse(state);
+        .parse(state) as ArticleWorkflowState;
 
       const writerPrompt = buildWriterPrompt(parsedState.topic, parsedState.outline);
       const article = (await provider.generate(writerPrompt)).trim();
@@ -144,7 +173,7 @@ export function createArticleGenerationWorkflow(
       return { article };
     })
     .addNode("editor", async (state: ArticleWorkflowState) => {
-      const parsedState = articleWorkflowStateSchema.parse(state);
+      const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
       const editorOutput = await editorAgent.run({ rawText: parsedState.article });
 
       logger.info("Editor output ready", {
@@ -155,7 +184,7 @@ export function createArticleGenerationWorkflow(
       return { editedText: editorOutput.editedText };
     })
     .addNode("seo", async (state: ArticleWorkflowState) => {
-      const parsedState = articleWorkflowStateSchema.parse(state);
+      const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
       const seoOutput = await seoAgent.run({
         outline: parsedState.outline,
         articleText: parsedState.editedText || parsedState.article
@@ -168,17 +197,43 @@ export function createArticleGenerationWorkflow(
 
       return { seoOutput };
     })
+    .addNode("publisher", async (state: ArticleWorkflowState) => {
+      const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
+      const seoOutput = parsedState.seoOutput as SeoOutput | undefined;
+
+      const articleForPublishing: PublishArticle = {
+        title: seoOutput?.title ?? parsedState.topic,
+        slug: seoOutput?.slug ?? parsedState.topic,
+        summary: seoOutput?.metaDescription ?? parsedState.topic,
+        content: parsedState.editedText || parsedState.article,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        tags: [],
+        category: "General",
+        author: "OpenBlogAgent",
+        language: "en"
+      };
+
+      const publishResult = await publisherManager.publish(articleForPublishing);
+      logger.info("Publishing completed", {
+        slug: articleForPublishing.slug,
+        success: publishResult.success
+      });
+
+      return { publishResult };
+    })
     .addEdge(START, "planner")
     .addEdge("planner", "writer")
     .addEdge("writer", "editor")
     .addEdge("editor", "seo")
-    .addEdge("seo", END)
+    .addEdge("seo", "publisher")
+    .addEdge("publisher", END)
     .compile();
 
   return {
     name: ARTICLE_GENERATION_WORKFLOW_NAME,
     async run(input: ArticleWorkflowState): Promise<ArticleWorkflowResult> {
-      const initialState = articleWorkflowStateSchema.parse(input);
+      const initialState = articleWorkflowStateSchema.parse(input) as ArticleWorkflowState;
       logger.info("Starting article workflow", {
         topic: initialState.topic,
         workflow: ARTICLE_GENERATION_WORKFLOW_NAME
@@ -186,7 +241,7 @@ export function createArticleGenerationWorkflow(
 
       const finalState = articleWorkflowStateSchema.parse(
         await workflow.invoke(initialState)
-      );
+      ) as ArticleWorkflowState;
 
       logger.info("Article workflow completed", {
         articleLength: finalState.article.length,
@@ -198,7 +253,8 @@ export function createArticleGenerationWorkflow(
         article: finalState.article,
         editedText: finalState.editedText || finalState.article,
         seoOutput: finalState.seoOutput as SeoOutput,
-        topic: finalState.topic
+        topic: finalState.topic,
+        publishResult: finalState.publishResult as PublishResult | undefined
       };
     }
   };

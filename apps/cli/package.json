@@ -5,9 +5,11 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
+    "@openblog/config": "file:../../packages/config",
     "@openblog/graph": "file:../../packages/graph",
     "@openblog/logger": "file:../../packages/logger",
-    "@openblog/providers": "file:../../packages/providers"
+    "@openblog/providers": "file:../../packages/providers",
+    "@openblog/publishers": "file:../../packages/publishers"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
