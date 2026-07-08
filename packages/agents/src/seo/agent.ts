@@ -38,49 +38,115 @@ export function createSeoAgent(provider: TextGenerationProvider): SeoAgent {
 
 function buildSeoPrompt(input: SeoAgentInput): string {
   return [
-    "You are an SEO expert. Analyze the article content and produce SEO-optimized metadata.",
+    "You are an SEO expert.",
+    "Analyze the article content and produce SEO-optimized metadata.",
+    "",
+    "Output rules:",
+    "- Return valid JSON only.",
+    "- Do not wrap the JSON in Markdown fences.",
+    "- Do not add explanations outside the JSON.",
+    "- The title must be at most 60 characters.",
+    "- The metaDescription must be at most 155 characters.",
+    "- The slug must be lowercase, URL-safe, and use hyphens instead of spaces.",
+    "- The h1 is only a suggested WordPress title, not article content.",
+    "- headings must contain only H2 and H3 items found or suggested from the article structure.",
+    "",
+    "Return this exact JSON structure:",
+    JSON.stringify(
+      {
+        title: "SEO title, max 60 characters",
+        metaDescription: "SEO meta description, max 155 characters",
+        slug: "url-safe-slug",
+        h1: "Suggested WordPress title",
+        headings: [
+          {
+            level: "H2",
+            text: "Section heading"
+          }
+        ]
+      },
+      null,
+      2
+    ),
     "",
     "Article Outline:",
     ...input.outline.map((s, i) => `${i + 1}. ${s}`),
     "",
     "Article Text:",
-    input.articleText,
-    "",
-    "Return valid JSON only with this exact structure:",
-    JSON.stringify(seoOutputSchema.shape, null, 2),
-    "",
-    "Important:",
-    "- headings must be an array of objects like {\"level\": \"H2\", \"text\": \"Section title\"}",
-    "- title must be at most 60 characters",
-    "- metaDescription must be at most 155 characters"
+    input.articleText
   ].join("\n");
 }
 
 function parseSeoOutput(raw: string): SeoOutput {
   const trimmed = raw.trim();
-  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fencedMatch?.[1]?.trim() ?? trimmed;
-  const startIndex = candidate.indexOf("{");
-  const endIndex = candidate.lastIndexOf("}");
 
-  if (startIndex < 0 || endIndex < 0) {
-    throw new Error("SEO agent did not return valid JSON");
+  const candidates = [
+    trimmed,
+    extractJsonFromFullMarkdownFence(trimmed),
+    extractOuterJsonObject(trimmed)
+  ].filter((value): value is string => Boolean(value));
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as Record<string, unknown>;
+      const normalized = normalizeSeoOutput(parsed);
+      return seoOutputSchema.parse(normalized);
+    } catch {
+      // Try next candidate
+    }
   }
 
-  const parsed = JSON.parse(candidate.slice(startIndex, endIndex + 1)) as Record<string, unknown>;
-  const normalized: Record<string, unknown> = {
-    ...parsed,
-    title: typeof parsed.title === "string" ? parsed.title.trim().slice(0, 60) : "",
+  throw new Error(`SEO agent did not return valid JSON. Received: ${raw}`);
+}
+
+function extractJsonFromFullMarkdownFence(text: string): string | null {
+  const match = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return match?.[1]?.trim() ?? null;
+}
+
+function extractOuterJsonObject(text: string): string | null {
+  const startIndex = text.indexOf("{");
+  const endIndex = text.lastIndexOf("}");
+
+  if (startIndex < 0 || endIndex < 0 || endIndex <= startIndex) {
+    return null;
+  }
+
+  return text.slice(startIndex, endIndex + 1);
+}
+
+function normalizeSeoOutput(parsed: Record<string, unknown>): SeoOutput {
+  return {
+    title:
+      typeof parsed.title === "string"
+        ? parsed.title.trim().slice(0, 60)
+        : "",
     metaDescription:
       typeof parsed.metaDescription === "string"
         ? parsed.metaDescription.trim().slice(0, 155)
         : "",
-    slug: typeof parsed.slug === "string" ? parsed.slug.trim() : "",
-    h1: typeof parsed.h1 === "string" ? parsed.h1.trim() : "",
+    slug:
+      typeof parsed.slug === "string"
+        ? normalizeSlug(parsed.slug)
+        : "",
+    h1:
+      typeof parsed.h1 === "string"
+        ? parsed.h1.trim()
+        : "",
     headings: normalizeHeadings(parsed.headings)
   };
+}
 
-  return seoOutputSchema.parse(normalized);
+function normalizeSlug(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 function normalizeHeadings(value: unknown): Array<{ level: "H2" | "H3"; text: string }> {
@@ -96,6 +162,7 @@ function normalizeHeadings(value: unknown): Array<{ level: "H2" | "H3"; text: st
 
     if (heading && typeof heading === "object") {
       const candidate = heading as Record<string, unknown>;
+
       const text = typeof candidate.text === "string" ? candidate.text.trim() : "";
       const level = typeof candidate.level === "string" ? candidate.level.toUpperCase() : "H2";
 
@@ -103,7 +170,12 @@ function normalizeHeadings(value: unknown): Array<{ level: "H2" | "H3"; text: st
         return [];
       }
 
-      return [{ level: level === "H3" ? "H3" : "H2", text }];
+      return [
+        {
+          level: level === "H3" ? "H3" : "H2",
+          text
+        }
+      ];
     }
 
     return [];
