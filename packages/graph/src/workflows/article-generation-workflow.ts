@@ -86,25 +86,31 @@ const graphState = Annotation.Root({
 
 function buildPlannerPrompt(topic: string): string {
   return [
-    "You are a senior content strategist.",
-    `Create a logical article outline for the topic: ${topic}`,
+    "You are a pragmatic content strategist.",
+    `Create a simple and practical article outline for the topic: ${topic}`,
     "Return valid JSON only.",
     'Use this exact shape: ["Section title", "Section title"]',
-    "The outline must be detailed, non-redundant, and ordered for a long-form article.",
-    "Include an introduction, core sections, and a conclusion through the section titles."
+    "Create 4 to 6 sections maximum.",
+    "Avoid overly broad, academic, or redundant sections.",
+    "The outline should be suitable for a clear blog post, not a long-form essay.",
+    "Include an introduction and a conclusion through the section titles."
   ].join("\n");
 }
 
 function buildWriterPrompt(topic: string, outline: string[]): string {
   return [
-    "You are a senior technical writer.",
-    `Write a complete Markdown article about: ${topic}`,
+    "You are a clear and concise technical blog writer.",
+    `Write a Markdown article about: ${topic}`,
     "Requirements:",
-    "- Start with a strong SEO-friendly H1 title.",
-    "- Use clear H2 sections aligned with the outline.",
-    "- Write in a competent, human, non-repetitive tone.",
-    "- Be substantial but avoid filler.",
-    "- End with a practical conclusion.",
+    "- Do not include an H1 title.",
+    "- Start directly with the introduction.",
+    "- Use H2 sections aligned with the outline.",
+    "- Keep the article between 1200 and 1,800 words.",
+    "- Write in a clear, practical, human tone.",
+    "- Prefer short paragraphs and simple explanations.",
+    "- Avoid unnecessary depth, filler, repetition, and academic style.",
+    "- If the topic is technical, explain only what is useful to the reader.",
+    "- End with a short practical conclusion.",
     "Outline:",
     ...outline.map((section, index) => `${index + 1}. ${section}`)
   ].join("\n");
