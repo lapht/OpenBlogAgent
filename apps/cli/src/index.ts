@@ -3,7 +3,13 @@ import dotenv from "dotenv";
 import { loadEnv } from "@openblog/config";
 import { createArticleGenerationWorkflow } from "@openblog/graph";
 import { logger } from "@openblog/logger";
-import { createPublishersFromConfig } from "@openblog/publishers";
+import {
+  createPublishersFromConfig,
+  StaticCategoryProvider,
+  StaticTagProvider,
+  WordPressCategoryProvider,
+  WordPressTagProvider
+} from "@openblog/publishers";
 import {
   createDefaultTextGenerationProvider,
   OllamaProvider,
@@ -109,10 +115,74 @@ async function main(): Promise<void> {
             status: env.OPENBLOG_GHOST_STATUS
           }
         : undefined,
-      defaultPublisherId: env.OPENBLOG_DEFAULT_PUBLISHER
+      defaultPublisherId: env.OPENBLOG_DEFAULT_PUBLISHER,
+      taxonomy: env.OPENBLOG_TAXONOMY_ALLOW_CREATE
+        ? {
+            allowCreate: env.OPENBLOG_TAXONOMY_ALLOW_CREATE,
+            defaultCategory: env.OPENBLOG_TAXONOMY_DEFAULT_CATEGORY,
+            maxTags: env.OPENBLOG_TAXONOMY_MAX_TAGS,
+            cacheTtlSeconds: env.OPENBLOG_TAXONOMY_CACHE_TTL_SECONDS
+          }
+        : undefined
     },
     logger
   );
+
+  const defaultPublisherId = env.OPENBLOG_DEFAULT_PUBLISHER;
+
+  const taxonomyConfig = {
+    allowCreate: env.OPENBLOG_TAXONOMY_ALLOW_CREATE,
+    defaultCategory: env.OPENBLOG_TAXONOMY_DEFAULT_CATEGORY,
+    maxTags: env.OPENBLOG_TAXONOMY_MAX_TAGS,
+    cacheTtlSeconds: env.OPENBLOG_TAXONOMY_CACHE_TTL_SECONDS
+  };
+
+  const categoryProvider =
+    env.OPENBLOG_TAXONOMY_PROVIDER === "wordpress" && env.OPENBLOG_WORDPRESS_ENDPOINT
+      ? new WordPressCategoryProvider({
+          endpoint: env.OPENBLOG_WORDPRESS_ENDPOINT,
+          username: env.OPENBLOG_WORDPRESS_USERNAME,
+          password: env.OPENBLOG_WORDPRESS_PASSWORD,
+          applicationPassword: env.OPENBLOG_WORDPRESS_APPLICATION_PASSWORD,
+          logger,
+          config: taxonomyConfig
+        })
+      : new StaticCategoryProvider(
+          [
+            { id: 1, name: "Artificial Intelligence" },
+            { id: 2, name: "Software Development" },
+            { id: 3, name: "DevOps" },
+            { id: 4, name: "Programming" },
+            { id: 5, name: "Tutorials" },
+            { id: 6, name: "News" },
+            { id: 7, name: "General" }
+          ],
+          env.OPENBLOG_TAXONOMY_DEFAULT_CATEGORY
+        );
+
+  const tagProvider =
+    env.OPENBLOG_TAXONOMY_PROVIDER === "wordpress" && env.OPENBLOG_WORDPRESS_ENDPOINT
+      ? new WordPressTagProvider({
+          endpoint: env.OPENBLOG_WORDPRESS_ENDPOINT,
+          username: env.OPENBLOG_WORDPRESS_USERNAME,
+          password: env.OPENBLOG_WORDPRESS_PASSWORD,
+          applicationPassword: env.OPENBLOG_WORDPRESS_APPLICATION_PASSWORD,
+          logger,
+          config: taxonomyConfig
+        })
+      : new StaticTagProvider(
+          [
+            { id: 1, name: "AI" },
+            { id: 2, name: "Node.js" },
+            { id: 3, name: "TypeScript" },
+            { id: 4, name: "LangGraph" },
+            { id: 5, name: "OpenRouter" },
+            { id: 6, name: "Ollama" },
+            { id: 7, name: "SEO" },
+            { id: 8, name: "Automation" }
+          ],
+          env.OPENBLOG_TAXONOMY_MAX_TAGS
+        );
 
   logger.info("Creating workflow instance", {
     publisherCount: publishers.length,
@@ -123,7 +193,10 @@ async function main(): Promise<void> {
     logger,
     provider,
     publishers,
-    defaultPublisherId: env.OPENBLOG_DEFAULT_PUBLISHER
+    defaultPublisherId,
+    categoryProvider,
+    tagProvider,
+    taxonomyConfig
   });
 
   try {
@@ -133,7 +206,9 @@ async function main(): Promise<void> {
 
     const result = await workflow.run({
       article: "",
+      category: "",
       outline: [],
+      tags: [],
       topic
     });
 

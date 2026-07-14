@@ -4,3 +4,6 @@ export * from "./factory";
 export * from "./wordpress";
 export * from "./ghost";
 export * from "./markdown";
+export * from "./taxonomy/types";
+export * from "./taxonomy/providers/static-taxonomy-provider";
+export * from "./taxonomy/providers/wordpress-taxonomy-provider";

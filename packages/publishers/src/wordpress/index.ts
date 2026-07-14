@@ -1,5 +1,5 @@
 import type { ILogger } from "@openblog/logger";
-
+import type { ICategoryProvider, ITagProvider } from "../taxonomy/types";
 import type {
   IPublisher,
   PublishArticle,
@@ -7,15 +7,6 @@ import type {
   PublisherValidationIssue,
   PublisherValidationResult
 } from "../types";
-
-function normalizeWordPressCategories(category: string | undefined): number[] {
-  if (!category) {
-    return [];
-  }
-
-  const parsed = Number(category);
-  return Number.isFinite(parsed) ? [parsed] : [];
-}
 
 export interface WordPressPublisherConfig {
   endpoint: string;
@@ -31,24 +22,18 @@ export class WordPressPublisher implements IPublisher {
 
   constructor(
     public readonly config: WordPressPublisherConfig,
-    private readonly logger: ILogger
+    private readonly logger: ILogger,
+    private readonly categoryProvider: ICategoryProvider,
+    private readonly tagProvider: ITagProvider
   ) {}
 
   async validate(article: PublishArticle): Promise<PublisherValidationResult> {
     const issues: PublisherValidationIssue[] = [];
-
-    if (!this.config.endpoint?.trim()) {
-      issues.push({ field: "endpoint", message: "WordPress endpoint is required" });
-    }
-
+    if (!this.config.endpoint?.trim()) issues.push({ field: "endpoint", message: "WordPress endpoint is required" });
     if (!this.config.username?.trim() && !this.config.applicationPassword?.trim()) {
       issues.push({ field: "authentication", message: "WordPress authentication is required" });
     }
-
-    if (!article.title?.trim()) {
-      issues.push({ field: "title", message: "Title is required" });
-    }
-
+    if (!article.title?.trim()) issues.push({ field: "title", message: "Title is required" });
     return { valid: issues.length === 0, issues };
   }
 
@@ -58,41 +43,34 @@ export class WordPressPublisher implements IPublisher {
 
   async publish(article: PublishArticle): Promise<PublishResult> {
     const validation = await this.validate(article);
-
     if (!validation.valid) {
-      this.logger.error("WordPress publisher validation failed", {
-        slug: article.slug,
-        issues: validation.issues
-      });
-
+      this.logger.error("WordPress publisher validation failed", { slug: article.slug, issues: validation.issues });
       return {
         success: false,
         publisherId: this.id,
         publisherName: this.name,
-        error: {
-          code: "validation_failed",
-          message: "WordPress publisher validation failed",
-          details: { issues: validation.issues }
-        }
+        error: { code: "validation_failed", message: "WordPress publisher validation failed", details: { issues: validation.issues } }
       };
     }
 
-    const payload = {
-      title: article.title,
-      content: article.content,
-      excerpt: article.summary,
-      status: this.config.status ?? "draft",
-      categories: normalizeWordPressCategories(article.category),
-      tags: article.tags ?? []
-    };
-
-    this.logger.info("WordPress publisher payload prepared", {
-      slug: article.slug,
-      status: payload.status
-    });
-
     try {
-      const response = await fetch(this.config.endpoint, {
+      const categoryEntry = await this.categoryProvider.resolve(article.category);
+      const tagEntries = await this.tagProvider.resolveMany(article.tags ?? []);
+
+      const payload = {
+        title: article.title,
+        content: article.content,
+        excerpt: article.summary,
+        status: this.config.status ?? "draft",
+        categories: [categoryEntry.id],
+        tags: tagEntries.map((t) => t.id)
+      };
+
+      this.logger.info("WordPress publisher payload prepared", { slug: article.slug, status: payload.status });
+
+      const postEndpoint = `${this.config.endpoint}/posts`;
+
+      const response = await fetch(postEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -110,28 +88,16 @@ export class WordPressPublisher implements IPublisher {
         success: true,
         publisherId: this.id,
         publisherName: this.name,
-        metadata: {
-          slug: article.slug,
-          status: payload.status,
-          endpoint: this.config.endpoint
-        }
+        metadata: { slug: article.slug, status: payload.status, endpoint: postEndpoint }
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown WordPress publish error";
-      this.logger.error("WordPress publisher error", {
-        slug: article.slug,
-        error: message
-      });
-
+      this.logger.error("WordPress publisher error", { slug: article.slug, error: message });
       return {
         success: false,
         publisherId: this.id,
         publisherName: this.name,
-        error: {
-          code: "publish_failed",
-          message,
-          details: { slug: article.slug }
-        }
+        error: { code: "publish_failed", message, details: { slug: article.slug } }
       };
     }
   }

@@ -1,8 +1,21 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import type { ILogger } from "@openblog/logger";
-import { createEditorAgent, type SeoOutput, createSeoAgent, seoOutputSchema } from "@openblog/agents";
+import {
+  createClassificationAgent,
+  createEditorAgent,
+  type SeoOutput,
+  createSeoAgent,
+  seoOutputSchema
+} from "@openblog/agents";
 import type { TextGenerationProvider } from "@openblog/providers";
-import { DefaultPublisherManager, type IPublisher, type PublishArticle, type PublishResult } from "@openblog/publishers";
+import { 
+  DefaultPublisherManager, 
+  type IPublisher, 
+  type PublishArticle, 
+  type PublishResult,
+  ICategoryProvider,
+  ITagProvider
+} from "@openblog/publishers";
 import { z } from "zod";
 
 export const ARTICLE_GENERATION_WORKFLOW_NAME = "article-generation-workflow" as const;
@@ -28,10 +41,12 @@ const emptySeoOutputSchema = z.object({}).passthrough();
 
 export const articleWorkflowStateSchema = z.object({
   article: z.string(),
+  category: z.string().default(""),
   editedText: z.string().optional(),
   seoOutput: z.union([seoOutputSchema, emptySeoOutputSchema]).optional(),
   outline: z.array(z.string()),
   publishResult: publishResultSchema.optional(),
+  tags: z.array(z.string()).default([]),
   topic: z.string().min(1)
 });
 
@@ -39,8 +54,10 @@ export type ArticleWorkflowState = z.infer<typeof articleWorkflowStateSchema>;
 
 export interface ArticleWorkflowResult {
   article: string;
+  category: string;
   editedText: string;
   seoOutput: SeoOutput;
+  tags: string[];
   topic: string;
   publishResult?: PublishResult;
 }
@@ -55,10 +72,22 @@ export interface CreateArticleGenerationWorkflowOptions {
   provider: TextGenerationProvider;
   publishers?: IPublisher[];
   defaultPublisherId?: string;
+  categoryProvider?: ICategoryProvider;
+  tagProvider?: ITagProvider;
+  taxonomyConfig?: {
+    allowCreate: boolean;
+    defaultCategory: string;
+    maxTags: number;
+    cacheTtlSeconds: number;
+  };
 }
 
 const graphState = Annotation.Root({
   article: Annotation<string>({
+    default: () => "",
+    reducer: (_, update) => update
+  }),
+  category: Annotation<string>({
     default: () => "",
     reducer: (_, update) => update
   }),
@@ -76,6 +105,10 @@ const graphState = Annotation.Root({
   }),
   publishResult: Annotation<unknown>({
     default: () => undefined,
+    reducer: (_, update) => update
+  }),
+  tags: Annotation<string[]>({
+    default: () => [],
     reducer: (_, update) => update
   }),
   topic: Annotation<string>({
@@ -134,10 +167,19 @@ function extractJsonArray(raw: string): string[] {
 export function createArticleGenerationWorkflow(
   options: CreateArticleGenerationWorkflowOptions
 ): ArticleGenerationWorkflow {
-  const { logger, provider, publishers = [], defaultPublisherId } = options;
+  const {
+    logger,
+    provider,
+    publishers = [],
+    defaultPublisherId,
+    categoryProvider,
+    tagProvider,
+    taxonomyConfig
+  } = options;
 
   const editorAgent = createEditorAgent(provider);
   const seoAgent = createSeoAgent(provider);
+  const classificationAgent = createClassificationAgent(provider);
   const publisherManager = new DefaultPublisherManager(logger, publishers, {
     defaultPublisherId
   });
@@ -203,6 +245,35 @@ export function createArticleGenerationWorkflow(
 
       return { seoOutput };
     })
+        .addNode("classification", async (state: ArticleWorkflowState) => {
+      const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
+
+      const availableCategories = categoryProvider
+        ? (await categoryProvider.list()).map((category) => category.name)
+        : [taxonomyConfig?.defaultCategory ?? "General"];
+
+      const availableTags = tagProvider
+        ? (await tagProvider.list()).map((tag) => tag.name)
+        : [];
+
+      const classificationOutput = await classificationAgent.run({
+        articleText: parsedState.editedText || parsedState.article,
+        availableCategories,
+        availableTags,
+        maxTags: taxonomyConfig?.maxTags ?? 5
+      });
+
+      logger.info("Classification output ready", {
+        category: classificationOutput.category,
+        tags: classificationOutput.tags,
+        topic: parsedState.topic
+      });
+
+      return {
+        category: classificationOutput.category,
+        tags: classificationOutput.tags
+      };
+    })
     .addNode("publisher", async (state: ArticleWorkflowState) => {
       const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
       const seoOutput = parsedState.seoOutput as SeoOutput | undefined;
@@ -214,8 +285,8 @@ export function createArticleGenerationWorkflow(
         content: parsedState.editedText || parsedState.article,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        tags: [],
-        category: "General",
+        tags: parsedState.tags,
+        category: parsedState.category || taxonomyConfig?.defaultCategory || "General",
         author: "OpenBlogAgent",
         language: "en"
       };
@@ -232,7 +303,8 @@ export function createArticleGenerationWorkflow(
     .addEdge("planner", "writer")
     .addEdge("writer", "editor")
     .addEdge("editor", "seo")
-    .addEdge("seo", "publisher")
+    .addEdge("seo", "classification")
+    .addEdge("classification", "publisher")
     .addEdge("publisher", END)
     .compile();
 
@@ -257,8 +329,10 @@ export function createArticleGenerationWorkflow(
 
       return {
         article: finalState.article,
+        category: finalState.category || taxonomyConfig?.defaultCategory || "General",
         editedText: finalState.editedText || finalState.article,
         seoOutput: finalState.seoOutput as SeoOutput,
+        tags: finalState.tags || [],
         topic: finalState.topic,
         publishResult: finalState.publishResult as PublishResult | undefined
       };
