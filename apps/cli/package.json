@@ -9,7 +9,8 @@
     "@openblog/graph": "file:../../packages/graph",
     "@openblog/logger": "file:../../packages/logger",
     "@openblog/providers": "file:../../packages/providers",
-    "@openblog/publishers": "file:../../packages/publishers"
+    "@openblog/publishers": "file:../../packages/publishers",
+    "@openblog/storage": "file:../../packages/storage"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

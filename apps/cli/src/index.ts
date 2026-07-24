@@ -15,6 +15,7 @@ import {
   OllamaProvider,
   OpenRouterProvider
 } from "@openblog/providers";
+import { createSQLiteMemoryService } from "@openblog/storage";
 
 dotenv.config();
 
@@ -52,6 +53,9 @@ function resolveTopic(): string {
 async function main(): Promise<void> {
   const topic = resolveTopic();
   const env = loadEnv();
+  const memoryStore = await createSQLiteMemoryService({
+    filePath: process.env.OPENBLOG_MEMORY_DB_PATH
+  });
 
   logger.info("CLI starting article generation", {
     topic,
@@ -192,6 +196,7 @@ async function main(): Promise<void> {
   const workflow = createArticleGenerationWorkflow({
     logger,
     provider,
+    memoryService: memoryStore.memoryService,
     publishers,
     defaultPublisherId,
     categoryProvider,
@@ -233,6 +238,8 @@ async function main(): Promise<void> {
       error: error instanceof Error ? error.message : String(error)
     });
     process.exit(1);
+  } finally {
+    await memoryStore.disconnect();
   }
 }
 

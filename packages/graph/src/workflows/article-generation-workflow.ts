@@ -1,20 +1,20 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
-import type { ILogger } from "@openblog/logger";
 import {
   createClassificationAgent,
   createEditorAgent,
-  type SeoOutput,
   createSeoAgent,
+  type SeoOutput,
   seoOutputSchema
 } from "@openblog/agents";
+import type { ILogger } from "@openblog/logger";
 import type { TextGenerationProvider } from "@openblog/providers";
-import { 
-  DefaultPublisherManager, 
-  type IPublisher, 
-  type PublishArticle, 
-  type PublishResult,
-  ICategoryProvider,
-  ITagProvider
+import {
+  DefaultPublisherManager,
+  type ICategoryProvider,
+  type IPublisher,
+  type ITagProvider,
+  type PublishArticle,
+  type PublishResult
 } from "@openblog/publishers";
 import { z } from "zod";
 
@@ -47,7 +47,8 @@ export const articleWorkflowStateSchema = z.object({
   outline: z.array(z.string()),
   publishResult: publishResultSchema.optional(),
   tags: z.array(z.string()).default([]),
-  topic: z.string().min(1)
+  topic: z.string().min(1),
+  workflowId: z.string().optional()
 });
 
 export type ArticleWorkflowState = z.infer<typeof articleWorkflowStateSchema>;
@@ -62,6 +63,34 @@ export interface ArticleWorkflowResult {
   publishResult?: PublishResult;
 }
 
+export interface WorkflowMemoryService {
+  beginWorkflow(params: {
+    workflowName: string;
+    topic: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<{
+    workflowId: string;
+    isDuplicate: boolean;
+    duplicateOfWorkflowId: string | null;
+  }>;
+  savePrompt(params: {
+    workflowId: string;
+    promptType: "planner" | "writer";
+    content: string;
+  }): Promise<void>;
+  completeWorkflow(params: {
+    workflowId: string;
+    topic: string;
+    article: string;
+    editedText: string;
+    seoOutput: Record<string, unknown>;
+    category: string;
+    tags: string[];
+    publishResult?: Record<string, unknown>;
+  }): Promise<void>;
+  failWorkflow(params: { workflowId: string; errorMessage: string }): Promise<void>;
+}
+
 export interface ArticleGenerationWorkflow {
   readonly name: typeof ARTICLE_GENERATION_WORKFLOW_NAME;
   run(input: ArticleWorkflowState): Promise<ArticleWorkflowResult>;
@@ -70,6 +99,7 @@ export interface ArticleGenerationWorkflow {
 export interface CreateArticleGenerationWorkflowOptions {
   logger: ILogger;
   provider: TextGenerationProvider;
+  memoryService?: WorkflowMemoryService;
   publishers?: IPublisher[];
   defaultPublisherId?: string;
   categoryProvider?: ICategoryProvider;
@@ -113,6 +143,10 @@ const graphState = Annotation.Root({
   }),
   topic: Annotation<string>({
     default: () => "",
+    reducer: (_, update) => update
+  }),
+  workflowId: Annotation<string | undefined>({
+    default: () => undefined,
     reducer: (_, update) => update
   })
 });
@@ -170,6 +204,7 @@ export function createArticleGenerationWorkflow(
   const {
     logger,
     provider,
+    memoryService,
     publishers = [],
     defaultPublisherId,
     categoryProvider,
@@ -189,6 +224,14 @@ export function createArticleGenerationWorkflow(
       const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
       const plannerPrompt = buildPlannerPrompt(parsedState.topic);
 
+      if (memoryService && parsedState.workflowId) {
+        await memoryService.savePrompt({
+          workflowId: parsedState.workflowId,
+          promptType: "planner",
+          content: plannerPrompt
+        });
+      }
+
       const plannerRawOutput = await provider.generate(plannerPrompt);
       const outline = extractJsonArray(plannerRawOutput);
 
@@ -207,6 +250,14 @@ export function createArticleGenerationWorkflow(
         .parse(state) as ArticleWorkflowState;
 
       const writerPrompt = buildWriterPrompt(parsedState.topic, parsedState.outline);
+      if (memoryService && parsedState.workflowId) {
+        await memoryService.savePrompt({
+          workflowId: parsedState.workflowId,
+          promptType: "writer",
+          content: writerPrompt
+        });
+      }
+
       const article = (await provider.generate(writerPrompt)).trim();
 
       if (article.length === 0) {
@@ -245,16 +296,14 @@ export function createArticleGenerationWorkflow(
 
       return { seoOutput };
     })
-        .addNode("classification", async (state: ArticleWorkflowState) => {
+    .addNode("classification", async (state: ArticleWorkflowState) => {
       const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
 
       const availableCategories = categoryProvider
         ? (await categoryProvider.list()).map((category) => category.name)
         : [taxonomyConfig?.defaultCategory ?? "General"];
 
-      const availableTags = tagProvider
-        ? (await tagProvider.list()).map((tag) => tag.name)
-        : [];
+      const availableTags = tagProvider ? (await tagProvider.list()).map((tag) => tag.name) : [];
 
       const classificationOutput = await classificationAgent.run({
         articleText: parsedState.editedText || parsedState.article,
@@ -311,31 +360,74 @@ export function createArticleGenerationWorkflow(
   return {
     name: ARTICLE_GENERATION_WORKFLOW_NAME,
     async run(input: ArticleWorkflowState): Promise<ArticleWorkflowResult> {
-      const initialState = articleWorkflowStateSchema.parse(input) as ArticleWorkflowState;
+      const parsedInput = articleWorkflowStateSchema.parse(input) as ArticleWorkflowState;
+      const workflowMemory = memoryService
+        ? await memoryService.beginWorkflow({
+            workflowName: ARTICLE_GENERATION_WORKFLOW_NAME,
+            topic: parsedInput.topic
+          })
+        : null;
+
+      if (workflowMemory?.isDuplicate) {
+        logger.warn("Duplicate topic detected", {
+          topic: parsedInput.topic,
+          duplicateOfWorkflowId: workflowMemory.duplicateOfWorkflowId
+        });
+      }
+
+      const initialState = {
+        ...parsedInput,
+        workflowId: workflowMemory?.workflowId
+      } as ArticleWorkflowState;
+
       logger.info("Starting article workflow", {
         topic: initialState.topic,
         workflow: ARTICLE_GENERATION_WORKFLOW_NAME
       });
 
-      const finalState = articleWorkflowStateSchema.parse(
-        await workflow.invoke(initialState)
-      ) as ArticleWorkflowState;
+      try {
+        const finalState = articleWorkflowStateSchema.parse(
+          await workflow.invoke(initialState)
+        ) as ArticleWorkflowState;
 
-      logger.info("Article workflow completed", {
-        articleLength: finalState.article.length,
-        topic: finalState.topic,
-        workflow: ARTICLE_GENERATION_WORKFLOW_NAME
-      });
+        if (memoryService && workflowMemory) {
+          await memoryService.completeWorkflow({
+            workflowId: workflowMemory.workflowId,
+            topic: finalState.topic,
+            article: finalState.article,
+            editedText: finalState.editedText || finalState.article,
+            seoOutput: (finalState.seoOutput ?? {}) as Record<string, unknown>,
+            category: finalState.category || taxonomyConfig?.defaultCategory || "General",
+            tags: finalState.tags || [],
+            publishResult: (finalState.publishResult as Record<string, unknown> | undefined) ?? undefined
+          });
+        }
 
-      return {
-        article: finalState.article,
-        category: finalState.category || taxonomyConfig?.defaultCategory || "General",
-        editedText: finalState.editedText || finalState.article,
-        seoOutput: finalState.seoOutput as SeoOutput,
-        tags: finalState.tags || [],
-        topic: finalState.topic,
-        publishResult: finalState.publishResult as PublishResult | undefined
-      };
+        logger.info("Article workflow completed", {
+          articleLength: finalState.article.length,
+          topic: finalState.topic,
+          workflow: ARTICLE_GENERATION_WORKFLOW_NAME
+        });
+
+        return {
+          article: finalState.article,
+          category: finalState.category || taxonomyConfig?.defaultCategory || "General",
+          editedText: finalState.editedText || finalState.article,
+          seoOutput: finalState.seoOutput as SeoOutput,
+          tags: finalState.tags || [],
+          topic: finalState.topic,
+          publishResult: finalState.publishResult as PublishResult | undefined
+        };
+      } catch (error) {
+        if (memoryService && workflowMemory) {
+          await memoryService.failWorkflow({
+            workflowId: workflowMemory.workflowId,
+            errorMessage: error instanceof Error ? error.message : String(error)
+          });
+        }
+
+        throw error;
+      }
     }
   };
 }
