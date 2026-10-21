@@ -43,7 +43,7 @@ TypeScript is strict CommonJS (`tsconfig.base.json`) with `noUnusedLocals`/`noUn
 
 ## Output
 
-The markdown publisher writes `{OPENBLOG_OUTPUT_DIR}/{slug}.md` (default `output/articles/`) with YAML frontmatter (title, description, slug, date). The README also mentions `output/article.md`, which is stale from an earlier phase.
+The markdown publisher writes `{OPENBLOG_OUTPUT_DIR}/{slug}.md` (default `output/articles/`) with YAML frontmatter (serialized with `yaml`; slug sanitized; fails with `already_exists` unless `OPENBLOG_MARKDOWN_OVERWRITE=true`). The README also mentions `output/article.md`, which is stale from an earlier phase.
 
 ## Notes
 
