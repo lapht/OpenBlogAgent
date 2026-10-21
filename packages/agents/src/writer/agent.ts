@@ -5,6 +5,8 @@ import { buildWriterPrompt } from "../prompts/writer";
 export interface WriterAgentInput {
   topic: string;
   outline: string[];
+  /** Problems found in a previous attempt, to be fixed by this one. */
+  feedback?: string;
 }
 
 export interface WriterAgent {
@@ -16,10 +18,10 @@ export interface WriterAgent {
 
 export function createWriterAgent(provider: TextGenerationProvider): WriterAgent {
   return {
-    buildPrompt: (input) => buildWriterPrompt(input.topic, input.outline),
+    buildPrompt: (input) => buildWriterPrompt(input.topic, input.outline, input.feedback),
     async run(input: WriterAgentInput): Promise<string> {
       const { text } = await provider.generate({
-        prompt: buildWriterPrompt(input.topic, input.outline)
+        prompt: buildWriterPrompt(input.topic, input.outline, input.feedback)
       });
       const article = text.trim();
 

@@ -5,6 +5,7 @@ import {
   createArticleGenerationWorkflow,
   WorkflowStepError
 } from "../../packages/graph/src/workflows/article-generation-workflow";
+import { lenientQuality } from "../mocks/lenient-quality";
 import { scriptedProvider } from "../mocks/scripted-provider";
 
 describe("article workflow with fake ports", () => {
@@ -33,6 +34,7 @@ describe("article workflow with fake ports", () => {
 
     const workflow = createArticleGenerationWorkflow({
       logger,
+      quality: lenientQuality,
       llm,
       publisher: {
         publish: async (article) => {
@@ -99,6 +101,7 @@ describe("article workflow with fake ports", () => {
       "writer:succeeded",
       "editor:succeeded",
       "seo:succeeded",
+      "quality:succeeded",
       "classification:succeeded",
       "publisher:succeeded"
     ]);
@@ -112,6 +115,7 @@ describe("article workflow with fake ports", () => {
 
     const workflow = createArticleGenerationWorkflow({
       logger,
+      quality: lenientQuality,
       llm: scriptedProvider(...replies),
       publisher: {
         publish: async () => ({
@@ -168,6 +172,7 @@ describe("article workflow with fake ports", () => {
 
     const workflow = createArticleGenerationWorkflow({
       logger,
+      quality: lenientQuality,
       llm: scriptedProvider(JSON.stringify(["Intro"]), "   "),
       publisher: { publish: async () => ({ success: true, publisherId: "f", publisherName: "F" }) },
       memory: {

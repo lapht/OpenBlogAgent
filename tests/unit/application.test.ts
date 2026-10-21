@@ -30,6 +30,11 @@ describe("createApplication", () => {
       OPENBLOG_OUTPUT_DIR: path.join(dir, "out"),
       OPENBLOG_MEMORY_DB_PATH: path.join(dir, "memory.db"),
       OPENBLOG_LOG_LEVEL: "fatal",
+      OPENBLOG_QUALITY_MIN_WORDS: "1",
+      OPENBLOG_QUALITY_MIN_H2: "0",
+      OPENBLOG_QUALITY_MIN_OUTLINE_COVERAGE: "0",
+      OPENBLOG_QUALITY_MIN_EDIT_RATIO: "0.0001",
+      OPENBLOG_QUALITY_MAX_ATTEMPTS: "0",
       ...extra
     });
 
@@ -183,7 +188,12 @@ describe("CLI entry", () => {
     OPENBLOG_OUTPUT_DIR: path.join(dir, "out"),
     OPENBLOG_MEMORY_DB_PATH: path.join(dir, "memory.db"),
     OPENBLOG_TAXONOMY_CATEGORIES: "News",
-    OPENBLOG_LOG_LEVEL: "fatal"
+    OPENBLOG_LOG_LEVEL: "fatal",
+    OPENBLOG_QUALITY_MIN_WORDS: "1",
+    OPENBLOG_QUALITY_MIN_H2: "0",
+    OPENBLOG_QUALITY_MIN_OUTLINE_COVERAGE: "0",
+    OPENBLOG_QUALITY_MIN_EDIT_RATIO: "0.0001",
+    OPENBLOG_QUALITY_MAX_ATTEMPTS: "0"
   });
 
   it("runs a topic end-to-end with a fake provider and exits 0", async () => {
