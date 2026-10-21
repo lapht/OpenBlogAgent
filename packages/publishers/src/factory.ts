@@ -5,7 +5,10 @@ import { MarkdownPublisher, type MarkdownPublisherConfig } from "./markdown";
 import { WordPressPublisher, type WordPressPublisherConfig } from "./wordpress";
 import type { IPublisher } from "./types";
 
-import { WordPressCategoryProvider, WordPressTagProvider } from "./taxonomy/providers/wordpress-taxonomy-provider";
+import {
+  WordPressCategoryProvider,
+  WordPressTagProvider
+} from "./taxonomy/providers/wordpress-taxonomy-provider";
 //import { StaticCategoryProvider, StaticTagProvider } from "./taxonomy/providers/static-taxonomy-provider";
 import type { TaxonomyProviderConfig } from "./taxonomy/types";
 
@@ -53,7 +56,9 @@ export function createPublishersFromConfig(
       config: taxonomyConfig
     });
 
-    publishers.push(new WordPressPublisher(config.wordpress, logger, categoryProvider, tagProvider));
+    publishers.push(
+      new WordPressPublisher(config.wordpress, logger, categoryProvider, tagProvider)
+    );
   }
 
   if (config.ghost) {

@@ -1,6 +1,12 @@
 import type { ILogger } from "@openblog/logger";
 
-import type { IPublisher, IPublisherManager, PublisherManagerConfig, PublishArticle, PublishResult } from "./types";
+import type {
+  IPublisher,
+  IPublisherManager,
+  PublisherManagerConfig,
+  PublishArticle,
+  PublishResult
+} from "./types";
 
 export class DefaultPublisherManager implements IPublisherManager {
   private readonly publishers = new Map<string, IPublisher>();
@@ -19,8 +25,12 @@ export class DefaultPublisherManager implements IPublisherManager {
     this.publishers.set(publisher.id, publisher);
   }
 
-  async publish(article: PublishArticle, options?: { publisherId?: string }): Promise<PublishResult> {
-    const requestedPublisherId = options?.publisherId ?? article.publisherId ?? this.config.defaultPublisherId;
+  async publish(
+    article: PublishArticle,
+    options?: { publisherId?: string }
+  ): Promise<PublishResult> {
+    const requestedPublisherId =
+      options?.publisherId ?? article.publisherId ?? this.config.defaultPublisherId;
 
     const publisher = this.resolvePublisher(article, requestedPublisherId);
 
@@ -90,7 +100,10 @@ export class DefaultPublisherManager implements IPublisherManager {
     }
   }
 
-  private resolvePublisher(article: PublishArticle, preferredPublisherId?: string): IPublisher | undefined {
+  private resolvePublisher(
+    article: PublishArticle,
+    preferredPublisherId?: string
+  ): IPublisher | undefined {
     if (preferredPublisherId) {
       const explicitPublisher = this.publishers.get(preferredPublisherId);
       if (explicitPublisher) {

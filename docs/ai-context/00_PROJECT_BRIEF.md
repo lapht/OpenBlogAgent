@@ -27,6 +27,7 @@ The actual implementation status must be established by inspecting the repositor
 The existing implementation is not sacred.
 
 You are explicitly allowed to recommend:
+
 - Refactoring existing code.
 - Replacing flawed abstractions.
 - Reorganizing package boundaries.

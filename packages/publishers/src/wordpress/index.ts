@@ -29,7 +29,8 @@ export class WordPressPublisher implements IPublisher {
 
   async validate(article: PublishArticle): Promise<PublisherValidationResult> {
     const issues: PublisherValidationIssue[] = [];
-    if (!this.config.endpoint?.trim()) issues.push({ field: "endpoint", message: "WordPress endpoint is required" });
+    if (!this.config.endpoint?.trim())
+      issues.push({ field: "endpoint", message: "WordPress endpoint is required" });
     if (!this.config.username?.trim() && !this.config.applicationPassword?.trim()) {
       issues.push({ field: "authentication", message: "WordPress authentication is required" });
     }
@@ -44,12 +45,19 @@ export class WordPressPublisher implements IPublisher {
   async publish(article: PublishArticle): Promise<PublishResult> {
     const validation = await this.validate(article);
     if (!validation.valid) {
-      this.logger.error("WordPress publisher validation failed", { slug: article.slug, issues: validation.issues });
+      this.logger.error("WordPress publisher validation failed", {
+        slug: article.slug,
+        issues: validation.issues
+      });
       return {
         success: false,
         publisherId: this.id,
         publisherName: this.name,
-        error: { code: "validation_failed", message: "WordPress publisher validation failed", details: { issues: validation.issues } }
+        error: {
+          code: "validation_failed",
+          message: "WordPress publisher validation failed",
+          details: { issues: validation.issues }
+        }
       };
     }
 
@@ -66,7 +74,10 @@ export class WordPressPublisher implements IPublisher {
         tags: tagEntries.map((t) => t.id)
       };
 
-      this.logger.info("WordPress publisher payload prepared", { slug: article.slug, status: payload.status });
+      this.logger.info("WordPress publisher payload prepared", {
+        slug: article.slug,
+        status: payload.status
+      });
 
       const postEndpoint = `${this.config.endpoint}/posts`;
 

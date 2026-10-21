@@ -399,7 +399,8 @@ export function createArticleGenerationWorkflow(
             seoOutput: (finalState.seoOutput ?? {}) as Record<string, unknown>,
             category: finalState.category || taxonomyConfig?.defaultCategory || "General",
             tags: finalState.tags || [],
-            publishResult: (finalState.publishResult as Record<string, unknown> | undefined) ?? undefined
+            publishResult:
+              (finalState.publishResult as Record<string, unknown> | undefined) ?? undefined
           });
         }
 

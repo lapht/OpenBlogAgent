@@ -12,38 +12,38 @@ Il progetto è una monorepo TypeScript basata su Node.js.
 
 Utilizza:
 
-* pnpm Workspace
-* LangGraph.js
-* Fastify
-* Pino
-* Zod
-* Dependency Injection (tsyringe)
-* Docker
-* Vitest
+- pnpm Workspace
+- LangGraph.js
+- Fastify
+- Pino
+- Zod
+- Dependency Injection (tsyringe)
+- Docker
+- Vitest
 
 L'architettura segue:
 
-* Clean Architecture
-* SOLID
-* Adapter Pattern
-* Strategy Pattern
+- Clean Architecture
+- SOLID
+- Adapter Pattern
+- Strategy Pattern
 
 ---
 
 ## Componenti già implementati
 
-* bootstrap del progetto
-* configurazione centralizzata
-* logging
-* workflow LangGraph
-* Planner Agent
-* Writer Agent
-* provider LLM
-* Publishing Engine
-* Markdown Publisher
-* WordPress Publisher
-* Ghost Publisher
-* output Markdown
+- bootstrap del progetto
+- configurazione centralizzata
+- logging
+- workflow LangGraph
+- Planner Agent
+- Writer Agent
+- provider LLM
+- Publishing Engine
+- Markdown Publisher
+- WordPress Publisher
+- Ghost Publisher
+- output Markdown
 
 Il sistema è già in grado di:
 
@@ -92,8 +92,8 @@ L'obiettivo è determinare automaticamente la categoria e i tag più appropriati
 
 Creare un motore di classificazione indipendente che assegni automaticamente:
 
-* categoria
-* tag
+- categoria
+- tag
 
 prima della fase di pubblicazione.
 
@@ -133,10 +133,10 @@ Publisher
 
 Responsabilità:
 
-* analizzare il contenuto dell'articolo
-* scegliere una sola categoria
-* utilizzare esclusivamente categorie esistenti
-* non inventare categorie
+- analizzare il contenuto dell'articolo
+- scegliere una sola categoria
+- utilizzare esclusivamente categorie esistenti
+- non inventare categorie
 
 Output:
 
@@ -152,21 +152,16 @@ Output:
 
 Responsabilità:
 
-* generare un insieme di tag pertinenti
-* evitare duplicati
-* limitare il numero massimo configurabile
-* evitare tag troppo generici
+- generare un insieme di tag pertinenti
+- evitare duplicati
+- limitare il numero massimo configurabile
+- evitare tag troppo generici
 
 Output:
 
 ```json
 {
-  "tags": [
-    "AI",
-    "Node.js",
-    "LangGraph",
-    "OpenRouter"
-  ]
+  "tags": ["AI", "Node.js", "LangGraph", "OpenRouter"]
 }
 ```
 
@@ -176,10 +171,10 @@ Output:
 
 Responsabilità:
 
-* recuperare le categorie disponibili
-* verificare che la categoria esista
-* ottenere l'identificativo della categoria
-* creare nuove categorie solo se consentito dalla configurazione
+- recuperare le categorie disponibili
+- verificare che la categoria esista
+- ottenere l'identificativo della categoria
+- creare nuove categorie solo se consentito dalla configurazione
 
 ---
 
@@ -187,10 +182,10 @@ Responsabilità:
 
 Responsabilità:
 
-* recuperare i tag disponibili
-* verificare quelli esistenti
-* creare i tag mancanti (configurabile)
-* restituire gli identificativi necessari al Publisher
+- recuperare i tag disponibili
+- verificare quelli esistenti
+- creare i tag mancanti (configurabile)
+- restituire gli identificativi necessari al Publisher
 
 ---
 
@@ -204,9 +199,9 @@ ICategoryProvider
 
 Implementazioni previste:
 
-* WordPressCategoryProvider
-* StaticCategoryProvider
-* JsonCategoryProvider
+- WordPressCategoryProvider
+- StaticCategoryProvider
+- JsonCategoryProvider
 
 In futuro potranno essere aggiunti provider per Ghost, Dev.to, Medium e altre piattaforme.
 
@@ -228,12 +223,12 @@ con implementazioni analoghe al sistema delle categorie.
 
 Rendere configurabili almeno:
 
-* categoria predefinita
-* numero massimo di tag
-* creazione automatica categorie
-* creazione automatica tag
-* tempo di cache delle tassonomie
-* provider da utilizzare
+- categoria predefinita
+- numero massimo di tag
+- creazione automatica categorie
+- creazione automatica tag
+- tempo di cache delle tassonomie
+- provider da utilizzare
 
 ---
 
@@ -247,10 +242,10 @@ La durata della cache deve essere configurabile.
 
 ## Vincoli
 
-* Il Writer non deve conoscere categorie e tag.
-* Il Publisher non deve decidere categorie e tag.
-* Il Classification Engine deve essere completamente indipendente dalla piattaforma di pubblicazione.
-* Gli agenti devono comunicare esclusivamente tramite lo stato del workflow.
+- Il Writer non deve conoscere categorie e tag.
+- Il Publisher non deve decidere categorie e tag.
+- Il Classification Engine deve essere completamente indipendente dalla piattaforma di pubblicazione.
+- Gli agenti devono comunicare esclusivamente tramite lo stato del workflow.
 
 ---
 
@@ -291,14 +286,14 @@ Non implementare ancora RAG.
 
 ## Da implementare
 
-* database
-* migrazioni
-* repository
-* MemoryService
-* salvataggio articoli
-* storico workflow
-* storico prompt
-* controllo duplicati
+- database
+- migrazioni
+- repository
+- MemoryService
+- salvataggio articoli
+- storico workflow
+- storico prompt
+- controllo duplicati
 
 ---
 
@@ -316,11 +311,11 @@ Permettere al sistema di trovare argomenti da solo.
 
 Research Agent capace di utilizzare:
 
-* RSS
-* Web Search
-* Sitemap
-* Trend API
-* News Feed
+- RSS
+- Web Search
+- Sitemap
+- Trend API
+- News Feed
 
 Output:
 
@@ -356,18 +351,18 @@ Automatizzare completamente il sistema.
 
 ## Da implementare
 
-* Cron
-* Job Queue
-* Scheduler
-* Retry
-* Timeout
-* Workflow History
+- Cron
+- Job Queue
+- Scheduler
+- Retry
+- Timeout
+- Workflow History
 
 Supportare:
 
-* ogni ora
-* ogni giorno
-* ogni settimana
+- ogni ora
+- ogni giorno
+- ogni settimana
 
 ---
 
@@ -427,14 +422,14 @@ Valutare automaticamente ogni articolo.
 
 Calcolo punteggi:
 
-* leggibilità
-* SEO
-* completezza
-* lunghezza
-* ripetizioni
-* qualità Markdown
-* struttura
-* keyword coverage
+- leggibilità
+- SEO
+- completezza
+- lunghezza
+- ripetizioni
+- qualità Markdown
+- struttura
+- keyword coverage
 
 Output:
 
@@ -474,10 +469,10 @@ Publish
 
 Supportare:
 
-* approvazione
-* rifiuto
-* modifica
-* ripartenza workflow
+- approvazione
+- rifiuto
+- modifica
+- ripartenza workflow
 
 ---
 
@@ -489,14 +484,14 @@ Realizzare una dashboard web.
 
 Visualizzare:
 
-* workflow
-* articoli
-* log
-* provider
-* costi
-* stato agenti
-* cronologia
-* scheduler
+- workflow
+- articoli
+- log
+- provider
+- costi
+- stato agenti
+- cronologia
+- scheduler
 
 La dashboard non deve contenere logica AI.
 
@@ -510,11 +505,11 @@ Consentire agli utenti di estendere OpenBlogAgent.
 
 Plugin possibili:
 
-* Agent
-* Provider
-* Publisher
-* Tool
-* Workflow Node
+- Agent
+- Provider
+- Publisher
+- Tool
+- Workflow Node
 
 Un plugin deve poter essere installato senza modificare il core.
 
@@ -528,15 +523,15 @@ Centralizzare tutti gli strumenti utilizzati dagli agenti.
 
 Tools previsti:
 
-* Web Search
-* RSS
-* Markdown
-* HTML Parser
-* Image Search
-* Image Generation
-* Sitemap
-* SEO
-* File System
+- Web Search
+- RSS
+- Markdown
+- HTML Parser
+- Image Search
+- Image Generation
+- Sitemap
+- SEO
+- File System
 
 Ogni Tool implementa una interfaccia comune.
 
@@ -550,12 +545,12 @@ Supportare più provider LLM.
 
 Provider previsti:
 
-* OpenRouter
-* Ollama
-* OpenAI
-* Anthropic
-* Google
-* Azure OpenAI
+- OpenRouter
+- Ollama
+- OpenAI
+- Anthropic
+- Google
+- Azure OpenAI
 
 Ogni agente deve poter scegliere dinamicamente il provider.
 
@@ -569,11 +564,11 @@ Ridurre il costo dei token.
 
 Implementare:
 
-* cache
-* model routing
-* provider fallback
-* retry intelligente
-* modello differente per ogni agente
+- cache
+- model routing
+- provider fallback
+- retry intelligente
+- modello differente per ogni agente
 
 Esempio:
 
@@ -609,11 +604,11 @@ Permettere agli agenti di recuperare informazioni rilevanti.
 
 Implementare:
 
-* embedding
-* vector database
-* semantic search
-* retrieval
-* context injection
+- embedding
+- vector database
+- semantic search
+- retrieval
+- context injection
 
 Gli agenti non devono conoscere il vector database.
 
@@ -627,13 +622,13 @@ Analizzare i risultati ottenuti.
 
 Metriche:
 
-* articoli prodotti
-* tempo medio
-* costo
-* errori
-* provider utilizzato
-* performance workflow
-* qualità media
+- articoli prodotti
+- tempo medio
+- costo
+- errori
+- provider utilizzato
+- performance workflow
+- qualità media
 
 ---
 
@@ -645,11 +640,11 @@ Generare automaticamente contenuti social.
 
 Output:
 
-* LinkedIn
-* X
-* Facebook
-* Threads
-* Mastodon
+- LinkedIn
+- X
+- Facebook
+- Threads
+- Mastodon
 
 Ogni post viene creato partendo dall'articolo pubblicato.
 
@@ -699,13 +694,13 @@ Esporre OpenBlogAgent come piattaforma.
 
 API previste:
 
-* avvio workflow
-* stato workflow
-* recupero articoli
-* recupero log
-* gestione provider
-* gestione scheduler
-* gestione plugin
+- avvio workflow
+- stato workflow
+- recupero articoli
+- recupero log
+- gestione provider
+- gestione scheduler
+- gestione plugin
 
 ---
 
@@ -717,11 +712,11 @@ Consentire agli sviluppatori di creare estensioni.
 
 Esporre:
 
-* Agent SDK
-* Tool SDK
-* Publisher SDK
-* Provider SDK
-* Workflow SDK
+- Agent SDK
+- Tool SDK
+- Publisher SDK
+- Provider SDK
+- Workflow SDK
 
 ---
 
@@ -729,28 +724,28 @@ Esporre:
 
 ## Checklist finale
 
-* workflow completo
-* dashboard
-* plugin system
-* scheduler
-* memory
-* RAG
-* SEO
-* analytics
-* social
-* image pipeline
-* API
-* SDK
-* documentazione completa
-* test automatici
-* CI/CD
-* release GitHub
-* Docker
-* immagini Docker pubbliche
-* esempi
-* template plugin
-* template agent
-* template publisher
+- workflow completo
+- dashboard
+- plugin system
+- scheduler
+- memory
+- RAG
+- SEO
+- analytics
+- social
+- image pipeline
+- API
+- SDK
+- documentazione completa
+- test automatici
+- CI/CD
+- release GitHub
+- Docker
+- immagini Docker pubbliche
+- esempi
+- template plugin
+- template agent
+- template publisher
 
 ---
 
@@ -758,11 +753,11 @@ Esporre:
 
 Ogni fase deve:
 
-* essere completamente funzionante prima della successiva;
-* introdurre una sola responsabilità principale;
-* mantenere gli agenti indipendenti;
-* evitare dipendenze circolari;
-* essere facilmente testabile;
-* essere pronta per diventare una Pull Request indipendente.
+- essere completamente funzionante prima della successiva;
+- introdurre una sola responsabilità principale;
+- mantenere gli agenti indipendenti;
+- evitare dipendenze circolari;
+- essere facilmente testabile;
+- essere pronta per diventare una Pull Request indipendente.
 
 Ogni nuova chat con un'AI può partire direttamente da una di queste fasi, riportando il relativo contesto e l'obiettivo, senza dover ricostruire la cronologia del progetto.
