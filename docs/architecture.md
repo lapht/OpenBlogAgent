@@ -8,4 +8,4 @@ OpenBlogAgent follows Clean Architecture principles:
 
 Dependencies flow from outer layers to contracts, never to concrete business logic.
 
-The workflow in `packages/graph` depends on ports (`LlmPort`, `PublishPort`, `TaxonomyPort`, `MemoryPort`); `apps/cli` wires the concrete adapters (see ADR-010).
+The workflow in `packages/graph` depends on ports (`LlmPort`, `PublishPort`, `TaxonomyPort`, `MemoryPort`); `packages/app` (`createApplication`) wires the concrete adapters from config; `apps/cli` and `apps/server` are thin entry points (see ADR-010, ADR-011).

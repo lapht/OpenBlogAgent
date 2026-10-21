@@ -40,6 +40,7 @@ The centralized config system supports:
 - OPENBLOG_GHOST_API_KEY
 - OPENBLOG_GHOST_STATUS
 - OPENBLOG_TAXONOMY_ALLOW_CREATE (`true`|`false`, default `false`)
+- OPENBLOG_TAXONOMY_CATEGORIES / OPENBLOG_TAXONOMY_TAGS (comma-separated static lists) and OPENBLOG_TAXONOMY_FILE (JSON `{ "categories": [], "tags": [] }`; the lists override the file)
 
 `OPENBLOG_WORDPRESS_ENDPOINT` is the base REST URL (e.g. `https://example.com/wp-json/wp/v2`, without `/posts`). All variables are validated in `packages/config` (`loadEnv()`); apps must read configuration only from the parsed object.
 

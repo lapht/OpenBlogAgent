@@ -6,6 +6,7 @@
   "types": "dist/main.d.ts",
   "dependencies": {
     "@fastify/cors": "^10.0.1",
+    "@openblog/app": "*",
     "@openblog/config": "*",
     "@openblog/logger": "*",
     "@openblog/shared": "*",
