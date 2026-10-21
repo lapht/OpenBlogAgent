@@ -158,3 +158,9 @@ ADR-style log. Add new entries at the bottom; do not rewrite accepted ones, supe
 - Context: the docs described intended structure, drifted from the code, and listed environment variables nobody could verify.
 - Decision: `docs/configuration.md` documents every variable of the Zod env schema and `.env.example` lists each one; `scripts/check-docs.mjs` (`npm run check:docs`, run in CI after the build) reads the built schema and fails when a variable is missing from either, and fails on any broken relative link in `README.md` and `docs/`. The MVP is released as `0.2.0` (root `package.json` and tag `v0.2.0`; workspace packages stay private at `0.1.0`).
 - Consequence: adding a variable requires documenting it in the same change. External links are not checked.
+
+## ADR-026: Token usage per step and a per-run budget
+
+- Context: the provider returned token counts but nothing stored them, so operators could not tell what an article cost or cap spending.
+- Decision: the tracked LLM (`trackUsage`) adds prompt, completion and total tokens, call count and the provider-reported `cost` (OpenRouter, requested with `usage.include`) to the run's counter. Every step execution stores the difference it caused in new `workflow_steps` columns (migration v4), failed executions included. `list` sums them per run. `OPENBLOG_MAX_TOKENS_PER_RUN` and `OPENBLOG_MAX_COST_PER_RUN` set the budget: it is checked before every call and after every call, and throws `BudgetExceededError` (code `budget_exceeded`), so the step and the run fail with that code. On `resume` the stored usage of earlier executions is the starting point, so the budget covers the whole run.
+- Consequence: cost comes only from what the provider reports (no price catalogs); with Ollama only the token limit applies. A call that crosses the limit has already been paid for, and its result is discarded. Steps stored before this change have no usage and count as zero.

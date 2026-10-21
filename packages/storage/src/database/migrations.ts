@@ -118,6 +118,17 @@ const migrations: Migration[] = [
       SET review_state = 'published', gate_passed = 1
       WHERE workflow_id IN (SELECT id FROM workflows WHERE status = 'published');
     `);
+  },
+
+  // v4: provider usage per step execution.
+  (db) => {
+    addMissingColumns(db, "workflow_steps", {
+      llm_calls: "INTEGER",
+      prompt_tokens: "INTEGER",
+      completion_tokens: "INTEGER",
+      total_tokens: "INTEGER",
+      cost_usd: "REAL"
+    });
   }
 ];
 

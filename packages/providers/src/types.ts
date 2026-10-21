@@ -10,6 +10,8 @@ export interface GenerateUsage {
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
+  /** Cost in USD, when the provider reports one. */
+  cost?: number;
 }
 
 export interface GenerateResult {
