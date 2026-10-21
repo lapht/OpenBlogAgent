@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import Database from "better-sqlite3";
 
 import type { IDatabaseConnection } from "./index";
@@ -16,7 +19,12 @@ export class SQLiteDatabaseConnection implements IDatabaseConnection {
       return;
     }
 
+    if (this.options.filePath !== ":memory:") {
+      fs.mkdirSync(path.dirname(path.resolve(this.options.filePath)), { recursive: true });
+    }
+
     this.db = new Database(this.options.filePath);
+    this.db.pragma("busy_timeout = 5000");
     this.db.pragma("foreign_keys = ON");
     this.db.pragma("journal_mode = WAL");
   }

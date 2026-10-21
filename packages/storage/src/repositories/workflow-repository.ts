@@ -25,7 +25,7 @@ interface WorkflowRow {
 export class WorkflowRepository implements IRepositoryContract<WorkflowRecord> {
   constructor(private readonly db: Database) {}
 
-  async getById(id: Identifier): Promise<WorkflowRecord | null> {
+  getById(id: Identifier): WorkflowRecord | null {
     const row = this.db
       .prepare(
         `SELECT
@@ -52,7 +52,7 @@ export class WorkflowRepository implements IRepositoryContract<WorkflowRecord> {
     return row ? this.mapRow(row) : null;
   }
 
-  async save(model: WorkflowRecord): Promise<void> {
+  save(model: WorkflowRecord): void {
     this.db
       .prepare(
         `INSERT INTO workflows (
@@ -106,13 +106,27 @@ export class WorkflowRepository implements IRepositoryContract<WorkflowRecord> {
       );
   }
 
-  async updateStatus(
+  /** The earliest successfully published run of a topic, the reference for duplicate detection. */
+  findFirstPublishedByTopic(topicNormalized: string): WorkflowRecord | null {
+    const row = this.db
+      .prepare(
+        `SELECT * FROM workflows
+         WHERE topic_normalized = ? AND status = 'published'
+         ORDER BY completed_at ASC, created_at ASC
+         LIMIT 1`
+      )
+      .get(topicNormalized) as WorkflowRow | undefined;
+
+    return row ? this.mapRow(row) : null;
+  }
+
+  updateStatus(
     id: Identifier,
     status: WorkflowStatus,
     completedAt: string | null,
     errorMessage: string | null,
     failure: { errorCode?: string | null; failedStep?: string | null } = {}
-  ): Promise<void> {
+  ): void {
     this.db
       .prepare(
         `UPDATE workflows

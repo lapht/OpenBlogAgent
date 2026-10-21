@@ -154,15 +154,59 @@ function currentArticle(state: ArticleWorkflowState): string {
   return state.editedText ?? required(state.article, "article");
 }
 
+interface StepContext {
+  logger: ILogger;
+  memory?: MemoryPort;
+}
+
+/** Wraps a node: failures carry the step name and every execution is recorded with its output. */
 function step(
   name: string,
+  { logger, memory }: StepContext,
   fn: (state: ArticleWorkflowState) => Promise<ArticleWorkflowUpdate>
 ): (state: ArticleWorkflowState) => Promise<ArticleWorkflowUpdate> {
-  return async (state) => {
+  const record = async (
+    state: ArticleWorkflowState,
+    startedAt: string,
+    result: { output: ArticleWorkflowUpdate } | { error: WorkflowStepError }
+  ): Promise<void> => {
+    if (!memory || !state.workflowId) {
+      return;
+    }
     try {
-      return await fn(state);
+      await memory.recordStep({
+        workflowId: state.workflowId,
+        step: name,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        ...("output" in result
+          ? { status: "succeeded", output: result.output }
+          : {
+              status: "failed",
+              errorCode: result.error.code,
+              errorMessage: result.error.message
+            })
+      });
     } catch (error) {
-      throw error instanceof WorkflowStepError ? error : new WorkflowStepError(name, error);
+      // Step artifacts are an audit trail; losing one must not fail the run.
+      logger.warn("Could not record workflow step", {
+        step: name,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  };
+
+  return async (state) => {
+    const startedAt = new Date().toISOString();
+    try {
+      const output = await fn(state);
+      await record(state, startedAt, { output });
+      return output;
+    } catch (error) {
+      const stepError =
+        error instanceof WorkflowStepError ? error : new WorkflowStepError(name, error);
+      await record(state, startedAt, { error: stepError });
+      throw stepError;
     }
   };
 }
@@ -179,10 +223,12 @@ export function createArticleGenerationWorkflow(
   const seoAgent = createSeoAgent(llm);
   const classificationAgent = createClassificationAgent(llm);
 
+  const stepContext: StepContext = { logger, memory };
+
   const workflow = new StateGraph(graphState)
     .addNode(
       "planner",
-      step("planner", async (state) => {
+      step("planner", stepContext, async (state) => {
         const input = { topic: state.topic };
 
         if (memory && state.workflowId) {
@@ -202,7 +248,7 @@ export function createArticleGenerationWorkflow(
     )
     .addNode(
       "writer",
-      step("writer", async (state) => {
+      step("writer", stepContext, async (state) => {
         const input = { topic: state.topic, outline: required(state.outline, "outline") };
 
         if (memory && state.workflowId) {
@@ -222,7 +268,7 @@ export function createArticleGenerationWorkflow(
     )
     .addNode(
       "editor",
-      step("editor", async (state) => {
+      step("editor", stepContext, async (state) => {
         const editorOutput = await editorAgent.run({
           rawText: required(state.article, "article")
         });
@@ -238,7 +284,7 @@ export function createArticleGenerationWorkflow(
     )
     .addNode(
       "seo",
-      step("seo", async (state) => {
+      step("seo", stepContext, async (state) => {
         const seoOutput = seoOutputSchema.parse(
           await seoAgent.run({
             outline: required(state.outline, "outline"),
@@ -253,7 +299,7 @@ export function createArticleGenerationWorkflow(
     )
     .addNode(
       "classification",
-      step("classification", async (state) => {
+      step("classification", stepContext, async (state) => {
         const availableCategories = taxonomy ? await taxonomy.listCategories() : [defaultCategory];
         const availableTags = taxonomy ? await taxonomy.listTags() : [];
 
@@ -273,7 +319,7 @@ export function createArticleGenerationWorkflow(
     )
     .addNode(
       "publisher",
-      step("publisher", async (state) => {
+      step("publisher", stepContext, async (state) => {
         const seoOutput = required(state.seoOutput, "seoOutput");
 
         const articleForPublishing: PublishArticle = {

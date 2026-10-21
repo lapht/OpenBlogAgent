@@ -47,6 +47,17 @@ export interface MemoryPort {
     errorCode?: string;
     errorMessage?: string;
   }): Promise<void>;
+  /** Stores the output (or error) of one step execution so a run can be audited or resumed. */
+  recordStep(params: {
+    workflowId: string;
+    step: string;
+    status: "succeeded" | "failed";
+    output?: unknown;
+    errorCode?: string;
+    errorMessage?: string;
+    startedAt: string;
+    completedAt: string;
+  }): Promise<void>;
   failWorkflow(params: {
     workflowId: string;
     errorMessage: string;

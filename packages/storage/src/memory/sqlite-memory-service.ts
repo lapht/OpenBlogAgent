@@ -4,6 +4,7 @@ import { runStorageMigrations, SQLiteDatabaseConnection } from "../database";
 import {
   ArticleRepository,
   PromptRepository,
+  StepRepository,
   TopicRepository,
   WorkflowRepository
 } from "../repositories";
@@ -32,7 +33,9 @@ export async function createSQLiteMemoryService(
     new WorkflowRepository(db),
     new TopicRepository(db),
     new PromptRepository(db),
-    new ArticleRepository(db)
+    new ArticleRepository(db),
+    new StepRepository(db),
+    (fn) => db.transaction(fn)()
   );
 
   return {

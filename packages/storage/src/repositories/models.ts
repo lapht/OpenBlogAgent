@@ -55,6 +55,25 @@ export interface ArticleRecord {
   editedMarkdown: string;
   seo: Record<string, unknown>;
   publishResult: Record<string, unknown> | null;
+  publishRemoteId: string | null;
+  publishRemoteUrl: string | null;
+  publishRemoteStatus: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type WorkflowStepStatus = "succeeded" | "failed";
+
+export interface WorkflowStepRecord {
+  id: Identifier;
+  workflowId: Identifier;
+  step: string;
+  status: WorkflowStepStatus;
+  /** 1 for the first execution of a step in a workflow, incremented on each retry. */
+  attempt: number;
+  output: unknown;
+  errorCode: string | null;
+  errorMessage: string | null;
+  startedAt: string;
+  completedAt: string;
 }

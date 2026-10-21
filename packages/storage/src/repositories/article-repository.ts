@@ -16,6 +16,9 @@ interface ArticleRow {
   edited_markdown: string;
   seo_json: string;
   publish_result_json: string | null;
+  publish_remote_id: string | null;
+  publish_remote_url: string | null;
+  publish_remote_status: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -23,7 +26,7 @@ interface ArticleRow {
 export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
   constructor(private readonly db: Database) {}
 
-  async getById(id: Identifier): Promise<ArticleRecord | null> {
+  getById(id: Identifier): ArticleRecord | null {
     const row = this.db
       .prepare(
         `SELECT
@@ -38,6 +41,9 @@ export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
           edited_markdown,
           seo_json,
           publish_result_json,
+          publish_remote_id,
+          publish_remote_url,
+          publish_remote_status,
           created_at,
           updated_at
          FROM articles
@@ -48,7 +54,7 @@ export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
     return row ? this.mapRow(row) : null;
   }
 
-  async save(model: ArticleRecord): Promise<void> {
+  save(model: ArticleRecord): void {
     this.db
       .prepare(
         `INSERT INTO articles (
@@ -63,9 +69,12 @@ export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
           edited_markdown,
           seo_json,
           publish_result_json,
+          publish_remote_id,
+          publish_remote_url,
+          publish_remote_status,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(workflow_id) DO UPDATE SET
           topic = excluded.topic,
           title = excluded.title,
@@ -76,6 +85,9 @@ export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
           edited_markdown = excluded.edited_markdown,
           seo_json = excluded.seo_json,
           publish_result_json = excluded.publish_result_json,
+          publish_remote_id = excluded.publish_remote_id,
+          publish_remote_url = excluded.publish_remote_url,
+          publish_remote_status = excluded.publish_remote_status,
           updated_at = excluded.updated_at`
       )
       .run(
@@ -90,12 +102,15 @@ export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
         model.editedMarkdown,
         JSON.stringify(model.seo),
         model.publishResult ? JSON.stringify(model.publishResult) : null,
+        model.publishRemoteId,
+        model.publishRemoteUrl,
+        model.publishRemoteStatus,
         model.createdAt,
         model.updatedAt
       );
   }
 
-  async getByWorkflowId(workflowId: Identifier): Promise<ArticleRecord | null> {
+  getByWorkflowId(workflowId: Identifier): ArticleRecord | null {
     const row = this.db
       .prepare(
         `SELECT
@@ -110,6 +125,9 @@ export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
           edited_markdown,
           seo_json,
           publish_result_json,
+          publish_remote_id,
+          publish_remote_url,
+          publish_remote_status,
           created_at,
           updated_at
          FROM articles
@@ -135,6 +153,9 @@ export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
       publishResult: row.publish_result_json
         ? (JSON.parse(row.publish_result_json) as Record<string, unknown>)
         : null,
+      publishRemoteId: row.publish_remote_id,
+      publishRemoteUrl: row.publish_remote_url,
+      publishRemoteStatus: row.publish_remote_status,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
