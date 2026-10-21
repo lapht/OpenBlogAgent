@@ -1,3 +1,6 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import { randomUUID } from "node:crypto";
+
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import {
   createClassificationAgent,
@@ -12,7 +15,7 @@ import {
   seoOutputSchema,
   validateArticle
 } from "@openblog/agents";
-import type { ILogger } from "@openblog/logger";
+import { withLogContext, withScope, type ILogger } from "@openblog/logger";
 import type { PublishArticle, PublishResult } from "@openblog/publishers";
 import { z } from "zod";
 
@@ -341,6 +344,18 @@ function currentArticle(state: ArticleWorkflowState): string {
   return state.editedText ?? required(state.article, "article");
 }
 
+/** Executions of each step in the run in progress, so log lines can say which attempt they belong to. */
+const attemptCounter = new AsyncLocalStorage<Map<string, number>>();
+
+/** Runs `fn` as one run: every log line inside carries its `workflowId`. */
+function inRun<T>(workflowId: string, previousSteps: StoredWorkflowStep[], fn: () => T): T {
+  const attempts = new Map<string, number>();
+  for (const stored of previousSteps) {
+    attempts.set(stored.step, Math.max(attempts.get(stored.step) ?? 0, stored.attempt));
+  }
+  return withLogContext({ workflowId }, () => attemptCounter.run(attempts, fn));
+}
+
 interface StepContext {
   logger: ILogger;
   memory?: MemoryPort;
@@ -384,30 +399,45 @@ function step(
   };
 
   return async (state) => {
-    if (state.completedSteps?.includes(name)) {
-      logger.info("Skipping step completed in a previous attempt", { step: name });
-      return {};
-    }
+    const attempts = attemptCounter.getStore();
+    const attempt = (attempts?.get(name) ?? 0) + 1;
 
-    const startedAt = new Date().toISOString();
-    try {
-      const output = await fn(state);
-      await record(state, startedAt, { output });
-      return output;
-    } catch (error) {
-      const stepError =
-        error instanceof WorkflowStepError ? error : new WorkflowStepError(name, error);
-      await record(state, startedAt, { error: stepError });
-      throw stepError;
-    }
+    return withLogContext({ step: name, attempt }, async () => {
+      if (state.completedSteps?.includes(name)) {
+        logger.info("Skipping step completed in a previous attempt");
+        return {};
+      }
+      attempts?.set(name, attempt);
+
+      const startedAt = new Date().toISOString();
+      const started = Date.now();
+      try {
+        const output = await fn(state);
+        await record(state, startedAt, { output });
+        logger.info("Step finished", { outcome: "succeeded", durationMs: Date.now() - started });
+        return output;
+      } catch (error) {
+        const stepError =
+          error instanceof WorkflowStepError ? error : new WorkflowStepError(name, error);
+        await record(state, startedAt, { error: stepError });
+        logger.error("Step finished", {
+          outcome: "failed",
+          durationMs: Date.now() - started,
+          errorCode: stepError.code,
+          error: stepError.message
+        });
+        throw stepError;
+      }
+    });
   };
 }
 
 export function createArticleGenerationWorkflow(
   options: CreateArticleGenerationWorkflowOptions
 ): ArticleGenerationWorkflow {
-  const { logger, publisher, taxonomy, memory, maxTags = 5 } = options;
-  const llm = trackUsage(options.llm);
+  const { publisher, taxonomy, memory, maxTags = 5 } = options;
+  const logger = withScope(options.logger);
+  const llm = trackUsage(options.llm, logger);
   const defaultCategory = options.defaultCategory ?? "General";
   const qualityRules = options.quality?.rules ?? {};
   const allowDuplicates = options.allowDuplicates ?? false;
@@ -855,18 +885,21 @@ export function createArticleGenerationWorkflow(
           })
         : null;
 
-      if (workflowMemory?.isDuplicate) {
-        const duplicate: DuplicateInfo = {
-          matchedOn: "topic",
-          workflowId: workflowMemory.duplicateOfWorkflowId ?? undefined
-        };
-        if (!force) {
-          return stopAsDuplicate(topic, workflowMemory, duplicate, "duplicate_topic_check");
+      // Without a memory store there is no stored id; a throwaway one still correlates the lines.
+      return inRun(workflowMemory?.workflowId ?? randomUUID(), [], async () => {
+        if (workflowMemory?.isDuplicate) {
+          const duplicate: DuplicateInfo = {
+            matchedOn: "topic",
+            workflowId: workflowMemory.duplicateOfWorkflowId ?? undefined
+          };
+          if (!force) {
+            return stopAsDuplicate(topic, workflowMemory, duplicate, "duplicate_topic_check");
+          }
+          logger.warn("Duplicate topic allowed by force", { topic, ...duplicate });
         }
-        logger.warn("Duplicate topic allowed by force", { topic, ...duplicate });
-      }
 
-      return execute(topic, workflowMemory, force);
+        return execute(topic, workflowMemory, force);
+      });
     },
 
     async approve(workflowId: string, input: ApprovalInput): Promise<ApprovalResult> {
@@ -877,91 +910,93 @@ export function createArticleGenerationWorkflow(
         );
       }
       const stored = await memory.loadArticle(workflowId);
-      if (!stored) {
-        throw new ApprovalError("not_found", `No stored article for workflow ${workflowId}`);
-      }
+      return inRun(workflowId, [], async () => {
+        if (!stored) {
+          throw new ApprovalError("not_found", `No stored article for workflow ${workflowId}`);
+        }
 
-      const { article } = stored;
-      if (article.reviewState === "published") {
-        throw new ApprovalError(
-          "already_published",
-          `The article of workflow ${workflowId} is already published`
+        const { article } = stored;
+        if (article.reviewState === "published") {
+          throw new ApprovalError(
+            "already_published",
+            `The article of workflow ${workflowId} is already published`
+          );
+        }
+
+        const overrideReason = input.overrideReason?.trim() || undefined;
+        const gatePassed = article.gatePassed === true;
+        if (!gatePassed && !overrideReason) {
+          throw new ApprovalError(
+            "gate_not_passed",
+            `The article of workflow ${workflowId} did not pass the quality gate; approve it with an override reason to publish it anyway`
+          );
+        }
+
+        const description = article.seo.metaDescription;
+        if (!article.title || !article.slug || typeof description !== "string") {
+          throw new ApprovalError(
+            "not_publishable",
+            `The stored article of workflow ${workflowId} has no title, slug or description`
+          );
+        }
+
+        await memory.beginApproval({
+          workflowId,
+          approvedBy: input.approvedBy,
+          overrideReason: gatePassed ? undefined : overrideReason
+        });
+        logger.info("Article approved", {
+          workflowId,
+          approvedBy: input.approvedBy,
+          overridden: !gatePassed,
+          overrideReason: gatePassed ? undefined : overrideReason
+        });
+
+        const now = new Date().toISOString();
+        // The publisher looks the slug up first, so retrying after a failed approval does not duplicate.
+        const publishResult = publishResultSchema.parse(
+          await publisher.publish({
+            title: article.title,
+            slug: article.slug,
+            summary: description,
+            content: article.editedMarkdown,
+            createdAt: now,
+            updatedAt: now,
+            tags: article.tags,
+            category: article.category ?? defaultCategory,
+            author: "OpenBlogAgent",
+            language: "en",
+            status: "publish"
+          })
         );
-      }
+        await memory.completeApproval({ workflowId, publishResult: { ...publishResult } });
 
-      const overrideReason = input.overrideReason?.trim() || undefined;
-      const gatePassed = article.gatePassed === true;
-      if (!gatePassed && !overrideReason) {
-        throw new ApprovalError(
-          "gate_not_passed",
-          `The article of workflow ${workflowId} did not pass the quality gate; approve it with an override reason to publish it anyway`
-        );
-      }
-
-      const description = article.seo.metaDescription;
-      if (!article.title || !article.slug || typeof description !== "string") {
-        throw new ApprovalError(
-          "not_publishable",
-          `The stored article of workflow ${workflowId} has no title, slug or description`
-        );
-      }
-
-      await memory.beginApproval({
-        workflowId,
-        approvedBy: input.approvedBy,
-        overrideReason: gatePassed ? undefined : overrideReason
-      });
-      logger.info("Article approved", {
-        workflowId,
-        approvedBy: input.approvedBy,
-        overridden: !gatePassed,
-        overrideReason: gatePassed ? undefined : overrideReason
-      });
-
-      const now = new Date().toISOString();
-      // The publisher looks the slug up first, so retrying after a failed approval does not duplicate.
-      const publishResult = publishResultSchema.parse(
-        await publisher.publish({
+        const result = {
+          workflowId,
           title: article.title,
           slug: article.slug,
-          summary: description,
-          content: article.editedMarkdown,
-          createdAt: now,
-          updatedAt: now,
-          tags: article.tags,
-          category: article.category ?? defaultCategory,
-          author: "OpenBlogAgent",
-          language: "en",
-          status: "publish"
-        })
-      );
-      await memory.completeApproval({ workflowId, publishResult: { ...publishResult } });
-
-      const result = {
-        workflowId,
-        title: article.title,
-        slug: article.slug,
-        publishResult
-      };
-      if (publishResult.success) {
-        logger.info("Approved article published", { workflowId, slug: article.slug });
-        return { ...result, status: "published" };
-      }
-
-      logger.error("Publishing the approved article failed", {
-        workflowId,
-        errorCode: publishResult.error?.code,
-        error: publishResult.error?.message
-      });
-      return {
-        ...result,
-        status: "failed",
-        failure: {
-          step: "publisher",
-          code: publishResult.error?.code ?? "publish_failed",
-          message: publishResult.error?.message ?? "Publisher did not confirm the publication"
+          publishResult
+        };
+        if (publishResult.success) {
+          logger.info("Approved article published", { workflowId, slug: article.slug });
+          return { ...result, status: "published" };
         }
-      };
+
+        logger.error("Publishing the approved article failed", {
+          workflowId,
+          errorCode: publishResult.error?.code,
+          error: publishResult.error?.message
+        });
+        return {
+          ...result,
+          status: "failed",
+          failure: {
+            step: "publisher",
+            code: publishResult.error?.code ?? "publish_failed",
+            message: publishResult.error?.message ?? "Publisher did not confirm the publication"
+          }
+        };
+      });
     },
 
     async resume(
@@ -986,18 +1021,19 @@ export function createArticleGenerationWorkflow(
       }
 
       const restored = restoreState(stored.steps);
-      logger.info("Resuming article workflow", {
-        workflowId,
-        topic: stored.topic,
-        completedSteps: restored.completedSteps
-      });
+      return inRun(workflowId, stored.steps, () => {
+        logger.info("Resuming article workflow", {
+          topic: stored.topic,
+          completedSteps: restored.completedSteps
+        });
 
-      return execute(
-        stored.topic,
-        { workflowId },
-        Boolean(resumeOptions.force) || allowDuplicates,
-        restored
-      );
+        return execute(
+          stored.topic,
+          { workflowId },
+          Boolean(resumeOptions.force) || allowDuplicates,
+          restored
+        );
+      });
     }
   };
 }
