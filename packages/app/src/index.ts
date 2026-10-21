@@ -4,6 +4,7 @@ import {
   type ArticleGenerationWorkflow,
   type LlmPort,
   type MemoryPort,
+  type StoredRunDetails,
   type StoredWorkflowSummary
 } from "@openblog/graph";
 import { logger as defaultLogger, type ILogger } from "@openblog/logger";
@@ -46,6 +47,8 @@ export interface Application {
   workflow: ArticleGenerationWorkflow;
   /** The most recent stored runs, newest first. */
   listRuns(limit?: number): Promise<StoredWorkflowSummary[]>;
+  /** One stored run with its steps; null if the id is unknown. */
+  getRun(workflowId: string): Promise<StoredRunDetails | null>;
   /** What was wired, for diagnostics. */
   info: {
     publisherIds: string[];
@@ -177,6 +180,9 @@ export async function createApplication(
     workflow,
     async listRuns(limit = 20): Promise<StoredWorkflowSummary[]> {
       return (await memory?.listWorkflows?.(limit)) ?? [];
+    },
+    async getRun(workflowId: string): Promise<StoredRunDetails | null> {
+      return (await memory?.getRunDetails?.(workflowId)) ?? null;
     },
     info: { publisherIds: publishers.map((publisher) => publisher.id), taxonomyProvider },
     async dispose(): Promise<void> {

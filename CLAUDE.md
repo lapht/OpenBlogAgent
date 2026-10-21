@@ -36,7 +36,7 @@ Commits must follow Conventional Commits (commitlint via husky; lint-staged runs
 - **`packages/publishers`**: pluggable `IPublisher` implementations (`markdown`, `wordpress`, `ghost`). `factory.ts` builds them from config. `manager.ts` (`DefaultPublisherManager`) selects the one named by `OPENBLOG_DEFAULT_PUBLISHER`. `taxonomy/` holds category and tag providers (WordPress-backed, or static) with a TTL cache. They are used for category and tag resolution.
 - **`packages/config`**: env loading and a Zod schema. All runtime config is `OPENBLOG_*`, `OPENROUTER_*` and `OLLAMA_*` environment variables (see `.env.example`).
 - **`types`, `logger` (Pino), `shared`, `storage`**: small shared types, logging, constants and SQLite persistence. Wiring is explicit constructor/factory injection; there is no DI container.
-- **`apps/cli`** is the real entry point (`run.ts`: arguments, `createApplication`, exit code). `apps/server` is a Fastify app that only exposes `GET /health` and `GET /version`; `buildServer` accepts an optional `application`.
+- **`apps/cli`** is the real entry point (`run.ts`: arguments, `createApplication`, exit code). `apps/server` is a Fastify app: public `GET /health`, `/version`, `/openapi.json`, plus `/runs` endpoints (start, list, inspect, resume, approve) behind `OPENBLOG_API_KEY` that run workflows in a bounded in-process queue; `main.ts` builds the application with `createApplication` like the CLI, and `buildServer` registers the run routes only when given an `application`.
 - The top-level `src/mastra/` is an empty leftover directory. Don't build there.
 
 TypeScript is strict CommonJS (`tsconfig.base.json`) with `noUnusedLocals`/`noUnusedParameters` on, so unused imports fail the build.

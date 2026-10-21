@@ -1,0 +1,295 @@
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { createApplication } from "../../packages/app/src";
+import { loadEnv } from "../../packages/config/src";
+import { buildServer } from "../../apps/server/src/app";
+
+const API_KEY = "test-key-123";
+const auth = { authorization: `Bearer ${API_KEY}` };
+
+const replies = () => [
+  JSON.stringify(["Intro", "Body", "Conclusion"]),
+  "Article body",
+  JSON.stringify({ editedText: "Edited body", changesSummary: "tidied" }),
+  JSON.stringify({
+    title: "A title",
+    metaDescription: "A description",
+    slug: "a-title",
+    h1: "A H1",
+    headings: [{ level: "H2", text: "Intro" }]
+  }),
+  JSON.stringify({ category: "News", tags: ["alpha"] })
+];
+
+/** Replays one reply per call; the call numbers in `failOn` throw instead; `gate` holds every call until released. */
+function fakeProvider(options: { failOn?: number[]; gate?: Promise<void> } = {}) {
+  let calls = 0;
+  let cursor = 0;
+  const script = replies();
+  return {
+    id: "fake",
+    get calls() {
+      return calls;
+    },
+    async generate() {
+      calls += 1;
+      await options.gate;
+      if (options.failOn?.includes(calls)) {
+        throw new Error(`provider down on call ${calls}`);
+      }
+      return { text: script[cursor++]!, model: "fake", usage: { totalTokens: 10 } };
+    }
+  };
+}
+
+describe("HTTP API", () => {
+  let dir: string;
+  const open: Array<{ close(): Promise<unknown> }> = [];
+
+  const env = () =>
+    loadEnv({
+      OPENBLOG_OUTPUT_DIR: path.join(dir, "out"),
+      OPENBLOG_MEMORY_DB_PATH: path.join(dir, "memory.db"),
+      OPENBLOG_LOG_LEVEL: "fatal",
+      OPENBLOG_TAXONOMY_CATEGORIES: "News, Tutorials",
+      OPENBLOG_TAXONOMY_TAGS: "alpha,beta",
+      OPENBLOG_QUALITY_MIN_WORDS: "1",
+      OPENBLOG_QUALITY_MIN_H2: "0",
+      OPENBLOG_QUALITY_MIN_OUTLINE_COVERAGE: "0",
+      OPENBLOG_QUALITY_MIN_EDIT_RATIO: "0.0001",
+      OPENBLOG_QUALITY_MAX_ATTEMPTS: "0"
+    });
+
+  async function server(
+    llm: ReturnType<typeof fakeProvider>,
+    options: Parameters<typeof buildServer>[0] = { apiKey: API_KEY }
+  ) {
+    const application = await createApplication(env(), { llm });
+    const app = await buildServer({ application, ...options });
+    open.push(app);
+    return app;
+  }
+
+  async function waitForRun(app: Awaited<ReturnType<typeof server>>, id: string) {
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const response = await app.inject({ method: "GET", url: `/runs/${id}`, headers: auth });
+      const run = response.json();
+      if (!["started", "running"].includes(run.status)) return run;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    throw new Error(`run ${id} did not finish`);
+  }
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), "openblog-api-"));
+  });
+
+  afterEach(async () => {
+    await Promise.all(open.splice(0).map((app) => app.close()));
+    rmSync(dir, { force: true, recursive: true });
+  });
+
+  it("rejects unauthenticated requests but keeps /health public", async () => {
+    const app = await server(fakeProvider());
+
+    for (const headers of [{}, { authorization: "Bearer wrong" }, { "x-api-key": "wrong" }]) {
+      const response = await app.inject({ method: "GET", url: "/runs", headers });
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toMatchObject({ code: "unauthorized" });
+    }
+    const post = await app.inject({ method: "POST", url: "/runs", payload: { topic: "x" } });
+    expect(post.statusCode).toBe(401);
+
+    expect((await app.inject({ method: "GET", url: "/health" })).statusCode).toBe(200);
+    expect(
+      (await app.inject({ method: "GET", url: "/runs", headers: { "x-api-key": API_KEY } }))
+        .statusCode
+    ).toBe(200);
+  });
+
+  it("refuses every run request when no API key is configured", async () => {
+    const app = await server(fakeProvider(), {});
+
+    const response = await app.inject({ method: "GET", url: "/runs", headers: auth });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({ code: "api_disabled" });
+  });
+
+  it("starts a run, reports its steps and lists it, like a CLI run", async () => {
+    const llm = fakeProvider();
+    const app = await server(llm);
+
+    const started = await app.inject({
+      method: "POST",
+      url: "/runs",
+      headers: auth,
+      payload: { topic: "Over HTTP" }
+    });
+    expect(started.statusCode).toBe(202);
+    const { workflowId } = started.json();
+
+    const run = await waitForRun(app, workflowId);
+    expect(run.errorMessage).toBeNull();
+    expect(run).toMatchObject({
+      workflowId,
+      topic: "Over HTTP",
+      status: "awaiting_approval",
+      totalTokens: 50
+    });
+    expect(run.steps.map((step: { step: string }) => step.step)).toEqual([
+      "planner",
+      "writer",
+      "editor",
+      "seo",
+      "duplicate_check",
+      "quality",
+      "classification",
+      "publisher"
+    ]);
+    expect(existsSync(path.join(dir, "out", "a-title.md"))).toBe(true);
+
+    const list = await app.inject({ method: "GET", url: "/runs", headers: auth });
+    expect(list.json().runs).toEqual([expect.objectContaining({ workflowId, topic: "Over HTTP" })]);
+  });
+
+  it("approves a stored article once", async () => {
+    const app = await server(fakeProvider());
+    const { workflowId } = (
+      await app.inject({ method: "POST", url: "/runs", headers: auth, payload: { topic: "T" } })
+    ).json();
+    await waitForRun(app, workflowId);
+
+    const approved = await app.inject({
+      method: "POST",
+      url: `/runs/${workflowId}/approve`,
+      headers: auth,
+      payload: { approvedBy: "ci" }
+    });
+    expect(approved.statusCode).toBe(200);
+    expect(approved.json()).toMatchObject({ workflowId, slug: "a-title", status: "published" });
+
+    const again = await app.inject({
+      method: "POST",
+      url: `/runs/${workflowId}/approve`,
+      headers: auth
+    });
+    expect(again.statusCode).toBe(409);
+    expect(again.json()).toMatchObject({ code: "already_published" });
+
+    const missing = await app.inject({
+      method: "POST",
+      url: "/runs/nope/approve",
+      headers: auth
+    });
+    expect(missing.statusCode).toBe(404);
+  });
+
+  it("validates the request body", async () => {
+    const app = await server(fakeProvider());
+
+    for (const payload of [{}, { topic: "" }, { topic: "x", extra: 1 }]) {
+      const response = await app.inject({ method: "POST", url: "/runs", headers: auth, payload });
+      expect(response.statusCode).toBe(400);
+    }
+  });
+
+  it("resumes a failed run in the background", async () => {
+    const app = await server(fakeProvider({ failOn: [4] })); // the seo step fails once
+    const { workflowId } = (
+      await app.inject({ method: "POST", url: "/runs", headers: auth, payload: { topic: "T" } })
+    ).json();
+    expect((await waitForRun(app, workflowId)).status).toBe("failed");
+
+    const resumed = await app.inject({
+      method: "POST",
+      url: `/runs/${workflowId}/resume`,
+      headers: auth
+    });
+    expect(resumed.statusCode).toBe(202);
+    expect((await waitForRun(app, workflowId)).status).toBe("awaiting_approval");
+
+    expect(
+      (await app.inject({ method: "POST", url: "/runs/nope/resume", headers: auth })).statusCode
+    ).toBe(404);
+  });
+
+  it("answers 429 when the queue is full and 409 for a run already in progress", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const app = await server(fakeProvider({ gate }), {
+      apiKey: API_KEY,
+      queue: { concurrency: 1, maxQueued: 0 }
+    });
+
+    const first = await app.inject({
+      method: "POST",
+      url: "/runs",
+      headers: auth,
+      payload: { topic: "First" }
+    });
+    expect(first.statusCode).toBe(202);
+
+    const second = await app.inject({
+      method: "POST",
+      url: "/runs",
+      headers: auth,
+      payload: { topic: "Second" }
+    });
+    expect(second.statusCode).toBe(429);
+    expect(second.json()).toMatchObject({ code: "queue_full" });
+    expect(second.headers["retry-after"]).toBeDefined();
+
+    const resume = await app.inject({
+      method: "POST",
+      url: `/runs/${first.json().workflowId}/resume`,
+      headers: auth
+    });
+    expect(resume.statusCode).toBe(409);
+
+    release();
+    expect((await waitForRun(app, first.json().workflowId)).status).toBe("awaiting_approval");
+  });
+
+  it("sends no CORS headers unless origins are configured", async () => {
+    const closed = await server(fakeProvider());
+    const open1 = await closed.inject({
+      method: "GET",
+      url: "/health",
+      headers: { origin: "https://evil.example" }
+    });
+    expect(open1.headers["access-control-allow-origin"]).toBeUndefined();
+
+    const allowed = await server(fakeProvider(), {
+      apiKey: API_KEY,
+      corsOrigins: ["https://app.example"]
+    });
+    const ok = await allowed.inject({
+      method: "GET",
+      url: "/health",
+      headers: { origin: "https://app.example" }
+    });
+    expect(ok.headers["access-control-allow-origin"]).toBe("https://app.example");
+    const other = await allowed.inject({
+      method: "GET",
+      url: "/health",
+      headers: { origin: "https://evil.example" }
+    });
+    expect(other.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+
+  it("publishes an OpenAPI document describing the run endpoints", async () => {
+    const app = await server(fakeProvider());
+
+    const response = await app.inject({ method: "GET", url: "/openapi.json" });
+
+    expect(response.statusCode).toBe(200);
+    expect(Object.keys(response.json().paths)).toEqual(
+      expect.arrayContaining(["/runs", "/runs/{id}", "/runs/{id}/resume", "/runs/{id}/approve"])
+    );
+  });
+});

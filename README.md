@@ -100,6 +100,8 @@ To use the server instead: `docker run --rm -p 3000:3000 --entrypoint node openb
 
 - `GET /health`
 - `GET /version`
+- `GET /openapi.json`
+- `POST /runs`, `GET /runs`, `GET /runs/{id}`, `POST /runs/{id}/resume`, `POST /runs/{id}/approve` (need `OPENBLOG_API_KEY`; see [Operations](docs/operations.md#http-api))
 
 ## Workflow Overview
 
