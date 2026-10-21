@@ -1,5 +1,7 @@
 export * from "./classification/agent";
 export * from "./structured-output";
+export * from "./planner/agent";
+export * from "./writer/agent";
 
 // Re-export agent factories for convenience
 export {

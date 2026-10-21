@@ -6,7 +6,7 @@ import {
   StructuredOutputError
 } from "../../packages/agents/src/structured-output";
 import { scriptedProvider } from "../mocks/scripted-provider";
-import { plannerOutlineSchema } from "../../packages/graph/src/workflows/article-generation-workflow";
+import { plannerOutlineSchema } from "../../packages/agents/src/planner/agent";
 
 const schema = z.object({ name: z.string().min(1) });
 const run = (provider: ReturnType<typeof scriptedProvider>, maxAttempts?: number) =>

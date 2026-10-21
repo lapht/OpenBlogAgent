@@ -57,3 +57,10 @@ ADR-style log. Add new entries at the bottom; do not rewrite accepted ones, supe
 - Kept: `@openblog/shared` (only the constants the server uses) and `@openblog/types` (only `Identifier`, used by storage and publishers). A ts-prune pass also removed the unused `VersionInfo`/`Environment` types and the storage `ICacheStore`/`IMemoryStore` stubs. `ILogger` lives only in `@openblog/logger` and `IPublisher` only in `@openblog/publishers`.
 - Decision: dependencies are wired with explicit constructors and factory functions; no DI container.
 - Consequence: re-introduce a package (plugin SDK, dashboard, research tools) only together with working code that uses it.
+
+## ADR-010: The workflow depends on ports; agents own prompts
+
+- Status: accepted (2026-10-21)
+- Context: the workflow file embedded the planner/writer prompts and parser, built `DefaultPublisherManager` itself and redefined the memory contract.
+- Decision: `@openblog/graph` only orchestrates. It defines ports in `packages/graph/src/ports.ts` (`LlmPort`, `PublishPort`, `TaxonomyPort`, `MemoryPort`) and `createArticleGenerationWorkflow` receives them (`llm`, `publisher`, `taxonomy`, `memory`). The CLI is the bootstrap: it builds `DefaultPublisherManager`, the taxonomy adapter and the memory service. Planner and writer are agents like the others; all prompts live in `packages/agents/src/prompts/*` with a `*_PROMPT_VERSION` constant.
+- Consequence: graph imports only types from adapter packages; the workflow is tested end-to-end with fakes. Bump the version constant when a prompt changes.
