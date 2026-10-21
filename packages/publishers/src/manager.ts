@@ -1,6 +1,7 @@
 import type { ILogger } from "@openblog/logger";
 
 import type {
+  ExistingPost,
   IPublisher,
   IPublisherManager,
   PublisherManagerConfig,
@@ -103,6 +104,15 @@ export class DefaultPublisherManager implements IPublisherManager {
         }
       };
     }
+  }
+
+  async findExisting(
+    article: Pick<PublishArticle, "slug">,
+    options?: { publisherId?: string }
+  ): Promise<ExistingPost | null> {
+    const requestedPublisherId = options?.publisherId ?? this.config.defaultPublisherId;
+    const publisher = this.resolvePublisher(article as PublishArticle, requestedPublisherId);
+    return (await publisher?.findExisting?.(article)) ?? null;
   }
 
   private resolvePublisher(

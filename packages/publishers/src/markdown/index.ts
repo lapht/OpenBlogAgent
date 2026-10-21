@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { stringify } from "yaml";
@@ -6,6 +6,7 @@ import { stringify } from "yaml";
 import type { ILogger } from "@openblog/logger";
 
 import type {
+  ExistingPost,
   IPublisher,
   PublishArticle,
   PublishResult,
@@ -39,6 +40,21 @@ export class MarkdownPublisher implements IPublisher {
     public readonly config: MarkdownPublisherConfig,
     private readonly logger: ILogger
   ) {}
+
+  /** The file a publish would create, unless overwriting is enabled (then nothing is "taken"). */
+  async findExisting(article: Pick<PublishArticle, "slug">): Promise<ExistingPost | null> {
+    const slug = slugify(article.slug);
+    if (this.config.overwrite || !SLUG_PATTERN.test(slug)) {
+      return null;
+    }
+    const outputPath = path.resolve(path.resolve(this.config.outputDir), `${slug}.md`);
+    try {
+      await access(outputPath);
+      return { url: outputPath };
+    } catch {
+      return null;
+    }
+  }
 
   async validate(article: PublishArticle): Promise<PublisherValidationResult> {
     const issues: PublisherValidationIssue[] = [];

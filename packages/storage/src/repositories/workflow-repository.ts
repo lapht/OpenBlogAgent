@@ -120,6 +120,17 @@ export class WorkflowRepository implements IRepositoryContract<WorkflowRecord> {
     return row ? this.mapRow(row) : null;
   }
 
+  /** Flags a run as a duplicate of another stored run (or of a remote post, then `null`). */
+  markDuplicate(id: Identifier, duplicateOfWorkflowId: Identifier | null): void {
+    this.db
+      .prepare(
+        `UPDATE workflows
+         SET is_duplicate = 1, duplicate_of_workflow_id = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(duplicateOfWorkflowId, new Date().toISOString(), id);
+  }
+
   updateStatus(
     id: Identifier,
     status: WorkflowStatus,

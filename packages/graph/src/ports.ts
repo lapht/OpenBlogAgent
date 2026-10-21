@@ -1,5 +1,5 @@
 import type { TextGenerationProvider } from "@openblog/providers";
-import type { PublishArticle, PublishResult } from "@openblog/publishers";
+import type { ExistingPost, PublishArticle, PublishResult } from "@openblog/publishers";
 
 /** Text generation. Implemented by the providers package (OpenRouter, Ollama, fallback). */
 export type LlmPort = TextGenerationProvider;
@@ -7,6 +7,8 @@ export type LlmPort = TextGenerationProvider;
 /** Publishes a finished article. Implemented by `DefaultPublisherManager`. */
 export interface PublishPort {
   publish(article: PublishArticle): Promise<PublishResult>;
+  /** Whether the slug is already published on the target. Absent when the target cannot tell. */
+  findExisting?(article: Pick<PublishArticle, "slug">): Promise<ExistingPost | null>;
 }
 
 /** Category and tag names the classification step may choose from. */
@@ -72,6 +74,20 @@ export interface MemoryPort {
     startedAt: string;
     completedAt: string;
   }): Promise<void>;
+  /** Ends a run stopped by the duplicate policy; `duplicateOfWorkflowId` is null for a remote post. */
+  markDuplicate(params: {
+    workflowId: string;
+    duplicateOfWorkflowId: string | null;
+    failedStep: string;
+    errorCode: string;
+    errorMessage: string;
+  }): Promise<void>;
+  /** A published or parked article of another run with this slug or title. */
+  findDuplicateArticle(params: {
+    workflowId: string;
+    slug: string;
+    title: string;
+  }): Promise<{ workflowId: string; matchedOn: "slug" | "title" } | null>;
   failWorkflow(params: {
     workflowId: string;
     errorMessage: string;

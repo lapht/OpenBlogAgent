@@ -139,6 +139,7 @@ export async function createApplication(
     memory: overrides.memory ?? memoryStore?.memoryService,
     defaultCategory: taxonomyConfig.defaultCategory,
     maxTags: taxonomyConfig.maxTags,
+    allowDuplicates: config.OPENBLOG_ALLOW_DUPLICATES,
     quality: {
       maxAttempts: config.OPENBLOG_QUALITY_MAX_ATTEMPTS,
       rules: {

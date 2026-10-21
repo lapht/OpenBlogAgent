@@ -54,6 +54,9 @@ export const envSchema = z.object({
   OPENBLOG_TAXONOMY_MAX_TAGS: z.coerce.number().int().positive().default(5),
   OPENBLOG_TAXONOMY_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(300),
 
+  /** Generate a topic, slug or title that was already published (same as passing `--force` on every run). */
+  OPENBLOG_ALLOW_DUPLICATES: envBoolean(false),
+
   /** How many times a failing article is regenerated before it is parked as `needs_review`. */
   OPENBLOG_QUALITY_MAX_ATTEMPTS: z.coerce.number().int().min(0).default(2),
   OPENBLOG_QUALITY_MIN_WORDS: z.coerce.number().int().positive().default(1000),

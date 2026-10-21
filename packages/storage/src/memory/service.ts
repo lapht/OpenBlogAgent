@@ -44,6 +44,15 @@ export interface FinishWorkflowParams {
   errorMessage?: string;
 }
 
+export interface MarkDuplicateParams {
+  workflowId: Identifier;
+  /** The stored run this one duplicates; `null` when the duplicate is a remote post. */
+  duplicateOfWorkflowId: Identifier | null;
+  failedStep: string;
+  errorCode: string;
+  errorMessage: string;
+}
+
 export interface FailWorkflowParams {
   workflowId: Identifier;
   errorMessage: string;
@@ -223,6 +232,33 @@ export class MemoryService {
 
   async getSteps(workflowId: Identifier): Promise<WorkflowStepRecord[]> {
     return this.stepRepository.getByWorkflowId(workflowId);
+  }
+
+  /** Ends a run stopped by the duplicate policy and records what it duplicates. */
+  async markDuplicate(params: MarkDuplicateParams): Promise<void> {
+    this.runInTransaction(() => {
+      this.workflowRepository.updateStatus(
+        params.workflowId,
+        "duplicate",
+        new Date().toISOString(),
+        params.errorMessage,
+        { errorCode: params.errorCode, failedStep: params.failedStep }
+      );
+      this.workflowRepository.markDuplicate(params.workflowId, params.duplicateOfWorkflowId);
+    });
+  }
+
+  /** A published or parked article of another run with this slug or title. */
+  async findDuplicateArticle(params: {
+    workflowId: Identifier;
+    slug: string;
+    title: string;
+  }): Promise<{ workflowId: Identifier; matchedOn: "slug" | "title" } | null> {
+    return this.articleRepository.findDuplicate({
+      slug: params.slug,
+      title: params.title,
+      excludeWorkflowId: params.workflowId
+    });
   }
 
   async failWorkflow(params: FailWorkflowParams): Promise<void> {
