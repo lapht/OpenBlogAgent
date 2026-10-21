@@ -1,5 +1,5 @@
 import type { IProvider } from "@openblog/core";
-import { Agent as HttpsAgent } from "https";
+import { logger } from "@openblog/logger";
 
 import type { TextGenerationProvider } from "..";
 
@@ -30,33 +30,20 @@ export class OpenRouterProvider implements IProvider, TextGenerationProvider {
       throw new Error("OPENROUTER_API_KEY is required for OpenRouterProvider");
     }
 
-    console.log("DEBUG OpenRouter:", {
-      hasApiKey: !!this.config.apiKey,
-      keyLength: this.config.apiKey?.length ?? 0,
-      model: this.config.model,
-      baseUrl: this.config.baseUrl ?? "https://openrouter.ai/api/v1"
-    });
-
     const maxAttempts = 3;
     let lastError: unknown;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      console.log("About to attempt OpenRouter request", {
+      logger.debug("Attempting OpenRouter request", {
         attempt,
         maxAttempts,
         model: this.config.model ?? "openai/gpt-4o-mini"
       });
 
       try {
-        // Create HTTPS agent with disabled certificate verification for SSL issues
-        const httpsAgent = new HttpsAgent({
-          rejectUnauthorized: false
-        });
-
         const response = await fetch(
           `${this.config.baseUrl ?? "https://openrouter.ai/api/v1"}/chat/completions`,
           {
-            agent: httpsAgent,
             body: JSON.stringify({
               messages: [
                 {
@@ -73,7 +60,7 @@ export class OpenRouterProvider implements IProvider, TextGenerationProvider {
               ...(this.config.siteUrl ? { "HTTP-Referer": this.config.siteUrl } : {})
             },
             method: "POST"
-          } as unknown as RequestInit
+          }
         );
 
         if (!response.ok) {
@@ -90,15 +77,14 @@ export class OpenRouterProvider implements IProvider, TextGenerationProvider {
         return content;
       } catch (error) {
         lastError = error;
-        console.error("DEBUG OpenRouter fetch error:", {
+        logger.debug("OpenRouter request failed", {
           attempt,
           maxAttempts,
-          message: error instanceof Error ? error.message : String(error),
-          stack: error instanceof Error ? error.stack : undefined
+          message: error instanceof Error ? error.message : String(error)
         });
 
         if (attempt < maxAttempts) {
-          console.log("Retrying OpenRouter request", {
+          logger.debug("Retrying OpenRouter request", {
             attempt,
             nextAttempt: attempt + 1,
             maxAttempts
