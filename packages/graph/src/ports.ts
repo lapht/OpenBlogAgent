@@ -31,8 +31,11 @@ export interface MemoryPort {
     promptType: "planner" | "writer";
     content: string;
   }): Promise<void>;
-  completeWorkflow(params: {
+  markRunning(workflowId: string): Promise<void>;
+  /** Stores the final status together with the generated content, also when publishing failed. */
+  finishWorkflow(params: {
     workflowId: string;
+    status: "published" | "needs_review" | "failed";
     topic: string;
     article: string;
     editedText: string;
@@ -40,6 +43,14 @@ export interface MemoryPort {
     category: string;
     tags: string[];
     publishResult?: Record<string, unknown>;
+    failedStep?: string;
+    errorCode?: string;
+    errorMessage?: string;
   }): Promise<void>;
-  failWorkflow(params: { workflowId: string; errorMessage: string }): Promise<void>;
+  failWorkflow(params: {
+    workflowId: string;
+    errorMessage: string;
+    failedStep?: string;
+    errorCode?: string;
+  }): Promise<void>;
 }

@@ -2,6 +2,8 @@ import { loadEnv } from "@openblog/config";
 import { createApplication, type ApplicationOverrides } from "@openblog/app";
 import { logger } from "@openblog/logger";
 
+import { reportRunOutcome } from "./report";
+
 export function resolveTopic(
   argv: string[] = process.argv.slice(2),
   npmArgv: string | undefined = process.env.npm_config_argv
@@ -58,19 +60,10 @@ export async function runCli(options: RunCliOptions = {}): Promise<number> {
         topic
       });
 
-      logger.info("Article saved", {
-        outputFilePath: result.publishResult?.outputPath,
-        publishSuccess: result.publishResult?.success,
-        publisherId: result.publishResult?.publisherId,
-        slug: result.seoOutput.slug,
-        title: result.seoOutput.title,
-        topic: result.topic
-      });
+      return reportRunOutcome(result, logger);
     } finally {
       await app.dispose();
     }
-
-    return 0;
   } catch (error) {
     logger.error("Article generation failed", {
       topic,

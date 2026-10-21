@@ -60,4 +60,13 @@ export function runStorageMigrations(db: Database): void {
       FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
     );
   `);
+
+  const workflowColumns = (
+    db.prepare("PRAGMA table_info(workflows)").all() as { name: string }[]
+  ).map((column) => column.name);
+  for (const column of ["error_code", "failed_step"]) {
+    if (!workflowColumns.includes(column)) {
+      db.exec(`ALTER TABLE workflows ADD COLUMN ${column} TEXT`);
+    }
+  }
 }

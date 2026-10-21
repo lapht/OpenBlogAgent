@@ -71,3 +71,10 @@ ADR-style log. Add new entries at the bottom; do not rewrite accepted ones, supe
 - Context: the CLI built providers, publishers, taxonomy and the workflow itself; WordPress taxonomy providers were created twice and default categories/tags were hard-coded.
 - Decision: `createApplication(config, overrides?)` in `packages/app` is the only place adapters are constructed. It returns `{ workflow, info, dispose }`; `overrides` replace adapters in tests. WordPress taxonomy providers are built once and shared by the publisher and the classifier. Static categories/tags come from `OPENBLOG_TAXONOMY_CATEGORIES`/`_TAGS` or `OPENBLOG_TAXONOMY_FILE` (lists win over the file); with nothing configured the only category is `OPENBLOG_TAXONOMY_DEFAULT_CATEGORY`.
 - Consequence: the CLI (`runCli`) only handles arguments and exit codes, and the server can build the same application (`buildServer({ application })`). The previous built-in category/tag lists are gone: set the variables to restore a taxonomy.
+
+## ADR-012: A run is `published` only when the publisher confirms
+
+- Status: accepted (2026-10-21)
+- Context: the workflow never checked `publishResult.success`, so a failed publish was stored as `completed`, the CLI logged `Article saved` and exited 0.
+- Decision: `ArticleWorkflowResult.status` is `published | needs_review | failed` and `failure` carries `{ step, code, message }`. A failed or missing publish result yields `failed` with the publisher's error code. Persisted statuses are `started -> running -> published | needs_review | failed` with `failed_step` and `error_code` columns. `finishWorkflow` stores the article even when publishing failed. A throwing step raises `WorkflowStepError` (step, code) and is stored via `failWorkflow`. The CLI exits non-zero unless the status is `published`.
+- Consequence: `needs_review` is only defined, not produced (quality-gate issue). Old `completed` rows are not migrated.

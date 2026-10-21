@@ -1,6 +1,12 @@
 import type { Identifier } from "@openblog/types";
 
-import type { ArticleRecord, PromptRecord, TopicRecord, WorkflowRecord } from "./models";
+import type {
+  ArticleRecord,
+  PromptRecord,
+  TopicRecord,
+  WorkflowRecord,
+  WorkflowStatus
+} from "./models";
 
 export interface IRepositoryContract<TModel = unknown> {
   getById(id: Identifier): Promise<TModel | null>;
@@ -10,9 +16,10 @@ export interface IRepositoryContract<TModel = unknown> {
 export interface IWorkflowRepository extends IRepositoryContract<WorkflowRecord> {
   updateStatus(
     id: Identifier,
-    status: "started" | "completed" | "failed",
+    status: WorkflowStatus,
     completedAt: string | null,
-    errorMessage: string | null
+    errorMessage: string | null,
+    failure?: { errorCode?: string | null; failedStep?: string | null }
   ): Promise<void>;
 }
 

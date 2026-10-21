@@ -72,11 +72,16 @@ export class DefaultPublisherManager implements IPublisherManager {
 
     try {
       const result = await publisher.publish(article);
-      this.logger.info("Publishing completed", {
-        publisherId,
-        slug: article.slug,
-        success: result.success
-      });
+      if (result.success) {
+        this.logger.info("Publishing completed", { publisherId, slug: article.slug });
+      } else {
+        this.logger.error("Publishing failed", {
+          publisherId,
+          slug: article.slug,
+          errorCode: result.error?.code,
+          error: result.error?.message
+        });
+      }
 
       return result;
     } catch (error) {

@@ -121,8 +121,9 @@ describe("createApplication", () => {
           return { workflowId: "w", isDuplicate: false, duplicateOfWorkflowId: null };
         },
         savePrompt: async () => {},
-        completeWorkflow: async () => {
-          memoryCalls.push("complete");
+        markRunning: async () => {},
+        finishWorkflow: async ({ status }) => {
+          memoryCalls.push(`finish:${status}`);
         },
         failWorkflow: async () => {}
       }
@@ -130,7 +131,7 @@ describe("createApplication", () => {
 
     expect(app.info).toEqual({ publisherIds: [], taxonomyProvider: "custom" });
     await app.workflow.run({ article: "", category: "", outline: [], tags: [], topic: "t" });
-    expect(memoryCalls).toEqual(["begin", "complete"]);
+    expect(memoryCalls).toEqual(["begin", "finish:failed"]);
     expect(existsSync(path.join(dir, "memory.db"))).toBe(false);
   });
 

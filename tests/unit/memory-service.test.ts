@@ -42,8 +42,10 @@ describe("memory service", () => {
       content: "writer prompt"
     });
 
-    await memoryHandle.memoryService.completeWorkflow({
+    await memoryHandle.memoryService.markRunning(firstRun.workflowId);
+    await memoryHandle.memoryService.finishWorkflow({
       workflowId: firstRun.workflowId,
+      status: "published",
       topic: "AI Agents for Testing",
       article: "raw article",
       editedText: "edited article",
@@ -93,7 +95,7 @@ describe("memory service", () => {
 
     expect(workflows).toHaveLength(2);
     expect(workflows[0].id).toBe(firstRun.workflowId);
-    expect(workflows[0].status).toBe("completed");
+    expect(workflows[0].status).toBe("published");
     expect(workflows[0].is_duplicate).toBe(0);
     expect(workflows[1].status).toBe("failed");
     expect(workflows[1].is_duplicate).toBe(1);
@@ -102,5 +104,49 @@ describe("memory service", () => {
     expect(promptsCount.count).toBe(2);
     expect(topic.hit_count).toBe(2);
     expect(articlesCount.count).toBe(1);
+  });
+
+  it("keeps the article and the failing step when a publish fails", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "openblog-memory-"));
+    tempDirectories.push(tempDir);
+
+    const dbPath = path.join(tempDir, "memory.db");
+    const memoryHandle = await createSQLiteMemoryService({ filePath: dbPath });
+    const run = await memoryHandle.memoryService.beginWorkflow({
+      workflowName: "article-generation-workflow",
+      topic: "Failing publish"
+    });
+
+    await memoryHandle.memoryService.markRunning(run.workflowId);
+    await memoryHandle.memoryService.finishWorkflow({
+      workflowId: run.workflowId,
+      status: "failed",
+      topic: "Failing publish",
+      article: "raw article",
+      editedText: "edited article",
+      seoOutput: { title: "T", slug: "t" },
+      category: "General",
+      tags: [],
+      publishResult: { success: false },
+      failedStep: "publisher",
+      errorCode: "validation_failed",
+      errorMessage: "Publisher validation failed"
+    });
+    await memoryHandle.disconnect();
+
+    const db = new Database(dbPath, { readonly: true });
+    const workflow = db
+      .prepare("SELECT status, failed_step, error_code, error_message FROM workflows")
+      .get();
+    const article = db.prepare("SELECT edited_markdown FROM articles").get();
+    db.close();
+
+    expect(workflow).toEqual({
+      status: "failed",
+      failed_step: "publisher",
+      error_code: "validation_failed",
+      error_message: "Publisher validation failed"
+    });
+    expect(article).toEqual({ edited_markdown: "edited article" });
   });
 });

@@ -14,6 +14,8 @@ interface WorkflowRow {
   duplicate_of_workflow_id: string | null;
   metadata_json: string | null;
   error_message: string | null;
+  error_code: string | null;
+  failed_step: string | null;
   started_at: string;
   completed_at: string | null;
   created_at: string;
@@ -36,6 +38,8 @@ export class WorkflowRepository implements IRepositoryContract<WorkflowRecord> {
           duplicate_of_workflow_id,
           metadata_json,
           error_message,
+          error_code,
+          failed_step,
           started_at,
           completed_at,
           created_at,
@@ -61,11 +65,13 @@ export class WorkflowRepository implements IRepositoryContract<WorkflowRecord> {
           duplicate_of_workflow_id,
           metadata_json,
           error_message,
+          error_code,
+          failed_step,
           started_at,
           completed_at,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           name = excluded.name,
           topic = excluded.topic,
@@ -75,6 +81,8 @@ export class WorkflowRepository implements IRepositoryContract<WorkflowRecord> {
           duplicate_of_workflow_id = excluded.duplicate_of_workflow_id,
           metadata_json = excluded.metadata_json,
           error_message = excluded.error_message,
+          error_code = excluded.error_code,
+          failed_step = excluded.failed_step,
           started_at = excluded.started_at,
           completed_at = excluded.completed_at,
           updated_at = excluded.updated_at`
@@ -89,6 +97,8 @@ export class WorkflowRepository implements IRepositoryContract<WorkflowRecord> {
         model.duplicateOfWorkflowId,
         JSON.stringify(model.metadata),
         model.errorMessage,
+        model.errorCode,
+        model.failedStep,
         model.startedAt,
         model.completedAt,
         model.createdAt,
@@ -100,7 +110,8 @@ export class WorkflowRepository implements IRepositoryContract<WorkflowRecord> {
     id: Identifier,
     status: WorkflowStatus,
     completedAt: string | null,
-    errorMessage: string | null
+    errorMessage: string | null,
+    failure: { errorCode?: string | null; failedStep?: string | null } = {}
   ): Promise<void> {
     this.db
       .prepare(
@@ -108,10 +119,20 @@ export class WorkflowRepository implements IRepositoryContract<WorkflowRecord> {
          SET status = ?,
              completed_at = ?,
              error_message = ?,
+             error_code = ?,
+             failed_step = ?,
              updated_at = ?
          WHERE id = ?`
       )
-      .run(status, completedAt, errorMessage, new Date().toISOString(), id);
+      .run(
+        status,
+        completedAt,
+        errorMessage,
+        failure.errorCode ?? null,
+        failure.failedStep ?? null,
+        new Date().toISOString(),
+        id
+      );
   }
 
   private mapRow(row: WorkflowRow): WorkflowRecord {
@@ -125,6 +146,8 @@ export class WorkflowRepository implements IRepositoryContract<WorkflowRecord> {
       duplicateOfWorkflowId: row.duplicate_of_workflow_id,
       metadata: row.metadata_json ? (JSON.parse(row.metadata_json) as Record<string, unknown>) : {},
       errorMessage: row.error_message,
+      errorCode: row.error_code,
+      failedStep: row.failed_step,
       startedAt: row.started_at,
       completedAt: row.completed_at,
       createdAt: row.created_at,
