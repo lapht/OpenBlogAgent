@@ -36,3 +36,5 @@ jobs:
       - run: npm run lint
       - run: npm run format
       - run: npm test
+      - run: npm run test:coverage
+        continue-on-error: true # informational, no threshold yet
