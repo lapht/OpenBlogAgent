@@ -5,7 +5,6 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "@openblog/core": "*",
     "@openblog/providers": "*",
     "@openblog/types": "*",
     "zod": "^3.23.8"

@@ -10,7 +10,7 @@ Build a robust, open and extensible platform for automated blog operations.
 
 - [x] TypeScript monorepo with npm workspaces
 - [x] Core contracts package
-- [x] Dependency injection bootstrap (`tsyringe`)
+- [x] Dependency injection bootstrap (`tsyringe`; removed later, see ADR-009)
 - [x] Fastify API skeleton (`/health`, `/version`)
 - [x] Environment configuration (`dotenv` + `zod`)
 - [x] Pino logger facade

@@ -10,8 +10,8 @@
     "packages/*"
   ],
   "scripts": {
-    "build:packages": "npm run build --workspace @openblog/types --workspace @openblog/core --workspace @openblog/logger --workspace @openblog/providers --workspace @openblog/config --workspace @openblog/publishers --workspace @openblog/agents --workspace @openblog/graph --workspace @openblog/shared --workspace @openblog/storage --workspace @openblog/tools --workspace @openblog/sdk",
-    "build:apps": "npm run build --workspace @openblog/cli --workspace @openblog/server --workspace @openblog/dashboard",
+    "build:packages": "npm run build --workspace @openblog/types --workspace @openblog/logger --workspace @openblog/providers --workspace @openblog/config --workspace @openblog/publishers --workspace @openblog/agents --workspace @openblog/graph --workspace @openblog/shared --workspace @openblog/storage",
+    "build:apps": "npm run build --workspace @openblog/cli --workspace @openblog/server",
     "build": "npm run build:packages && npm run build:apps",
     "clean": "npm run clean --workspaces --if-present",
     "dev": "npm run dev --workspace @openblog/server",

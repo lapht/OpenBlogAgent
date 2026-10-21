@@ -2,9 +2,8 @@
 
 OpenBlogAgent follows Clean Architecture principles:
 
-- `apps/`: entry points (server, dashboard, cli)
+- `apps/`: entry points (server, cli)
 - `packages/`: reusable modules and contracts
-- `packages/core`: domain-level interfaces and DI entry point
-- `packages/sdk`: stable public surface for plugin authors
+- Wiring is explicit constructor/factory injection (no DI container); see ADR-009 in `decisions`
 
 Dependencies flow from outer layers to contracts, never to concrete business logic.

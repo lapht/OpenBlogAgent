@@ -48,3 +48,12 @@ ADR-style log. Add new entries at the bottom; do not rewrite accepted ones, supe
 - Context: JSON extraction was copy-pasted in three agents plus the planner, malformed replies aborted the run, and normalization (slice, empty-string defaults) hid invalid output.
 - Decision: `generateStructured` (`packages/agents/src/structured-output.ts`) extracts JSON, validates with Zod and re-prompts with the validation error (default 3 attempts, `maxAttempts` per agent), then throws `StructuredOutputError` with the truncated last reply. Schemas only do safe normalization (trim, slugify, tag de-dup/cap, category canonicalization) and reject empty slug/title/h1, over-long title/description and categories outside the allowed list.
 - Consequence: no silent truncation; a model that keeps violating limits fails the run with a descriptive error. Provider failures (`ProviderError`) are not retried here, ADR for providers covers them.
+
+## ADR-009: Remove unused scaffolding; wire dependencies explicitly
+
+- Status: accepted (2026-10-21)
+- Context: the repository carried empty marker interfaces, tool stubs, a tsyringe container nothing imported and duplicate `ILogger`/`IPublisher` contracts.
+- Decision: removed `@openblog/core` (interfaces and DI container, plus `tsyringe`/`reflect-metadata`), `@openblog/tools` (stubs and the unused Markdown assembler, which supersedes the note in ADR-007), `@openblog/sdk` (re-export barrel with no consumers), `apps/dashboard` (one-line stub), the empty agent folders (`planner`, `writer`, `research`, `publisher`, `memory`, `analytics`) and the `IAgent` aliases in `seo`/`editor`, the placeholder `Node`/`Edge`/`Workflow` types in `@openblog/graph`, and the unused `OpenBlogError`/`isNonEmptyString`/`KeyValue` in `@openblog/shared`.
+- Kept: `@openblog/shared` (only the constants the server uses) and `@openblog/types` (only `Identifier`, used by storage and publishers). A ts-prune pass also removed the unused `VersionInfo`/`Environment` types and the storage `ICacheStore`/`IMemoryStore` stubs. `ILogger` lives only in `@openblog/logger` and `IPublisher` only in `@openblog/publishers`.
+- Decision: dependencies are wired with explicit constructors and factory functions; no DI container.
+- Consequence: re-introduce a package (plugin SDK, dashboard, research tools) only together with working code that uses it.

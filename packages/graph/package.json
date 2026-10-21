@@ -7,7 +7,6 @@
   "dependencies": {
     "@langchain/langgraph": "^0.2.39",
     "@openblog/agents": "*",
-    "@openblog/core": "*",
     "@openblog/logger": "*",
     "@openblog/providers": "*",
     "@openblog/publishers": "*",

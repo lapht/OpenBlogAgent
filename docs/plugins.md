@@ -1,6 +1,6 @@
 # Plugin Model (Foundation)
 
-Third-party extensions should depend on `@openblog/sdk` only.
+There is no plugin SDK yet: the placeholder `@openblog/sdk` package was removed (ADR-009). A public package will be introduced together with the first working plugin point.
 
 Design goals:
 

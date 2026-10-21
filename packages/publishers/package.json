@@ -5,7 +5,6 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "@openblog/core": "*",
     "@openblog/logger": "*",
     "@openblog/types": "*"
   },
