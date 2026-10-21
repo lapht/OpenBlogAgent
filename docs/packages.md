@@ -12,6 +12,17 @@
 - `@openblog/graph`
 - `@openblog/agents`
 - `@openblog/providers`
-- `@openblog/storage`
+- `@openblog/storage`: persistence layer (SQLite connection, migrations, repositories, memory service)
 - `@openblog/publishers`
 - `@openblog/tools`
+
+## Storage Notes
+
+`@openblog/storage` includes:
+
+- database connection primitives
+- migration runner for persistence tables
+- repositories for workflows, topics, prompts, and articles
+- memory service with duplicate-topic detection
+
+See [Memory and Persistence](memory.md) for details.

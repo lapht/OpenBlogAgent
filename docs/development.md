@@ -15,3 +15,10 @@ The server app exposes:
 - `GET /version`
 
 Run locally with `npm run dev`.
+
+## Further Reading
+
+- [Architecture Overview](architecture.md)
+- [Packages](packages.md)
+- [Publishing](publishing.md)
+- [Memory and Persistence](memory.md)

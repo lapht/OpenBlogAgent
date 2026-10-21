@@ -44,10 +44,16 @@ Not included in this phase:
 
 - dashboard
 - publisher integrations beyond the current modular scaffold
-- database
-- memory system
 - plugin system
 - multi-agent orchestration
+
+## Documentation
+
+- [Development Guide](docs/development.md)
+- [Architecture Overview](docs/architecture.md)
+- [Packages](docs/packages.md)
+- [Publishing](docs/publishing.md)
+- [Memory and Persistence](docs/memory.md)
 
 ## Monorepo Layout
 
