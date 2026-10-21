@@ -104,3 +104,8 @@ ADR-style log. Add new entries at the bottom; do not rewrite accepted ones, supe
 
 - Context: the publisher posted raw Markdown, dropped the slug, ignored the response and accepted a regular password that the core REST API rejects.
 - Decision: Markdown is converted with `marked` and sanitized with `sanitize-html` before it is sent. The endpoint must end in `/wp-json/wp/v2` (trailing slashes and `/posts` are stripped). Authentication is Basic with an Application Password; `OPENBLOG_WORDPRESS_PASSWORD` is removed. The post `id`, `link`, `status` and `slug` are parsed with Zod and returned in `PublishResult.metadata`; requests time out after 15s by default and failures carry a classified error code.
+
+## ADR-017: WordPress taxonomy resolution policy
+
+- Context: term creation hit an invalid URL, the cache "invalidation" returned an empty list, only the first 100 terms were read, and the category fallback/creation order was undocumented.
+- Decision: an unknown category resolves to `OPENBLOG_TAXONOMY_DEFAULT_CATEGORY` and is never created (resolution fails if the default does not exist either). An unknown tag is created only when `OPENBLOG_TAXONOMY_ALLOW_CREATE=true`, otherwise it is skipped with a warning. Names are matched trimmed, case-insensitive and HTML-entity-decoded; tags are de-duplicated and capped at `OPENBLOG_TAXONOMY_MAX_TAGS`. Terms are read across all pages (`X-WP-TotalPages`), and a created term is added to the cache so later lookups in the same run neither re-create nor lose it. One provider pair per site is built in `createApplication`.
