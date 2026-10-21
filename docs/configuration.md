@@ -4,7 +4,7 @@ All runtime configuration comes from environment variables, validated at start-u
 
 `npm run check:docs` fails if a variable of the schema is missing from this page or from `.env.example`.
 
-Secrets: `OPENROUTER_API_KEY` and `OPENBLOG_WORDPRESS_APPLICATION_PASSWORD`. They are redacted in logs; never commit `.env`.
+Secrets: `OPENROUTER_API_KEY`, `OPENBLOG_WORDPRESS_APPLICATION_PASSWORD`, `OPENBLOG_GHOST_ADMIN_API_KEY` and `OPENBLOG_API_KEY`. They are redacted in logs; never commit `.env`.
 
 Booleans accept only `true` or `false`. An empty value (`FOO=`) counts as unset.
 
@@ -37,13 +37,16 @@ OpenRouter is used first when `OPENROUTER_API_KEY` is set; Ollama is used when i
 | Variable                                  | Default           | Purpose                                                                                        |
 | ----------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------- |
 | `OPENBLOG_PUBLICATION_POLICY`             | `draft`           | `draft`, `publish_after_approval` or `publish_if_gate_passes`; see [Publishing](publishing.md) |
-| `OPENBLOG_DEFAULT_PUBLISHER`              | none              | `markdown` or `wordpress`; `--publisher` overrides it per command                              |
+| `OPENBLOG_DEFAULT_PUBLISHER`              | none              | `markdown`, `wordpress` or `ghost`; `--publisher` overrides it per command                     |
 | `OPENBLOG_OUTPUT_DIR`                     | `output/articles` | Where the Markdown publisher writes `{slug}.md`                                                |
 | `OPENBLOG_MARKDOWN_OVERWRITE`             | `false`           | Let the Markdown publisher replace an existing file                                            |
 | `OPENBLOG_WORDPRESS_ENDPOINT`             | none              | REST base URL ending in `/wp-json/wp/v2`                                                       |
 | `OPENBLOG_WORDPRESS_USERNAME`             | none              | WordPress user that owns the application password                                              |
 | `OPENBLOG_WORDPRESS_APPLICATION_PASSWORD` | none              | WordPress application password (secret)                                                        |
 | `OPENBLOG_WORDPRESS_STATUS`               | none              | Status for direct publisher use only; the workflow sets the status from the publication policy |
+| `OPENBLOG_GHOST_ENDPOINT`                 | none              | Ghost site URL, e.g. `https://blog.example.com`; setting it registers the Ghost publisher      |
+| `OPENBLOG_GHOST_ADMIN_API_KEY`            | none              | Admin API key `<id>:<secret>` of a custom integration (secret)                                 |
+| `OPENBLOG_GHOST_STATUS`                   | none              | Status for direct publisher use only; the workflow sets the status from the publication policy |
 | `OPENBLOG_WORDPRESS_ON_EXISTING`          | `update`          | When a post with the same slug exists: `update` it or fail with `conflict`                     |
 
 ## Taxonomy (categories and tags offered to the classifier)
