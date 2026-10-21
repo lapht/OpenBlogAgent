@@ -106,12 +106,12 @@ export class WorkflowRepository implements IRepositoryContract<WorkflowRecord> {
       );
   }
 
-  /** The earliest successfully published run of a topic, the reference for duplicate detection. */
+  /** The earliest published (or published-pending-approval) run of a topic, the reference for duplicate detection. */
   findFirstPublishedByTopic(topicNormalized: string): WorkflowRecord | null {
     const row = this.db
       .prepare(
         `SELECT * FROM workflows
-         WHERE topic_normalized = ? AND status = 'published'
+         WHERE topic_normalized = ? AND status IN ('published', 'awaiting_approval')
          ORDER BY completed_at ASC, created_at ASC
          LIMIT 1`
       )

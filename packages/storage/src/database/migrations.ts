@@ -100,6 +100,24 @@ const migrations: Migration[] = [
       publish_remote_url: "TEXT",
       publish_remote_status: "TEXT"
     });
+  },
+
+  // v3: review state and approval audit trail.
+  (db) => {
+    addMissingColumns(db, "articles", {
+      review_state: "TEXT NOT NULL DEFAULT 'needs_review'",
+      gate_passed: "INTEGER",
+      approved_by: "TEXT",
+      approved_at: "TEXT",
+      approval_override_reason: "TEXT"
+    });
+
+    // Articles stored before the gate: published ones are published, nothing else is known.
+    db.exec(`
+      UPDATE articles
+      SET review_state = 'published', gate_passed = 1
+      WHERE workflow_id IN (SELECT id FROM workflows WHERE status = 'published');
+    `);
   }
 ];
 

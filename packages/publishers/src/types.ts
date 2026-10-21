@@ -11,6 +11,11 @@ export interface PublishArticle {
   category: string;
   author: string;
   language: string;
+  /**
+   * Whether the post goes live. Wins over the publisher's own configured status; absent means the
+   * publisher's default (a draft for WordPress).
+   */
+  status?: "draft" | "publish";
   target?: string;
   publisherId?: string;
   metadata?: Record<string, unknown>;

@@ -103,12 +103,13 @@ export class WordPressPublisher implements IPublisher {
       const categoryEntry = await this.categoryProvider.resolve(article.category);
       const tagEntries = await this.tagProvider.resolveMany(article.tags ?? []);
 
+      const status = article.status ?? this.config.status ?? "draft";
       const payload = {
         title: article.title,
         slug: article.slug,
         content: markdownToSafeHtml(article.content),
         excerpt: article.summary,
-        status: this.config.status ?? "draft",
+        status,
         categories: [categoryEntry.id],
         tags: tagEntries.map((t) => t.id)
       };
@@ -149,7 +150,7 @@ export class WordPressPublisher implements IPublisher {
 
       // An update never changes the status of a post that is already live unless asked to publish.
       const updatePayload: Partial<typeof payload> = { ...payload };
-      if (this.config.status !== "publish") {
+      if (status !== "publish") {
         delete updatePayload.status;
       }
 

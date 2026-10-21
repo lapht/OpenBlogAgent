@@ -35,6 +35,7 @@ describe("article workflow with fake ports", () => {
     const workflow = createArticleGenerationWorkflow({
       logger,
       quality: lenientQuality,
+      publicationPolicy: "publish_if_gate_passes",
       llm,
       publisher: {
         publish: async (article) => {
@@ -121,6 +122,7 @@ describe("article workflow with fake ports", () => {
     const workflow = createArticleGenerationWorkflow({
       logger,
       quality: lenientQuality,
+      publicationPolicy: "publish_if_gate_passes",
       llm: scriptedProvider(...replies),
       publisher: {
         publish: async () => ({
@@ -182,6 +184,7 @@ describe("article workflow with fake ports", () => {
     const workflow = createArticleGenerationWorkflow({
       logger,
       quality: lenientQuality,
+      publicationPolicy: "publish_if_gate_passes",
       llm: scriptedProvider(JSON.stringify(["Intro"]), "   "),
       publisher: { publish: async () => ({ success: true, publisherId: "f", publisherName: "F" }) },
       memory: {

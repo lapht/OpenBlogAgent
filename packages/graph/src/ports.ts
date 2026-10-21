@@ -25,6 +25,20 @@ export interface StoredWorkflowStep {
   output?: unknown;
 }
 
+/** A stored article as `approve` needs it. */
+export interface StoredArticle {
+  topic: string;
+  title: string | null;
+  slug: string | null;
+  category: string | null;
+  tags: string[];
+  editedMarkdown: string;
+  seo: Record<string, unknown>;
+  reviewState: "needs_review" | "approved" | "published";
+  /** Null when unknown (stored before the quality gate existed). */
+  gatePassed: boolean | null;
+}
+
 /** Workflow bookkeeping. Implemented by `MemoryService` in the storage package. */
 export interface MemoryPort {
   beginWorkflow(params: {
@@ -51,7 +65,7 @@ export interface MemoryPort {
   /** Stores the final status together with the generated content, also when publishing failed. */
   finishWorkflow(params: {
     workflowId: string;
-    status: "published" | "needs_review" | "failed";
+    status: "published" | "awaiting_approval" | "needs_review" | "failed";
     topic: string;
     article: string;
     editedText: string;
@@ -59,6 +73,8 @@ export interface MemoryPort {
     category: string;
     tags: string[];
     publishResult?: Record<string, unknown>;
+    /** Whether the quality gate passed; approving an article that did not needs an override. */
+    gatePassed?: boolean;
     failedStep?: string;
     errorCode?: string;
     errorMessage?: string;
@@ -88,6 +104,22 @@ export interface MemoryPort {
     slug: string;
     title: string;
   }): Promise<{ workflowId: string; matchedOn: "slug" | "title" } | null>;
+  /** The stored article of a run, with that run's status; null if none was stored. */
+  loadArticle(workflowId: string): Promise<{
+    workflowStatus: string;
+    article: StoredArticle;
+  } | null>;
+  /** Records who approved the article and when (and the override reason), before publishing. */
+  beginApproval(params: {
+    workflowId: string;
+    approvedBy: string;
+    overrideReason?: string;
+  }): Promise<void>;
+  /** Stores the publish that followed an approval; the article is published only on success. */
+  completeApproval(params: {
+    workflowId: string;
+    publishResult: Record<string, unknown>;
+  }): Promise<void>;
   failWorkflow(params: {
     workflowId: string;
     errorMessage: string;
