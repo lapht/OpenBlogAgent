@@ -2,15 +2,37 @@ import { z } from "zod";
 
 import type { TextGenerationProvider } from "@openblog/providers";
 
+import { generateStructured, type StructuredOutputOptions } from "../structured-output";
+
+const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+const slugSchema = z
+  .string()
+  .transform(normalizeSlug)
+  .pipe(
+    z
+      .string()
+      .min(1, "slug must not be empty")
+      .regex(SLUG_PATTERN, "slug must be lowercase letters, digits and hyphens")
+  );
+
 export const seoOutputSchema = z.object({
-  title: z.string().max(60),
-  metaDescription: z.string().max(155),
-  slug: z.string(),
-  h1: z.string(),
+  title: z
+    .string()
+    .trim()
+    .min(1, "title must not be empty")
+    .max(60, "title must be at most 60 characters"),
+  metaDescription: z
+    .string()
+    .trim()
+    .min(1, "metaDescription must not be empty")
+    .max(155, "metaDescription must be at most 155 characters"),
+  slug: slugSchema,
+  h1: z.string().trim().min(1, "h1 must not be empty"),
   headings: z.array(
     z.object({
       level: z.enum(["H2", "H3"]),
-      text: z.string()
+      text: z.string().trim().min(1, "heading text must not be empty")
     })
   )
 });
@@ -26,12 +48,18 @@ export interface SeoAgent {
   run(input: SeoAgentInput): Promise<SeoOutput>;
 }
 
-export function createSeoAgent(provider: TextGenerationProvider): SeoAgent {
+export function createSeoAgent(
+  provider: TextGenerationProvider,
+  options: StructuredOutputOptions = {}
+): SeoAgent {
   return {
-    async run(input: SeoAgentInput): Promise<SeoOutput> {
-      const prompt = buildSeoPrompt(input);
-      const rawOutput = (await provider.generate({ prompt })).text;
-      return parseSeoOutput(rawOutput);
+    run(input: SeoAgentInput): Promise<SeoOutput> {
+      return generateStructured(provider, {
+        ...options,
+        prompt: buildSeoPrompt(input),
+        schema: seoOutputSchema,
+        label: "SEO agent"
+      });
     }
   };
 }
@@ -77,55 +105,6 @@ function buildSeoPrompt(input: SeoAgentInput): string {
   ].join("\n");
 }
 
-function parseSeoOutput(raw: string): SeoOutput {
-  const trimmed = raw.trim();
-
-  const candidates = [
-    trimmed,
-    extractJsonFromFullMarkdownFence(trimmed),
-    extractOuterJsonObject(trimmed)
-  ].filter((value): value is string => Boolean(value));
-
-  for (const candidate of candidates) {
-    try {
-      const parsed = JSON.parse(candidate) as Record<string, unknown>;
-      const normalized = normalizeSeoOutput(parsed);
-      return seoOutputSchema.parse(normalized);
-    } catch {
-      // Try next candidate
-    }
-  }
-
-  throw new Error(`SEO agent did not return valid JSON. Received: ${raw}`);
-}
-
-function extractJsonFromFullMarkdownFence(text: string): string | null {
-  const match = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return match?.[1]?.trim() ?? null;
-}
-
-function extractOuterJsonObject(text: string): string | null {
-  const startIndex = text.indexOf("{");
-  const endIndex = text.lastIndexOf("}");
-
-  if (startIndex < 0 || endIndex < 0 || endIndex <= startIndex) {
-    return null;
-  }
-
-  return text.slice(startIndex, endIndex + 1);
-}
-
-function normalizeSeoOutput(parsed: Record<string, unknown>): SeoOutput {
-  return {
-    title: typeof parsed.title === "string" ? parsed.title.trim().slice(0, 60) : "",
-    metaDescription:
-      typeof parsed.metaDescription === "string" ? parsed.metaDescription.trim().slice(0, 155) : "",
-    slug: typeof parsed.slug === "string" ? normalizeSlug(parsed.slug) : "",
-    h1: typeof parsed.h1 === "string" ? parsed.h1.trim() : "",
-    headings: normalizeHeadings(parsed.headings)
-  };
-}
-
 function normalizeSlug(value: string): string {
   return value
     .trim()
@@ -136,37 +115,4 @@ function normalizeSlug(value: string): string {
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
-}
-
-function normalizeHeadings(value: unknown): Array<{ level: "H2" | "H3"; text: string }> {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.flatMap((heading) => {
-    if (typeof heading === "string") {
-      const text = heading.trim();
-      return text ? [{ level: "H2" as const, text }] : [];
-    }
-
-    if (heading && typeof heading === "object") {
-      const candidate = heading as Record<string, unknown>;
-
-      const text = typeof candidate.text === "string" ? candidate.text.trim() : "";
-      const level = typeof candidate.level === "string" ? candidate.level.toUpperCase() : "H2";
-
-      if (!text) {
-        return [];
-      }
-
-      return [
-        {
-          level: level === "H3" ? "H3" : "H2",
-          text
-        }
-      ];
-    }
-
-    return [];
-  });
 }

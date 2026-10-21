@@ -2,8 +2,10 @@ import { z } from "zod";
 
 import type { TextGenerationProvider } from "@openblog/providers";
 
+import { generateStructured, type StructuredOutputOptions } from "../structured-output";
+
 export const editorOutputSchema = z.object({
-  editedText: z.string(),
+  editedText: z.string().trim().min(1, "editedText must not be empty"),
   changesSummary: z.string()
 });
 
@@ -17,12 +19,18 @@ export interface EditorAgent {
   run(input: EditorAgentInput): Promise<EditorOutput>;
 }
 
-export function createEditorAgent(provider: TextGenerationProvider): EditorAgent {
+export function createEditorAgent(
+  provider: TextGenerationProvider,
+  options: StructuredOutputOptions = {}
+): EditorAgent {
   return {
-    async run(input: EditorAgentInput): Promise<EditorOutput> {
-      const prompt = buildEditorPrompt(input);
-      const rawOutput = (await provider.generate({ prompt })).text;
-      return parseEditorOutput(rawOutput);
+    run(input: EditorAgentInput): Promise<EditorOutput> {
+      return generateStructured(provider, {
+        ...options,
+        prompt: buildEditorPrompt(input),
+        schema: editorOutputSchema,
+        label: "Editor agent"
+      });
     }
   };
 }
@@ -54,41 +62,4 @@ function buildEditorPrompt(input: EditorAgentInput): string {
     "Original text:",
     input.rawText
   ].join("\n");
-}
-
-function parseEditorOutput(raw: string): EditorOutput {
-  const trimmed = raw.trim();
-
-  const candidates = [
-    trimmed,
-    extractJsonFromFullMarkdownFence(trimmed),
-    extractOuterJsonObject(trimmed)
-  ].filter((value): value is string => Boolean(value));
-
-  for (const candidate of candidates) {
-    try {
-      const parsed = JSON.parse(candidate);
-      return editorOutputSchema.parse(parsed);
-    } catch {
-      // Try next candidate
-    }
-  }
-
-  throw new Error(`Editor agent did not return valid JSON. Received: ${raw}`);
-}
-
-function extractJsonFromFullMarkdownFence(text: string): string | null {
-  const match = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return match?.[1]?.trim() ?? null;
-}
-
-function extractOuterJsonObject(text: string): string | null {
-  const startIndex = text.indexOf("{");
-  const endIndex = text.lastIndexOf("}");
-
-  if (startIndex < 0 || endIndex < 0 || endIndex <= startIndex) {
-    return null;
-  }
-
-  return text.slice(startIndex, endIndex + 1);
 }
