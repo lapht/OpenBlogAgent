@@ -8,6 +8,7 @@ export * as analytics from "./analytics";
 export * as memory from "./memory";
 
 export * from "./classification/agent";
+export * from "./structured-output";
 
 // Re-export agent factories for convenience
 export {

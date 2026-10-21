@@ -3,6 +3,7 @@ import {
   createClassificationAgent,
   createEditorAgent,
   createSeoAgent,
+  generateStructured,
   type SeoOutput,
   seoOutputSchema
 } from "@openblog/agents";
@@ -183,21 +184,6 @@ function buildWriterPrompt(topic: string, outline: string[]): string {
   ].join("\n");
 }
 
-function extractJsonArray(raw: string): string[] {
-  const trimmed = raw.trim();
-  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fencedMatch?.[1]?.trim() ?? trimmed;
-  const startIndex = candidate.indexOf("[");
-  const endIndex = candidate.lastIndexOf("]");
-
-  if (startIndex < 0 || endIndex < 0 || endIndex <= startIndex) {
-    throw new Error("Planner response did not contain a JSON array");
-  }
-
-  const parsed = JSON.parse(candidate.slice(startIndex, endIndex + 1)) as unknown;
-  return plannerOutlineSchema.parse(parsed);
-}
-
 export function createArticleGenerationWorkflow(
   options: CreateArticleGenerationWorkflowOptions
 ): ArticleGenerationWorkflow {
@@ -232,8 +218,12 @@ export function createArticleGenerationWorkflow(
         });
       }
 
-      const plannerRawOutput = (await provider.generate({ prompt: plannerPrompt })).text;
-      const outline = extractJsonArray(plannerRawOutput);
+      const outline = await generateStructured(provider, {
+        prompt: plannerPrompt,
+        schema: plannerOutlineSchema,
+        shape: "array",
+        label: "Planner"
+      });
 
       logger.info("Planner output ready", {
         outline,
