@@ -167,7 +167,7 @@ OPENBLOG_GHOST_STATUS=draft
 3. Build only the packages needed by the article workflow:
 
 ```bash
-npm run build:article
+npm run build
 ```
 
 4. Run a test article generation:
@@ -328,7 +328,7 @@ Useful commands:
 
 ```bash
 npm install
-npm run build:article
+npm run build
 npm start "AI agents in software development"
 npm run lint
 npm run test

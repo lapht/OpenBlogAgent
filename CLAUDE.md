@@ -12,8 +12,8 @@ Use npm (not pnpm, even though `ROADMAP_PLAN.md` mentions it).
 
 ```bash
 npm install
-npm run build:article          # builds only the packages the CLI needs (types, core, logger, providers, config, publishers, agents, graph, cli)
-npm start "topic here"         # build:article + run CLI (apps/cli/dist/index.js)
+npm run build                       # builds all workspaces in dependency order
+npm start "topic here"         # build + run CLI (apps/cli/dist/index.js)
 npm run generate -- "topic"    # same as start
 npm run build                  # all workspaces
 npm run typecheck              # tsc --noEmit per workspace
@@ -28,7 +28,7 @@ Commits must follow Conventional Commits (commitlint via husky; lint-staged runs
 
 ## Architecture
 
-- **Build order matters.** Workspace packages depend on each other through `file:../x` links and resolve via `main: dist/index.js`. After changing a package's source, rebuild it (`npm run build:article`) before running the CLI. Tests are the exception: they import from `packages/*/src` directly, so no build is needed for `vitest`.
+- **Build order matters.** Workspace packages depend on each other through npm workspace links (`"*"` versions) and resolve via `main: dist/index.js`. After changing a package's source, rebuild it (`npm run build`) before running the CLI. Tests are the exception: they import from `packages/*/src` directly, so no build is needed for `vitest`.
 - **`packages/graph/src/workflows/article-generation-workflow.ts`** is the center of the system. It defines the LangGraph `StateGraph` (the `Annotation.Root` state, the planner/writer prompts, and node wiring) and a Zod `articleWorkflowStateSchema`. Graph state defaults (e.g. `seoOutput` starting as an empty object) must stay compatible with that Zod schema, which is why it accepts an empty passthrough object. Adding a state field means updating both the `Annotation` and the schema.
 - **`packages/agents`**: one folder per agent (`planner`, `writer`, `editor`, `seo`, `classification`, plus scaffolds `research`, `memory`, `analytics`, `publisher`). Real agents have `agent.ts` + `interfaces.ts`. Several of the others are interface-only stubs.
 - **`packages/providers`**: `TextGenerationProvider` implementations. OpenRouter is tried first; Ollama is the fallback if OpenRouter is unconfigured or fails. If both fail, the CLI exits with a combined error.

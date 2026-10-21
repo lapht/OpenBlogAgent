@@ -18,7 +18,7 @@ Treat scripts in [package.json](../package.json) as source of truth.
 
 - Install: `npm install`
 - Build all: `npm run build`
-- Build workflow subset: `npm run build:article`
+- Build workflow subset: `npm run build`
 - Lint: `npm run lint`
 - Typecheck: `npm run typecheck`
 - Test: `npm run test`

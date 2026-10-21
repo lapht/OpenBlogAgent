@@ -3,7 +3,7 @@
 ## Development Setup
 
 1. Install Node.js LTS and npm.
-2. Run `npm install`.
+2. Run `npm ci`.
 3. Copy `.env.example` to `.env` and adjust values.
 4. Run `npm run build` and `npm run test`.
 

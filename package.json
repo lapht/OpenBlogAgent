@@ -10,21 +10,21 @@
     "packages/*"
   ],
   "scripts": {
-    "build:article": "npm run build --workspace @openblog/types --workspace @openblog/core --workspace @openblog/logger --workspace @openblog/providers --workspace @openblog/config --workspace @openblog/storage --workspace @openblog/publishers --workspace @openblog/agents --workspace @openblog/graph --workspace @openblog/cli",
     "build:packages": "npm run build --workspace @openblog/types --workspace @openblog/core --workspace @openblog/logger --workspace @openblog/providers --workspace @openblog/config --workspace @openblog/publishers --workspace @openblog/agents --workspace @openblog/graph --workspace @openblog/shared --workspace @openblog/storage --workspace @openblog/tools --workspace @openblog/sdk",
     "build:apps": "npm run build --workspace @openblog/cli --workspace @openblog/server --workspace @openblog/dashboard",
     "build": "npm run build:packages && npm run build:apps",
     "clean": "npm run clean --workspaces --if-present",
     "dev": "npm run dev --workspace @openblog/server",
-    "generate": "npm run build:article && node apps/cli/dist/index.js",
+    "generate": "npm run build && node apps/cli/dist/index.js",
     "lint": "eslint . --ext .ts",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
     "prepare": "husky",
-    "start": "npm run build:article && node apps/cli/dist/index.js",
+    "start": "npm run build && node apps/cli/dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "check:deps": "node scripts/check-deps.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx,js,json,md,yml,yaml}": [
@@ -35,7 +35,6 @@
     ]
   },
   "devDependencies": {
-    "@langchain/langgraph": "^0.2.39",
     "@commitlint/cli": "^19.4.0",
     "@commitlint/config-conventional": "^19.4.0",
     "@types/node": "^22.5.4",
@@ -48,7 +47,6 @@
     "prettier": "^3.3.3",
     "rimraf": "^6.0.1",
     "typescript": "^5.6.2",
-    "vitest": "^2.0.5",
-    "zod": "^3.23.8"
+    "vitest": "^2.0.5"
   }
 }
