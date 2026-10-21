@@ -1,0 +1,21 @@
+{
+  "name": "@openblog/app",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "dependencies": {
+    "@openblog/config": "*",
+    "@openblog/graph": "*",
+    "@openblog/logger": "*",
+    "@openblog/providers": "*",
+    "@openblog/publishers": "*",
+    "@openblog/storage": "*",
+    "zod": "^3.23.8"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rimraf dist",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}
