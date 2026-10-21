@@ -21,7 +21,7 @@ The agents only produce content. The publisher layer is responsible for:
 
 - IPublisher: common interface for all publishers.
 - DefaultPublisherManager: central component that routes the publish request.
-- MarkdownPublisher: writes Markdown with YAML front matter to the output directory.
+- MarkdownPublisher: writes `{OPENBLOG_OUTPUT_DIR}/{slug}.md` with YAML front matter (title, slug, description, category, tags as a list, createdAt, updatedAt, author, language) produced by a YAML serializer. The slug is slugified (`^[a-z0-9]+(-[a-z0-9]+)*$`) and the path is checked to stay inside the output directory (`invalid_slug` otherwise). An existing file is never replaced unless `OPENBLOG_MARKDOWN_OVERWRITE=true`; otherwise the publish fails with `already_exists`.
 - WordPressPublisher: creates a post (draft by default) through the WordPress REST API. Markdown is rendered to HTML with `marked` and sanitized with `sanitize-html`; the payload includes the slug; the response (`id`, `link`, `status`, `slug`) is returned in `PublishResult.metadata`. Only Application Passwords are supported, and HTTP errors map to distinct codes: `auth_failed` (401), `forbidden` (403), `invalid_request` (other 4xx), `server_error` (5xx), `network_error`, `timeout` and `unexpected_response`.
 - GhostPublisher: placeholder for a future Ghost Admin API integration. It is not registered by the factory, has no configuration, and always fails with `not_implemented`.
 
@@ -31,6 +31,7 @@ The centralized config system supports:
 
 - OPENBLOG_DEFAULT_PUBLISHER
 - OPENBLOG_OUTPUT_DIR
+- OPENBLOG_MARKDOWN_OVERWRITE (`true`|`false`, default `false`)
 - OPENBLOG_WORDPRESS_ENDPOINT
 - OPENBLOG_WORDPRESS_USERNAME
 - OPENBLOG_WORDPRESS_APPLICATION_PASSWORD

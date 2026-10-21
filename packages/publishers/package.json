@@ -9,6 +9,7 @@
     "@openblog/types": "*",
     "marked": "^18.1.1",
     "sanitize-html": "^2.18.1",
+    "yaml": "^2.9.0",
     "zod": "^3.25.76"
   },
   "scripts": {

@@ -76,7 +76,10 @@ export async function createApplication(
     overrides.publishers ??
     createPublishersFromConfig(
       {
-        markdown: { outputDir: config.OPENBLOG_OUTPUT_DIR },
+        markdown: {
+          outputDir: config.OPENBLOG_OUTPUT_DIR,
+          overwrite: config.OPENBLOG_MARKDOWN_OVERWRITE
+        },
         wordpress: config.OPENBLOG_WORDPRESS_ENDPOINT
           ? {
               endpoint: config.OPENBLOG_WORDPRESS_ENDPOINT,

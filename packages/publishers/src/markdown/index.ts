@@ -1,5 +1,7 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+
+import { stringify } from "yaml";
 
 import type { ILogger } from "@openblog/logger";
 
@@ -13,6 +15,20 @@ import type {
 
 export interface MarkdownPublisherConfig {
   outputDir: string;
+  /** Replace an existing file with the same slug. Defaults to false: the publish fails instead. */
+  overwrite?: boolean;
+}
+
+const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** Reduces arbitrary text (a title, a raw topic) to a slug matching `SLUG_PATTERN`; empty if nothing is left. */
+export function slugify(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 export class MarkdownPublisher implements IPublisher {
@@ -67,18 +83,44 @@ export class MarkdownPublisher implements IPublisher {
       };
     }
 
-    const outputDir = this.config.outputDir;
-    mkdirSync(outputDir, { recursive: true });
+    const slug = slugify(article.slug);
 
-    const outputPath = path.join(outputDir, `${article.slug}.md`);
-    const contents = this.buildFrontMatter(article);
+    if (!SLUG_PATTERN.test(slug)) {
+      return this.failure("invalid_slug", "Slug has no usable characters", { slug: article.slug });
+    }
 
-    writeFileSync(outputPath, contents, "utf8");
+    const outputDir = path.resolve(this.config.outputDir);
+    const outputPath = path.resolve(outputDir, `${slug}.md`);
 
-    this.logger.info("Markdown publisher wrote article", {
-      outputPath,
-      slug: article.slug
-    });
+    if (path.dirname(outputPath) !== outputDir) {
+      return this.failure("invalid_slug", "Resolved path is outside the output directory", {
+        slug: article.slug
+      });
+    }
+
+    const contents = this.buildFrontMatter({ ...article, slug });
+
+    try {
+      await mkdir(outputDir, { recursive: true });
+      await writeFile(outputPath, contents, {
+        encoding: "utf8",
+        flag: this.config.overwrite ? "w" : "wx"
+      });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        return this.failure("already_exists", `File already exists: ${outputPath}`, {
+          slug,
+          outputPath
+        });
+      }
+
+      return this.failure("write_failed", error instanceof Error ? error.message : String(error), {
+        slug,
+        outputPath
+      });
+    }
+
+    this.logger.info("Markdown publisher wrote article", { outputPath, slug });
 
     return {
       success: true,
@@ -86,25 +128,36 @@ export class MarkdownPublisher implements IPublisher {
       publisherName: this.name,
       outputPath,
       metadata: {
-        slug: article.slug,
+        slug,
         format: "markdown"
       }
     };
   }
 
+  private failure(code: string, message: string, details: Record<string, unknown>): PublishResult {
+    this.logger.error("Markdown publisher failed", { code, ...details });
+
+    return {
+      success: false,
+      publisherId: this.id,
+      publisherName: this.name,
+      error: { code, message, details }
+    };
+  }
+
   private buildFrontMatter(article: PublishArticle): string {
-    return [
-      "---",
-      `title: ${article.title}`,
-      `slug: ${article.slug}`,
-      `category: ${article.category}`,
-      `tags: ${article.tags.join(", ")}`,
-      `createdAt: ${article.createdAt}`,
-      `author: ${article.author}`,
-      "---",
-      "",
-      article.content,
-      ""
-    ].join("\n");
+    const frontMatter = stringify({
+      title: article.title,
+      slug: article.slug,
+      description: article.summary,
+      category: article.category,
+      tags: article.tags,
+      createdAt: article.createdAt,
+      updatedAt: article.updatedAt,
+      author: article.author,
+      language: article.language
+    });
+
+    return `---\n${frontMatter}---\n\n${article.content}\n`;
   }
 }

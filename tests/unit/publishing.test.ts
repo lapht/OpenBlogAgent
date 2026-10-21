@@ -1,7 +1,8 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { parse } from "yaml";
 
 import { logger } from "../../packages/logger/src";
 import {
@@ -85,6 +86,76 @@ describe("Publishing Engine", () => {
     expect(fileContents).toContain("title: Test Article");
     expect(fileContents).toContain("slug: test-article");
     expect(fileContents).toContain("# Test Article");
+  });
+
+  it("slugifies hostile slugs and never writes outside the output directory", async () => {
+    const outputDir = path.join(tempDir, "articles");
+    const publisher = new MarkdownPublisher({ outputDir }, logger);
+
+    const result = await publisher.publish({ ...baseArticle, slug: "../../etc/x" });
+
+    expect(result.success).toBe(true);
+    expect(result.outputPath).toBe(path.join(outputDir, "etc-x.md"));
+    expect(readdirSync(outputDir)).toEqual(["etc-x.md"]);
+    expect(readdirSync(tempDir)).toEqual(["articles"]);
+  });
+
+  it("rejects a slug with no usable characters", async () => {
+    const publisher = new MarkdownPublisher({ outputDir: tempDir }, logger);
+
+    const result = await publisher.publish({ ...baseArticle, slug: "../.." });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe("invalid_slug");
+    expect(readdirSync(tempDir)).toEqual([]);
+  });
+
+  it("writes front matter that round-trips through a YAML parser", async () => {
+    const publisher = new MarkdownPublisher({ outputDir: tempDir }, logger);
+    const article: PublishArticle = {
+      ...baseArticle,
+      title: 'Rust: "safe" # systems\nprogramming — è tutto qui 🚀',
+      summary: "Line one: here\nline two",
+      tags: ["a: b", "c, d", "ünï"]
+    };
+
+    const result = await publisher.publish(article);
+    const raw = readFileSync(result.outputPath as string, "utf8");
+    const [, frontMatter, body] = raw.split(/^---$/m);
+    const data = parse(frontMatter) as Record<string, unknown>;
+
+    expect(data.title).toBe(article.title);
+    expect(data.description).toBe(article.summary);
+    expect(data.tags).toEqual(article.tags);
+    expect(data.slug).toBe("test-article");
+    expect(data.updatedAt).toBe(article.updatedAt);
+    expect(body).toContain("# Test Article");
+  });
+
+  it("refuses to overwrite an existing article unless overwrite is enabled", async () => {
+    const first = await new MarkdownPublisher({ outputDir: tempDir }, logger).publish(baseArticle);
+    expect(first.success).toBe(true);
+
+    const second = await new MarkdownPublisher({ outputDir: tempDir }, logger).publish({
+      ...baseArticle,
+      content: "# Replaced"
+    });
+
+    expect(second.success).toBe(false);
+    expect(second.error?.code).toBe("already_exists");
+    expect(readFileSync(first.outputPath as string, "utf8")).toContain("Body");
+
+    const third = await new MarkdownPublisher(
+      { outputDir: tempDir, overwrite: true },
+      logger
+    ).publish({
+      ...baseArticle,
+      content: "# Replaced"
+    });
+
+    expect(third.success).toBe(true);
+    expect(existsSync(first.outputPath as string)).toBe(true);
+    expect(readFileSync(first.outputPath as string, "utf8")).toContain("# Replaced");
   });
 
   it("uses the default publisher when no explicit target is supplied", async () => {

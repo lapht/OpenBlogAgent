@@ -34,6 +34,8 @@ export const envSchema = z.object({
 
   OPENBLOG_DEFAULT_PUBLISHER: optionalString(),
   OPENBLOG_OUTPUT_DIR: z.string().default("output/articles"),
+  /** Let the markdown publisher replace an existing file with the same slug. */
+  OPENBLOG_MARKDOWN_OVERWRITE: envBoolean(false),
   OPENBLOG_WORDPRESS_ENDPOINT: optionalString(),
   OPENBLOG_WORDPRESS_USERNAME: optionalString(),
   OPENBLOG_WORDPRESS_APPLICATION_PASSWORD: optionalString(), // secret
