@@ -23,6 +23,7 @@
     "start": "npm run build && node apps/cli/dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "check:deps": "node scripts/check-deps.mjs"
   },
@@ -40,6 +41,7 @@
     "@types/node": "^22.5.4",
     "@typescript-eslint/eslint-plugin": "^8.5.0",
     "@typescript-eslint/parser": "^8.5.0",
+    "@vitest/coverage-v8": "^2.1.9",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "husky": "^9.1.5",

@@ -111,31 +111,31 @@ describe("Publishing Engine", () => {
     expect(mockPublisher.publish).toHaveBeenCalledTimes(1);
   });
 
-  it("sends WordPress categories as integers instead of strings", async () => {
+  it("reports a failed result when the WordPress API rejects the request", async () => {
     const fetchMock = vi.fn(async () => ({
-      ok: true,
-      text: async () => ""
+      ok: false,
+      status: 401,
+      text: async () => "rest_forbidden"
     }));
-
     vi.stubGlobal("fetch", fetchMock);
 
     const publisher = new WordPressPublisher(
       {
-        endpoint: "https://example.com/wp-json/wp/v2/posts",
+        endpoint: "https://example.com/wp-json/wp/v2",
         username: "user",
         applicationPassword: "pass"
       },
-      logger
+      logger,
+      { list: async () => [], resolve: async () => ({ id: 1, name: "Engineering" }) },
+      { list: async () => [], resolveMany: async () => [] }
     );
 
-    await publisher.publish({
-      ...baseArticle,
-      category: "42"
-    });
+    const result = await publisher.publish(baseArticle);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [, options] = fetchMock.mock.calls[0];
-    expect(JSON.parse(options.body as string).categories).toEqual([42]);
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe("publish_failed");
+    expect(result.error?.message).toContain("401");
 
     vi.unstubAllGlobals();
   });
