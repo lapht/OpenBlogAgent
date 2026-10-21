@@ -36,9 +36,12 @@ The centralized config system supports:
 - OPENBLOG_WORDPRESS_PASSWORD
 - OPENBLOG_WORDPRESS_APPLICATION_PASSWORD
 - OPENBLOG_WORDPRESS_STATUS
-- OPENBLOG_GHOST_ENDPOINT
+- OPENBLOG_GHOST_ENDPOINT (Ghost is not supported yet)
 - OPENBLOG_GHOST_API_KEY
 - OPENBLOG_GHOST_STATUS
+- OPENBLOG_TAXONOMY_ALLOW_CREATE (`true`|`false`, default `false`)
+
+`OPENBLOG_WORDPRESS_ENDPOINT` is the base REST URL (e.g. `https://example.com/wp-json/wp/v2`, without `/posts`). All variables are validated in `packages/config` (`loadEnv()`); apps must read configuration only from the parsed object.
 
 ## Registering a new publisher
 
