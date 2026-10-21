@@ -85,6 +85,17 @@ examples/
 .github/
 ```
 
+## Docker
+
+The image runs the CLI (ADR-022). Data and generated articles live in named volumes, and `.env` is read if present:
+
+```bash
+docker compose -f docker/docker-compose.yml build
+docker compose -f docker/docker-compose.yml run --rm openblog "Why caching matters"
+```
+
+To use the server instead: `docker run --rm -p 3000:3000 --entrypoint node openblogagent:local apps/server/dist/main.js`.
+
 ## Server Endpoints
 
 - `GET /health`

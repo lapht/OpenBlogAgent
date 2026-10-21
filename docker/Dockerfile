@@ -1,19 +1,29 @@
-FROM node:20-alpine AS base
-WORKDIR /app
+# Production image of the OpenBlogAgent CLI (see ADR-022). Build context: the repository root.
+# Debian (glibc) rather than Alpine: better-sqlite3 ships prebuilt binaries for it, so no compiler is needed.
 
-FROM base AS deps
-COPY package*.json tsconfig.base.json ./
+FROM node:20-bookworm-slim AS build
+WORKDIR /app
+ENV HUSKY=0
+COPY package.json package-lock.json tsconfig.base.json ./
 COPY apps ./apps
 COPY packages ./packages
 RUN npm ci
-
-FROM deps AS build
 RUN npm run build
+# Drops dev dependencies but keeps the workspace links (node_modules/@openblog/* -> packages/*).
+RUN npm prune --omit=dev
 
-FROM node:20-alpine AS runner
+FROM node:20-bookworm-slim AS runner
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/server/package.json ./apps/server/package.json
-COPY --from=build /app/apps/server/dist ./apps/server/dist
-EXPOSE 3000
-CMD ["node", "apps/server/dist/main.js"]
+ENV NODE_ENV=production \
+    OPENBLOG_MEMORY_DB_PATH=/app/data/openblog-memory.db \
+    OPENBLOG_OUTPUT_DIR=/app/output/articles
+# The workspace links point into apps/ and packages/, so both trees (with their dist folders) must ship.
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/apps ./apps
+COPY --from=build /app/packages ./packages
+RUN mkdir -p /app/data /app/output/articles && chown -R node:node /app/data /app/output
+USER node
+VOLUME ["/app/data", "/app/output"]
+# No HEALTHCHECK: the CLI runs once and exits. A server container would use apps/server/dist/main.js.
+ENTRYPOINT ["node", "apps/cli/dist/index.js"]

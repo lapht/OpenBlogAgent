@@ -38,3 +38,38 @@ jobs:
       - run: npm test
       - run: npm run test:coverage
         continue-on-error: true # informational, no threshold yet
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -f docker/Dockerfile -t openblogagent:ci .
+
+      - name: Compose file is valid
+        run: docker compose -f docker/docker-compose.yml config --quiet
+
+      - name: Workspace packages resolve in the runner stage
+        run: >-
+          docker run --rm --entrypoint node openblogagent:ci
+          -e "for (const name of ['config', 'logger', 'shared', 'graph', 'app']) require('@openblog/' + name)"
+
+      - name: CLI entry point starts and rejects a missing topic
+        run: |
+          set +e
+          output=$(docker run --rm openblogagent:ci 2>&1)
+          code=$?
+          echo "$output"
+          test "$code" -eq 1
+          echo "$output" | grep -q "Missing article topic"
+
+      - name: Container runs as a non-root user
+        run: test "$(docker run --rm --entrypoint id openblogagent:ci -u)" != "0"
+
+      - name: Data survives container recreation
+        run: |
+          docker volume create openblog-ci-data
+          docker run --rm -v openblog-ci-data:/app/data --entrypoint sh openblogagent:ci -c 'echo kept > /app/data/probe'
+          test "$(docker run --rm -v openblog-ci-data:/app/data --entrypoint cat openblogagent:ci /app/data/probe)" = "kept"
