@@ -40,6 +40,8 @@ export const envSchema = z.object({
   OPENBLOG_WORDPRESS_USERNAME: optionalString(),
   OPENBLOG_WORDPRESS_APPLICATION_PASSWORD: optionalString(), // secret
   OPENBLOG_WORDPRESS_STATUS: z.enum(["draft", "publish"]).optional(),
+  /** When a WordPress post with the same slug exists: update it or fail with `conflict`. */
+  OPENBLOG_WORDPRESS_ON_EXISTING: z.enum(["update", "conflict"]).default("update"),
   OPENBLOG_TAXONOMY_PROVIDER: z.enum(["static", "wordpress"]).default("static"),
   /** Comma-separated category names offered to the classifier (static taxonomy). */
   OPENBLOG_TAXONOMY_CATEGORIES: optionalString(),

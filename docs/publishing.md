@@ -22,7 +22,7 @@ The agents only produce content. The publisher layer is responsible for:
 - IPublisher: common interface for all publishers.
 - DefaultPublisherManager: central component that routes the publish request.
 - MarkdownPublisher: writes `{OPENBLOG_OUTPUT_DIR}/{slug}.md` with YAML front matter (title, slug, description, category, tags as a list, createdAt, updatedAt, author, language) produced by a YAML serializer. The slug is slugified (`^[a-z0-9]+(-[a-z0-9]+)*$`) and the path is checked to stay inside the output directory (`invalid_slug` otherwise). An existing file is never replaced unless `OPENBLOG_MARKDOWN_OVERWRITE=true`; otherwise the publish fails with `already_exists`.
-- WordPressPublisher: creates a post (draft by default) through the WordPress REST API. Markdown is rendered to HTML with `marked` and sanitized with `sanitize-html`; the payload includes the slug; the response (`id`, `link`, `status`, `slug`) is returned in `PublishResult.metadata`. Only Application Passwords are supported, and HTTP errors map to distinct codes: `auth_failed` (401), `forbidden` (403), `invalid_request` (other 4xx), `server_error` (5xx), `network_error`, `timeout` and `unexpected_response`.
+- WordPressPublisher: creates a post (draft by default) through the WordPress REST API. Markdown is rendered to HTML with `marked` and sanitized with `sanitize-html`; the payload includes the slug; the response (`id`, `link`, `status`, `slug`) is returned in `PublishResult.metadata`. Publishing is idempotent: before writing, the publisher queries `GET /posts?slug=<slug>&status=any`; an existing post is updated in place with `PUT /posts/<id>` (its status is kept unless `OPENBLOG_WORDPRESS_STATUS=publish`), or the publish fails with `conflict` when `OPENBLOG_WORDPRESS_ON_EXISTING=conflict`. The result metadata has `action` (`created`|`updated`); id, link and status are stored on the article row (`publish_remote_*`). Only Application Passwords are supported, and HTTP errors map to distinct codes: `auth_failed` (401), `forbidden` (403), `invalid_request` (other 4xx), `server_error` (5xx), `network_error`, `timeout` and `unexpected_response`.
 - GhostPublisher: placeholder for a future Ghost Admin API integration. It is not registered by the factory, has no configuration, and always fails with `not_implemented`.
 
 ## Configuration
@@ -36,6 +36,7 @@ The centralized config system supports:
 - OPENBLOG_WORDPRESS_USERNAME
 - OPENBLOG_WORDPRESS_APPLICATION_PASSWORD
 - OPENBLOG_WORDPRESS_STATUS
+- OPENBLOG_WORDPRESS_ON_EXISTING (`update`|`conflict`, default `update`)
 - OPENBLOG_TAXONOMY_ALLOW_CREATE (`true`|`false`, default `false`)
 - OPENBLOG_TAXONOMY_CATEGORIES / OPENBLOG_TAXONOMY_TAGS (comma-separated static lists) and OPENBLOG_TAXONOMY_FILE (JSON `{ "categories": [], "tags": [] }`; the lists override the file)
 
