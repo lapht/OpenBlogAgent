@@ -85,13 +85,6 @@ export async function createApplication(
               status: config.OPENBLOG_WORDPRESS_STATUS
             }
           : undefined,
-        ghost: config.OPENBLOG_GHOST_ENDPOINT
-          ? {
-              endpoint: config.OPENBLOG_GHOST_ENDPOINT,
-              apiKey: config.OPENBLOG_GHOST_API_KEY,
-              status: config.OPENBLOG_GHOST_STATUS
-            }
-          : undefined,
         defaultPublisherId: config.OPENBLOG_DEFAULT_PUBLISHER,
         taxonomy: taxonomyConfig,
         wordpressTaxonomy

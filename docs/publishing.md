@@ -23,7 +23,7 @@ The agents only produce content. The publisher layer is responsible for:
 - DefaultPublisherManager: central component that routes the publish request.
 - MarkdownPublisher: writes Markdown with YAML front matter to the output directory.
 - WordPressPublisher: creates a post (draft by default) through the WordPress REST API. Markdown is rendered to HTML with `marked` and sanitized with `sanitize-html`; the payload includes the slug; the response (`id`, `link`, `status`, `slug`) is returned in `PublishResult.metadata`. Only Application Passwords are supported, and HTTP errors map to distinct codes: `auth_failed` (401), `forbidden` (403), `invalid_request` (other 4xx), `server_error` (5xx), `network_error`, `timeout` and `unexpected_response`.
-- GhostPublisher: prepares a Ghost integration payload and can be extended later.
+- GhostPublisher: placeholder for a future Ghost Admin API integration. It is not registered by the factory, has no configuration, and always fails with `not_implemented`.
 
 ## Configuration
 
@@ -35,9 +35,6 @@ The centralized config system supports:
 - OPENBLOG_WORDPRESS_USERNAME
 - OPENBLOG_WORDPRESS_APPLICATION_PASSWORD
 - OPENBLOG_WORDPRESS_STATUS
-- OPENBLOG_GHOST_ENDPOINT (Ghost is not supported yet)
-- OPENBLOG_GHOST_API_KEY
-- OPENBLOG_GHOST_STATUS
 - OPENBLOG_TAXONOMY_ALLOW_CREATE (`true`|`false`, default `false`)
 - OPENBLOG_TAXONOMY_CATEGORIES / OPENBLOG_TAXONOMY_TAGS (comma-separated static lists) and OPENBLOG_TAXONOMY_FILE (JSON `{ "categories": [], "tags": [] }`; the lists override the file)
 
