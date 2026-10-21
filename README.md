@@ -46,9 +46,8 @@ Included in this phase:
 
 Not included in this phase:
 
-- dashboard
+- dashboard (removed from the repository; see ADR-009)
 - Ghost publishing (`GhostPublisher` only prepares a payload and makes no HTTP call; planned)
-- a Markdown assembler step (`createMarkdownAssembler` in `packages/tools` exists but is not used by the workflow)
 - plugin system
 - multi-agent orchestration
 
@@ -67,21 +66,17 @@ Not included in this phase:
 ```text
 apps/
   server/
-  dashboard/
   cli/
 packages/
-  core/
   graph/
   agents/
   providers/
   storage/
   publishers/
-  tools/
   logger/
   shared/
   types/
   config/
-  sdk/
 docs/
 docker/
 scripts/
@@ -359,7 +354,6 @@ npm run test
 - Fastify
 - Zod + dotenv
 - Pino
-- tsyringe
 - Vitest
 - ESLint + Prettier
 - Husky + Commitlint + lint-staged

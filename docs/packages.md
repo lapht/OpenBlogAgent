@@ -2,10 +2,10 @@
 
 ## Core Packages
 
-- `@openblog/core`: contracts and dependency injection container scaffold
 - `@openblog/config`: environment loading and validation with dotenv + Zod
 - `@openblog/logger`: Pino-based logger facade
-- `@openblog/sdk`: single public API surface
+- `@openblog/shared`: constants shared by apps (request-id header, product name)
+- `@openblog/types`: small shared type aliases
 
 ## Domain Packages
 
@@ -14,7 +14,6 @@
 - `@openblog/providers`
 - `@openblog/storage`: persistence layer (SQLite connection, migrations, repositories, memory service)
 - `@openblog/publishers`
-- `@openblog/tools`
 
 ## Storage Notes
 

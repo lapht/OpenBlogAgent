@@ -4,9 +4,6 @@
   "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "dependencies": {
-    "@openblog/types": "*"
-  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rimraf dist",

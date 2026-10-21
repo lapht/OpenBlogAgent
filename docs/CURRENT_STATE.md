@@ -20,8 +20,7 @@ Last reviewed against `main` by static reading of the code plus a local run of b
 | Ghost publisher                                                                   | Not implemented        | `GhostPublisher.publish` makes no HTTP call yet reports success                                     |
 | Fastify server (`/health`, `/version`)                                            | Verified               | `tests/integration/health.test.ts` (requires Node ≥ 20)                                             |
 | CLI                                                                               | Unverified             | `apps/cli/src/index.ts`; no tests, no stable exit codes or flags beyond the topic argument          |
-| `createMarkdownAssembler` (`packages/tools`)                                      | Unused                 | exported but not called by the workflow                                                             |
-| Dashboard, plugin system, scheduler, research engine                              | Planned                | placeholders / plan documents only                                                                  |
+| Dashboard, plugin system, scheduler, research engine                              | Planned                | no code (removed scaffolding, see ADR-009); plan documents only                                     |
 
 ## Known limitations
 

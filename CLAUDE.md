@@ -34,7 +34,7 @@ Commits must follow Conventional Commits (commitlint via husky; lint-staged runs
 - **`packages/providers`**: `TextGenerationProvider` implementations. OpenRouter is tried first; Ollama is the fallback if OpenRouter is unconfigured or fails. If both fail, the CLI exits with a combined error.
 - **`packages/publishers`**: pluggable `IPublisher` implementations (`markdown`, `wordpress`, `ghost`). `factory.ts` builds them from config. `manager.ts` (`DefaultPublisherManager`) selects the one named by `OPENBLOG_DEFAULT_PUBLISHER`. `taxonomy/` holds category and tag providers (WordPress-backed, or static) with a TTL cache. They are used for category and tag resolution.
 - **`packages/config`**: env loading and a Zod schema. All runtime config is `OPENBLOG_*`, `OPENROUTER_*` and `OLLAMA_*` environment variables (see `.env.example`).
-- **`packages/core`, `sdk`, `types`, `logger` (Pino), `shared`, `tools`, `storage`**: contracts, DI (tsyringe) and utilities.
+- **`types`, `logger` (Pino), `shared`, `storage`**: small shared types, logging, constants and SQLite persistence. Wiring is explicit constructor/factory injection; there is no DI container.
 - **`apps/cli`** is the real entry point. `apps/server` is a Fastify app that only exposes `GET /health` and `GET /version`. `apps/dashboard` is a placeholder.
 - The top-level `src/mastra/` is an empty leftover directory. Don't build there.
 
