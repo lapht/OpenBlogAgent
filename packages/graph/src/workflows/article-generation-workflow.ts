@@ -13,7 +13,7 @@ import type { ILogger } from "@openblog/logger";
 import type { PublishArticle, PublishResult } from "@openblog/publishers";
 import { z } from "zod";
 
-import type { LlmPort, MemoryPort, PublishPort, TaxonomyPort } from "../ports";
+import type { LlmPort, MemoryPort, PublishPort, StoredWorkflowStep, TaxonomyPort } from "../ports";
 
 export const ARTICLE_GENERATION_WORKFLOW_NAME = "article-generation-workflow" as const;
 
@@ -104,6 +104,21 @@ export type ArticleWorkflowResult = PublishedWorkflowResult | FailedWorkflowResu
 export interface ArticleGenerationWorkflow {
   readonly name: typeof ARTICLE_GENERATION_WORKFLOW_NAME;
   run(input: ArticleWorkflowInput): Promise<ArticleWorkflowResult>;
+  /** Continues a run that did not publish, reusing the stored output of its completed steps. */
+  resume(workflowId: string): Promise<ArticleWorkflowResult>;
+}
+
+export type WorkflowResumeErrorCode = "memory_unavailable" | "not_found" | "already_published";
+
+/** Thrown when a run cannot be resumed; nothing is executed or changed. */
+export class WorkflowResumeError extends Error {
+  readonly code: WorkflowResumeErrorCode;
+
+  constructor(code: WorkflowResumeErrorCode, message: string) {
+    super(message);
+    this.name = "WorkflowResumeError";
+    this.code = code;
+  }
 }
 
 export interface CreateArticleGenerationWorkflowOptions {
@@ -135,11 +150,51 @@ const graphState = Annotation.Root({
   seoOutput: optional<SeoOutput>(),
   category: optional<string>(),
   tags: optional<string[]>(),
-  publishResult: optional<PublishResult>()
+  publishResult: optional<PublishResult>(),
+  /** Steps restored from a previous run; their nodes are skipped. */
+  completedSteps: optional<string[]>()
 });
 
 export type ArticleWorkflowState = typeof graphState.State;
 type ArticleWorkflowUpdate = typeof graphState.Update;
+
+/** Shape of what each step stores, used to restore state when a run is resumed. */
+const stepOutputSchemas: Record<string, z.ZodType<ArticleWorkflowUpdate, z.ZodTypeDef, unknown>> = {
+  planner: z.object({ outline: plannerOutlineSchema }),
+  writer: z.object({ article: nonEmptyTextSchema }),
+  editor: z.object({ editedText: nonEmptyTextSchema }),
+  seo: z.object({ seoOutput: seoOutputSchema }),
+  classification: classificationSchema,
+  publisher: z.object({ publishResult: publishResultSchema })
+};
+
+/** State rebuilt from the latest successful execution of each stored step. */
+function restoreState(steps: StoredWorkflowStep[]): ArticleWorkflowUpdate {
+  const latest = new Map<string, StoredWorkflowStep>();
+  for (const stored of steps) {
+    if (stored.status === "succeeded") {
+      latest.set(stored.step, stored);
+    }
+  }
+
+  const restored: ArticleWorkflowUpdate = {};
+  const completedSteps: string[] = [];
+  for (const [name, stored] of latest) {
+    const schema = stepOutputSchemas[name];
+    if (!schema) {
+      continue;
+    }
+    const output = schema.parse(stored.output);
+    // A publish the publisher rejected is stored as an output but is not a completed step.
+    if (output.publishResult && !output.publishResult.success) {
+      continue;
+    }
+    Object.assign(restored, output);
+    completedSteps.push(name);
+  }
+
+  return { ...restored, completedSteps };
+}
 
 /** Reads a field a previous step must have produced; a miss is a wiring bug, not user input. */
 function required<T>(value: T | undefined, field: string): T {
@@ -197,6 +252,11 @@ function step(
   };
 
   return async (state) => {
+    if (state.completedSteps?.includes(name)) {
+      logger.info("Skipping step completed in a previous attempt", { step: name });
+      return {};
+    }
+
     const startedAt = new Date().toISOString();
     try {
       const output = await fn(state);
@@ -352,6 +412,94 @@ export function createArticleGenerationWorkflow(
     .addEdge("publisher", END)
     .compile();
 
+  async function execute(
+    topic: string,
+    workflowMemory: { workflowId: string } | null,
+    restored: ArticleWorkflowUpdate = {}
+  ): Promise<ArticleWorkflowResult> {
+    logger.info("Starting article workflow", {
+      topic,
+      workflow: ARTICLE_GENERATION_WORKFLOW_NAME
+    });
+
+    try {
+      if (memory && workflowMemory) {
+        await memory.markRunning(workflowMemory.workflowId);
+      }
+
+      const finalState = await workflow.invoke({
+        ...restored,
+        topic,
+        workflowId: workflowMemory?.workflowId
+      });
+
+      const output: ArticleWorkflowOutput = {
+        article: required(finalState.article, "article"),
+        category: required(finalState.category, "category"),
+        editedText: required(finalState.editedText, "editedText"),
+        seoOutput: required(finalState.seoOutput, "seoOutput"),
+        tags: required(finalState.tags, "tags"),
+        topic: finalState.topic
+      };
+      const publishResult = finalState.publishResult;
+      const failure: WorkflowFailure | undefined = publishResult?.success
+        ? undefined
+        : {
+            step: "publisher",
+            code: publishResult?.error?.code ?? "publish_failed",
+            message: publishResult?.error?.message ?? "Publisher did not confirm the publication"
+          };
+      const status: WorkflowRunStatus = failure ? "failed" : "published";
+
+      if (memory && workflowMemory) {
+        await memory.finishWorkflow({
+          workflowId: workflowMemory.workflowId,
+          status,
+          ...output,
+          publishResult: publishResult && { ...publishResult },
+          failedStep: failure?.step,
+          errorCode: failure?.code,
+          errorMessage: failure?.message
+        });
+      }
+
+      if (failure) {
+        logger.error("Article workflow failed", {
+          topic,
+          workflow: ARTICLE_GENERATION_WORKFLOW_NAME,
+          failedStep: failure.step,
+          errorCode: failure.code,
+          error: failure.message
+        });
+      } else {
+        logger.info("Article workflow completed", {
+          articleLength: output.article.length,
+          topic,
+          workflow: ARTICLE_GENERATION_WORKFLOW_NAME
+        });
+      }
+
+      return failure
+        ? { ...output, status: "failed", failure, publishResult }
+        : {
+            ...output,
+            status: "published",
+            publishResult: required(publishResult, "publishResult")
+          };
+    } catch (error) {
+      if (memory && workflowMemory) {
+        await memory.failWorkflow({
+          workflowId: workflowMemory.workflowId,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          failedStep: error instanceof WorkflowStepError ? error.step : undefined,
+          errorCode: error instanceof WorkflowStepError ? error.code : undefined
+        });
+      }
+
+      throw error;
+    }
+  }
+
   return {
     name: ARTICLE_GENERATION_WORKFLOW_NAME,
     async run(input: ArticleWorkflowInput): Promise<ArticleWorkflowResult> {
@@ -370,86 +518,35 @@ export function createArticleGenerationWorkflow(
         });
       }
 
-      logger.info("Starting article workflow", {
-        topic,
-        workflow: ARTICLE_GENERATION_WORKFLOW_NAME
+      return execute(topic, workflowMemory);
+    },
+
+    async resume(workflowId: string): Promise<ArticleWorkflowResult> {
+      if (!memory) {
+        throw new WorkflowResumeError(
+          "memory_unavailable",
+          "Resuming a run requires a memory store"
+        );
+      }
+      const stored = await memory.loadWorkflow(workflowId);
+      if (!stored) {
+        throw new WorkflowResumeError("not_found", `Workflow ${workflowId} was not found`);
+      }
+      if (stored.status === "published") {
+        throw new WorkflowResumeError(
+          "already_published",
+          `Workflow ${workflowId} is already published`
+        );
+      }
+
+      const restored = restoreState(stored.steps);
+      logger.info("Resuming article workflow", {
+        workflowId,
+        topic: stored.topic,
+        completedSteps: restored.completedSteps
       });
 
-      try {
-        if (memory && workflowMemory) {
-          await memory.markRunning(workflowMemory.workflowId);
-        }
-
-        const finalState = await workflow.invoke({
-          topic,
-          workflowId: workflowMemory?.workflowId
-        });
-
-        const output: ArticleWorkflowOutput = {
-          article: required(finalState.article, "article"),
-          category: required(finalState.category, "category"),
-          editedText: required(finalState.editedText, "editedText"),
-          seoOutput: required(finalState.seoOutput, "seoOutput"),
-          tags: required(finalState.tags, "tags"),
-          topic: finalState.topic
-        };
-        const publishResult = finalState.publishResult;
-        const failure: WorkflowFailure | undefined = publishResult?.success
-          ? undefined
-          : {
-              step: "publisher",
-              code: publishResult?.error?.code ?? "publish_failed",
-              message: publishResult?.error?.message ?? "Publisher did not confirm the publication"
-            };
-        const status: WorkflowRunStatus = failure ? "failed" : "published";
-
-        if (memory && workflowMemory) {
-          await memory.finishWorkflow({
-            workflowId: workflowMemory.workflowId,
-            status,
-            ...output,
-            publishResult: publishResult && { ...publishResult },
-            failedStep: failure?.step,
-            errorCode: failure?.code,
-            errorMessage: failure?.message
-          });
-        }
-
-        if (failure) {
-          logger.error("Article workflow failed", {
-            topic,
-            workflow: ARTICLE_GENERATION_WORKFLOW_NAME,
-            failedStep: failure.step,
-            errorCode: failure.code,
-            error: failure.message
-          });
-        } else {
-          logger.info("Article workflow completed", {
-            articleLength: output.article.length,
-            topic,
-            workflow: ARTICLE_GENERATION_WORKFLOW_NAME
-          });
-        }
-
-        return failure
-          ? { ...output, status: "failed", failure, publishResult }
-          : {
-              ...output,
-              status: "published",
-              publishResult: required(publishResult, "publishResult")
-            };
-      } catch (error) {
-        if (memory && workflowMemory) {
-          await memory.failWorkflow({
-            workflowId: workflowMemory.workflowId,
-            errorMessage: error instanceof Error ? error.message : String(error),
-            failedStep: error instanceof WorkflowStepError ? error.step : undefined,
-            errorCode: error instanceof WorkflowStepError ? error.code : undefined
-          });
-        }
-
-        throw error;
-      }
+      return execute(stored.topic, { workflowId }, restored);
     }
   };
 }

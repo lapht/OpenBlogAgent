@@ -125,6 +125,7 @@ describe("createApplication", () => {
         finishWorkflow: async ({ status }) => {
           memoryCalls.push(`finish:${status}`);
         },
+        loadWorkflow: async () => null,
         recordStep: async () => {},
         failWorkflow: async () => {}
       }
