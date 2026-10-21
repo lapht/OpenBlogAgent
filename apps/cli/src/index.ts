@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 
 import { loadEnv } from "@openblog/config";
-import { createArticleGenerationWorkflow } from "@openblog/graph";
+import { createArticleGenerationWorkflow, WorkflowStepError } from "@openblog/graph";
 import { logger } from "@openblog/logger";
 import {
   createPublishersFromConfig,
@@ -17,6 +17,8 @@ import {
   OpenRouterProvider
 } from "@openblog/providers";
 import { createSQLiteMemoryService } from "@openblog/storage";
+
+import { reportRunOutcome } from "./report";
 
 dotenv.config();
 
@@ -211,27 +213,15 @@ async function main(): Promise<void> {
       topic
     });
 
-    logger.info("Workflow completed successfully", {
-      topic,
-      title: result.seoOutput?.title,
-      slug: result.seoOutput?.slug,
-      publishSuccess: result.publishResult?.success,
-      publisherId: result.publishResult?.publisherId,
-      outputPath: result.publishResult?.outputPath
-    });
-
-    logger.info("Article saved", {
-      outputFilePath: result.publishResult?.outputPath,
-      topic: result.topic,
-      slug: result.seoOutput.slug,
-      publisherId: result.publishResult?.publisherId
-    });
+    process.exitCode = reportRunOutcome(result, logger);
   } catch (error) {
     logger.error("Article generation failed", {
       topic,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
+      failedStep: error instanceof WorkflowStepError ? error.step : undefined,
+      errorCode: error instanceof WorkflowStepError ? error.code : undefined
     });
-    process.exit(1);
+    process.exitCode = 1;
   } finally {
     await memoryStore.disconnect();
   }

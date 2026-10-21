@@ -1,6 +1,9 @@
 import type { Identifier } from "@openblog/types";
 
-export type WorkflowStatus = "started" | "completed" | "failed";
+/** `started -> running -> published | needs_review | failed`. */
+export type WorkflowStatus = "started" | "running" | "published" | "needs_review" | "failed";
+
+export type FinalWorkflowStatus = Extract<WorkflowStatus, "published" | "needs_review" | "failed">;
 
 export interface WorkflowRecord {
   id: Identifier;
@@ -12,6 +15,8 @@ export interface WorkflowRecord {
   duplicateOfWorkflowId: Identifier | null;
   metadata: Record<string, unknown>;
   errorMessage: string | null;
+  errorCode: string | null;
+  failedStep: string | null;
   startedAt: string;
   completedAt: string | null;
   createdAt: string;

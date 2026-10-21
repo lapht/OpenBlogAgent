@@ -24,7 +24,7 @@ This document explains how persistent memory works in OpenBlogAgent.
 
 ### Repository Layer
 
-- `WorkflowRepository`: workflow lifecycle records (`started`, `completed`, `failed`).
+- `WorkflowRepository`: workflow lifecycle records (`started` → `running` → `published` | `needs_review` | `failed`, plus `failed_step` and `error_code`).
 - `TopicRepository`: normalized topic history and duplicate lookup.
 - `PromptRepository`: planner/writer prompts associated with a workflow.
 - `ArticleRepository`: final article payload and publication metadata.
@@ -35,7 +35,8 @@ This document explains how persistent memory works in OpenBlogAgent.
 
 - `beginWorkflow(...)`
 - `savePrompt(...)`
-- `completeWorkflow(...)`
+- `markRunning(...)`
+- `finishWorkflow(...)` (final status plus the generated article, also for a failed publish)
 - `failWorkflow(...)`
 
 ### Integration Layer
@@ -90,8 +91,11 @@ At runtime:
 1. Workflow starts and calls `beginWorkflow`.
 2. Planner node stores planner prompt via `savePrompt`.
 3. Writer node stores writer prompt via `savePrompt`.
-4. On success, workflow calls `completeWorkflow`.
-5. On failure, workflow calls `failWorkflow`.
+4. The run is marked `running`.
+5. After the graph finishes, `finishWorkflow` stores `published` only if the publisher confirmed. A failed or rejected publish stores `failed` (step `publisher`, the publisher error code) and keeps the article content so it can be retried.
+6. If a step throws, `failWorkflow` stores `failed` with the failing step and error code.
+
+`needs_review` is defined for future quality-gate outcomes; nothing produces it yet. Rows written before this change may still carry the old `completed` status.
 
 ## Configuration
 
@@ -136,7 +140,7 @@ LIMIT 20;
 
 `tests/unit/memory-service.test.ts` validates:
 
-- workflow lifecycle persistence (`completed` and `failed`)
+- workflow lifecycle persistence (`published` and `failed`, with failing step and error code)
 - prompt persistence
 - topic duplicate detection and hit count updates
-- article persistence on successful completion
+- article persistence on completion, including a failed publish

@@ -48,7 +48,41 @@ export const articleWorkflowStateSchema = z.object({
 
 export type ArticleWorkflowState = z.infer<typeof articleWorkflowStateSchema>;
 
+/** `needs_review` is reserved for quality-gate outcomes; nothing produces it yet. */
+export type WorkflowRunStatus = "published" | "needs_review" | "failed";
+
+export interface WorkflowFailure {
+  step: string;
+  code: string;
+  message: string;
+}
+
+/** Thrown when a workflow step fails; carries the step so the run can be recorded as failed there. */
+export class WorkflowStepError extends Error {
+  readonly step: string;
+  readonly code: string;
+
+  constructor(step: string, cause: unknown) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    super(`${step} step failed: ${message}`, { cause });
+    this.name = "WorkflowStepError";
+    this.step = step;
+    this.code = errorCode(cause);
+  }
+}
+
+function errorCode(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (typeof code === "string" && code.length > 0) {
+    return code;
+  }
+  return error instanceof Error && error.name !== "Error" ? error.name : "step_failed";
+}
+
 export interface ArticleWorkflowResult {
+  /** `published` only when the publisher confirmed; otherwise `failed` with `failure` set. */
+  status: WorkflowRunStatus;
+  failure?: WorkflowFailure;
   article: string;
   category: string;
   editedText: string;
@@ -114,6 +148,16 @@ const graphState = Annotation.Root({
   })
 });
 
+function step<S, R>(name: string, fn: (state: S) => Promise<R>): (state: S) => Promise<R> {
+  return async (state) => {
+    try {
+      return await fn(state);
+    } catch (error) {
+      throw error instanceof WorkflowStepError ? error : new WorkflowStepError(name, error);
+    }
+  };
+}
+
 export function createArticleGenerationWorkflow(
   options: CreateArticleGenerationWorkflowOptions
 ): ArticleGenerationWorkflow {
@@ -127,126 +171,141 @@ export function createArticleGenerationWorkflow(
   const classificationAgent = createClassificationAgent(llm);
 
   const workflow = new StateGraph(graphState)
-    .addNode("planner", async (state: ArticleWorkflowState) => {
-      const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
-      const input = { topic: parsedState.topic };
+    .addNode(
+      "planner",
+      step("planner", async (state: ArticleWorkflowState) => {
+        const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
+        const input = { topic: parsedState.topic };
 
-      if (memory && parsedState.workflowId) {
-        await memory.savePrompt({
-          workflowId: parsedState.workflowId,
-          promptType: "planner",
-          content: plannerAgent.buildPrompt(input)
+        if (memory && parsedState.workflowId) {
+          await memory.savePrompt({
+            workflowId: parsedState.workflowId,
+            promptType: "planner",
+            content: plannerAgent.buildPrompt(input)
+          });
+        }
+
+        const outline = await plannerAgent.run(input);
+
+        logger.info("Planner output ready", {
+          outline,
+          topic: parsedState.topic
         });
-      }
 
-      const outline = await plannerAgent.run(input);
+        return { outline };
+      })
+    )
+    .addNode(
+      "writer",
+      step("writer", async (state: ArticleWorkflowState) => {
+        const parsedState = articleWorkflowStateSchema
+          .extend({
+            outline: plannerOutlineSchema
+          })
+          .parse(state) as ArticleWorkflowState;
+        const input = { topic: parsedState.topic, outline: parsedState.outline };
 
-      logger.info("Planner output ready", {
-        outline,
-        topic: parsedState.topic
-      });
+        if (memory && parsedState.workflowId) {
+          await memory.savePrompt({
+            workflowId: parsedState.workflowId,
+            promptType: "writer",
+            content: writerAgent.buildPrompt(input)
+          });
+        }
 
-      return { outline };
-    })
-    .addNode("writer", async (state: ArticleWorkflowState) => {
-      const parsedState = articleWorkflowStateSchema
-        .extend({
-          outline: plannerOutlineSchema
-        })
-        .parse(state) as ArticleWorkflowState;
-      const input = { topic: parsedState.topic, outline: parsedState.outline };
+        const article = await writerAgent.run(input);
 
-      if (memory && parsedState.workflowId) {
-        await memory.savePrompt({
-          workflowId: parsedState.workflowId,
-          promptType: "writer",
-          content: writerAgent.buildPrompt(input)
+        logger.info("Writer output ready", {
+          articleLength: article.length,
+          topic: parsedState.topic
         });
-      }
 
-      const article = await writerAgent.run(input);
+        return { article };
+      })
+    )
+    .addNode(
+      "editor",
+      step("editor", async (state: ArticleWorkflowState) => {
+        const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
+        const editorOutput = await editorAgent.run({ rawText: parsedState.article });
 
-      logger.info("Writer output ready", {
-        articleLength: article.length,
-        topic: parsedState.topic
-      });
+        logger.info("Editor output ready", {
+          changesSummary: editorOutput.changesSummary,
+          topic: parsedState.topic
+        });
 
-      return { article };
-    })
-    .addNode("editor", async (state: ArticleWorkflowState) => {
-      const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
-      const editorOutput = await editorAgent.run({ rawText: parsedState.article });
+        return { editedText: editorOutput.editedText };
+      })
+    )
+    .addNode(
+      "seo",
+      step("seo", async (state: ArticleWorkflowState) => {
+        const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
+        const seoOutput = await seoAgent.run({
+          outline: parsedState.outline,
+          articleText: parsedState.editedText || parsedState.article
+        });
 
-      logger.info("Editor output ready", {
-        changesSummary: editorOutput.changesSummary,
-        topic: parsedState.topic
-      });
+        logger.info("SEO output ready", {
+          slug: seoOutput.slug,
+          topic: parsedState.topic
+        });
 
-      return { editedText: editorOutput.editedText };
-    })
-    .addNode("seo", async (state: ArticleWorkflowState) => {
-      const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
-      const seoOutput = await seoAgent.run({
-        outline: parsedState.outline,
-        articleText: parsedState.editedText || parsedState.article
-      });
+        return { seoOutput };
+      })
+    )
+    .addNode(
+      "classification",
+      step("classification", async (state: ArticleWorkflowState) => {
+        const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
 
-      logger.info("SEO output ready", {
-        slug: seoOutput.slug,
-        topic: parsedState.topic
-      });
+        const availableCategories = taxonomy ? await taxonomy.listCategories() : [defaultCategory];
+        const availableTags = taxonomy ? await taxonomy.listTags() : [];
 
-      return { seoOutput };
-    })
-    .addNode("classification", async (state: ArticleWorkflowState) => {
-      const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
+        const classificationOutput = await classificationAgent.run({
+          articleText: parsedState.editedText || parsedState.article,
+          availableCategories,
+          availableTags,
+          maxTags
+        });
 
-      const availableCategories = taxonomy ? await taxonomy.listCategories() : [defaultCategory];
-      const availableTags = taxonomy ? await taxonomy.listTags() : [];
+        logger.info("Classification output ready", {
+          category: classificationOutput.category,
+          tags: classificationOutput.tags,
+          topic: parsedState.topic
+        });
 
-      const classificationOutput = await classificationAgent.run({
-        articleText: parsedState.editedText || parsedState.article,
-        availableCategories,
-        availableTags,
-        maxTags
-      });
+        return {
+          category: classificationOutput.category,
+          tags: classificationOutput.tags
+        };
+      })
+    )
+    .addNode(
+      "publisher",
+      step("publisher", async (state: ArticleWorkflowState) => {
+        const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
+        const seoOutput = parsedState.seoOutput as SeoOutput | undefined;
 
-      logger.info("Classification output ready", {
-        category: classificationOutput.category,
-        tags: classificationOutput.tags,
-        topic: parsedState.topic
-      });
+        const articleForPublishing: PublishArticle = {
+          title: seoOutput?.title ?? parsedState.topic,
+          slug: seoOutput?.slug ?? parsedState.topic,
+          summary: seoOutput?.metaDescription ?? parsedState.topic,
+          content: parsedState.editedText || parsedState.article,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          tags: parsedState.tags,
+          category: parsedState.category || defaultCategory,
+          author: "OpenBlogAgent",
+          language: "en"
+        };
 
-      return {
-        category: classificationOutput.category,
-        tags: classificationOutput.tags
-      };
-    })
-    .addNode("publisher", async (state: ArticleWorkflowState) => {
-      const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
-      const seoOutput = parsedState.seoOutput as SeoOutput | undefined;
+        // The publisher manager logs the outcome; the run's status is decided in `run`.
+        const publishResult = await publisher.publish(articleForPublishing);
 
-      const articleForPublishing: PublishArticle = {
-        title: seoOutput?.title ?? parsedState.topic,
-        slug: seoOutput?.slug ?? parsedState.topic,
-        summary: seoOutput?.metaDescription ?? parsedState.topic,
-        content: parsedState.editedText || parsedState.article,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        tags: parsedState.tags,
-        category: parsedState.category || defaultCategory,
-        author: "OpenBlogAgent",
-        language: "en"
-      };
-
-      const publishResult = await publisher.publish(articleForPublishing);
-      logger.info("Publishing completed", {
-        slug: articleForPublishing.slug,
-        success: publishResult.success
-      });
-
-      return { publishResult };
-    })
+        return { publishResult };
+      })
+    )
     .addEdge(START, "planner")
     .addEdge("planner", "writer")
     .addEdge("writer", "editor")
@@ -285,44 +344,75 @@ export function createArticleGenerationWorkflow(
       });
 
       try {
+        if (memory && workflowMemory) {
+          await memory.markRunning(workflowMemory.workflowId);
+        }
+
         const finalState = articleWorkflowStateSchema.parse(
           await workflow.invoke(initialState)
         ) as ArticleWorkflowState;
 
+        const publishResult = finalState.publishResult as PublishResult | undefined;
+        const failure: WorkflowFailure | undefined = publishResult?.success
+          ? undefined
+          : {
+              step: "publisher",
+              code: publishResult?.error?.code ?? "publish_failed",
+              message: publishResult?.error?.message ?? "Publisher did not confirm the publication"
+            };
+        const status: WorkflowRunStatus = failure ? "failed" : "published";
+
         if (memory && workflowMemory) {
-          await memory.completeWorkflow({
+          await memory.finishWorkflow({
             workflowId: workflowMemory.workflowId,
+            status,
             topic: finalState.topic,
             article: finalState.article,
             editedText: finalState.editedText || finalState.article,
             seoOutput: (finalState.seoOutput ?? {}) as Record<string, unknown>,
             category: finalState.category || defaultCategory,
             tags: finalState.tags || [],
-            publishResult:
-              (finalState.publishResult as Record<string, unknown> | undefined) ?? undefined
+            publishResult: publishResult as Record<string, unknown> | undefined,
+            failedStep: failure?.step,
+            errorCode: failure?.code,
+            errorMessage: failure?.message
           });
         }
 
-        logger.info("Article workflow completed", {
-          articleLength: finalState.article.length,
-          topic: finalState.topic,
-          workflow: ARTICLE_GENERATION_WORKFLOW_NAME
-        });
+        if (failure) {
+          logger.error("Article workflow failed", {
+            topic: finalState.topic,
+            workflow: ARTICLE_GENERATION_WORKFLOW_NAME,
+            failedStep: failure.step,
+            errorCode: failure.code,
+            error: failure.message
+          });
+        } else {
+          logger.info("Article workflow completed", {
+            articleLength: finalState.article.length,
+            topic: finalState.topic,
+            workflow: ARTICLE_GENERATION_WORKFLOW_NAME
+          });
+        }
 
         return {
+          status,
+          failure,
           article: finalState.article,
           category: finalState.category || defaultCategory,
           editedText: finalState.editedText || finalState.article,
           seoOutput: finalState.seoOutput as SeoOutput,
           tags: finalState.tags || [],
           topic: finalState.topic,
-          publishResult: finalState.publishResult as PublishResult | undefined
+          publishResult
         };
       } catch (error) {
         if (memory && workflowMemory) {
           await memory.failWorkflow({
             workflowId: workflowMemory.workflowId,
-            errorMessage: error instanceof Error ? error.message : String(error)
+            errorMessage: error instanceof Error ? error.message : String(error),
+            failedStep: error instanceof WorkflowStepError ? error.step : undefined,
+            errorCode: error instanceof WorkflowStepError ? error.code : undefined
           });
         }
 

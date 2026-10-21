@@ -64,3 +64,10 @@ ADR-style log. Add new entries at the bottom; do not rewrite accepted ones, supe
 - Context: the workflow file embedded the planner/writer prompts and parser, built `DefaultPublisherManager` itself and redefined the memory contract.
 - Decision: `@openblog/graph` only orchestrates. It defines ports in `packages/graph/src/ports.ts` (`LlmPort`, `PublishPort`, `TaxonomyPort`, `MemoryPort`) and `createArticleGenerationWorkflow` receives them (`llm`, `publisher`, `taxonomy`, `memory`). The CLI is the bootstrap: it builds `DefaultPublisherManager`, the taxonomy adapter and the memory service. Planner and writer are agents like the others; all prompts live in `packages/agents/src/prompts/*` with a `*_PROMPT_VERSION` constant.
 - Consequence: graph imports only types from adapter packages; the workflow is tested end-to-end with fakes. Bump the version constant when a prompt changes.
+
+## ADR-011: A run is `published` only when the publisher confirms
+
+- Status: accepted (2026-10-21)
+- Context: the workflow never checked `publishResult.success`, so a failed publish was stored as `completed`, the CLI logged `Article saved` and exited 0.
+- Decision: `ArticleWorkflowResult.status` is `published | needs_review | failed` and `failure` carries `{ step, code, message }`. A failed or missing publish result yields `failed` with the publisher's error code. Persisted statuses are `started -> running -> published | needs_review | failed` with `failed_step` and `error_code` columns. `finishWorkflow` stores the article even when publishing failed. A throwing step raises `WorkflowStepError` (step, code) and is stored via `failWorkflow`. The CLI exits non-zero unless the status is `published`.
+- Consequence: `needs_review` is only defined, not produced (quality-gate issue). Old `completed` rows are not migrated.

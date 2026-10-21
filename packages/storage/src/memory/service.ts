@@ -8,6 +8,7 @@ import {
   TopicRepository,
   WorkflowRepository
 } from "../repositories";
+import type { FinalWorkflowStatus } from "../repositories/models";
 
 export interface WorkflowStartParams {
   workflowName: string;
@@ -27,8 +28,9 @@ export interface SavePromptParams {
   content: string;
 }
 
-export interface CompleteWorkflowParams {
+export interface FinishWorkflowParams {
   workflowId: Identifier;
+  status: FinalWorkflowStatus;
   topic: string;
   article: string;
   editedText: string;
@@ -36,11 +38,16 @@ export interface CompleteWorkflowParams {
   category: string;
   tags: string[];
   publishResult?: Record<string, unknown>;
+  failedStep?: string;
+  errorCode?: string;
+  errorMessage?: string;
 }
 
 export interface FailWorkflowParams {
   workflowId: Identifier;
   errorMessage: string;
+  failedStep?: string;
+  errorCode?: string;
 }
 
 export class MemoryService {
@@ -71,6 +78,8 @@ export class MemoryService {
       duplicateOfWorkflowId: existingTopic?.firstWorkflowId ?? null,
       metadata: params.metadata ?? {},
       errorMessage: null,
+      errorCode: null,
+      failedStep: null,
       startedAt: now,
       completedAt: null,
       createdAt: now,
@@ -112,9 +121,20 @@ export class MemoryService {
     });
   }
 
-  async completeWorkflow(params: CompleteWorkflowParams): Promise<void> {
+  async markRunning(workflowId: Identifier): Promise<void> {
+    await this.workflowRepository.updateStatus(workflowId, "running", null, null);
+  }
+
+  /** Records the final status and keeps the generated content, also when publishing failed. */
+  async finishWorkflow(params: FinishWorkflowParams): Promise<void> {
     const now = new Date().toISOString();
-    await this.workflowRepository.updateStatus(params.workflowId, "completed", now, null);
+    await this.workflowRepository.updateStatus(
+      params.workflowId,
+      params.status,
+      now,
+      params.errorMessage ?? null,
+      { errorCode: params.errorCode, failedStep: params.failedStep }
+    );
 
     await this.articleRepository.save({
       id: randomUUID(),
@@ -138,7 +158,8 @@ export class MemoryService {
       params.workflowId,
       "failed",
       new Date().toISOString(),
-      params.errorMessage
+      params.errorMessage,
+      { errorCode: params.errorCode, failedStep: params.failedStep }
     );
   }
 }
