@@ -138,7 +138,18 @@ export async function createApplication(
     },
     memory: overrides.memory ?? memoryStore?.memoryService,
     defaultCategory: taxonomyConfig.defaultCategory,
-    maxTags: taxonomyConfig.maxTags
+    maxTags: taxonomyConfig.maxTags,
+    quality: {
+      maxAttempts: config.OPENBLOG_QUALITY_MAX_ATTEMPTS,
+      rules: {
+        minWords: config.OPENBLOG_QUALITY_MIN_WORDS,
+        maxWords: config.OPENBLOG_QUALITY_MAX_WORDS,
+        minH2: config.OPENBLOG_QUALITY_MIN_H2,
+        minOutlineCoverage: config.OPENBLOG_QUALITY_MIN_OUTLINE_COVERAGE,
+        minEditRatio: config.OPENBLOG_QUALITY_MIN_EDIT_RATIO,
+        maxEditRatio: config.OPENBLOG_QUALITY_MAX_EDIT_RATIO
+      }
+    }
   });
 
   logger.info("Application created", {

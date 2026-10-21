@@ -12,7 +12,8 @@ export function reportRunOutcome(
       status: result.status,
       failedStep: result.failure?.step,
       errorCode: result.failure?.code,
-      error: result.failure?.message ?? `Run ended with status ${result.status}`
+      error: result.failure?.message ?? `Run ended with status ${result.status}`,
+      violations: result.status === "needs_review" ? result.violations : undefined
     });
     return 1;
   }

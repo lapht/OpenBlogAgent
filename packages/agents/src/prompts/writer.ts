@@ -1,6 +1,6 @@
 export const WRITER_PROMPT_VERSION = "1";
 
-export function buildWriterPrompt(topic: string, outline: string[]): string {
+export function buildWriterPrompt(topic: string, outline: string[], feedback?: string): string {
   return [
     "You are a clear and concise technical blog writer.",
     `Write a Markdown article about: ${topic}`,
@@ -15,6 +15,13 @@ export function buildWriterPrompt(topic: string, outline: string[]): string {
     "- If the topic is technical, explain only what is useful to the reader.",
     "- End with a short practical conclusion.",
     "Outline:",
-    ...outline.map((section, index) => `${index + 1}. ${section}`)
+    ...outline.map((section, index) => `${index + 1}. ${section}`),
+    ...(feedback
+      ? [
+          "",
+          "Your previous attempt was rejected by automatic checks. Write the article again and fix every problem below:",
+          feedback
+        ]
+      : [])
   ].join("\n");
 }

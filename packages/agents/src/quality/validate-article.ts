@@ -201,7 +201,7 @@ export function validateArticle(
 }
 
 /** Renders violations as a bullet list to put in a regeneration prompt. */
-export function formatViolations(violations: readonly ArticleViolation[]): string {
+export function formatViolations(violations: readonly { code: string; message: string }[]): string {
   return violations.map((v) => `- [${v.code}] ${v.message}`).join("\n");
 }
 

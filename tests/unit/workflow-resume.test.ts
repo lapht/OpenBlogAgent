@@ -11,6 +11,7 @@ import {
   WorkflowStepError
 } from "../../packages/graph/src/workflows/article-generation-workflow";
 import { createSQLiteMemoryService } from "../../packages/storage/src/memory";
+import { lenientQuality } from "../mocks/lenient-quality";
 
 const replies = [
   JSON.stringify(["Intro", "Body", "Conclusion"]),
@@ -62,6 +63,7 @@ async function setup(llm: ReturnType<typeof flakyProvider>, publishOk = true) {
   const workflow = createArticleGenerationWorkflow({
     logger,
     llm,
+    quality: lenientQuality,
     memory: handle.memoryService,
     publisher: {
       publish: async (article) => {
@@ -120,6 +122,7 @@ describe("resuming a run", () => {
       { step: "editor", status: "succeeded", attempt: 1 },
       { step: "seo", status: "failed", attempt: 1 },
       { step: "seo", status: "succeeded", attempt: 2 },
+      { step: "quality", status: "succeeded", attempt: 1 },
       { step: "classification", status: "succeeded", attempt: 1 },
       { step: "publisher", status: "succeeded", attempt: 1 }
     ]);

@@ -5,15 +5,19 @@ import {
   createPlannerAgent,
   createSeoAgent,
   createWriterAgent,
+  type ArticleValidationRules,
+  formatViolations,
   plannerOutlineSchema,
   type SeoOutput,
-  seoOutputSchema
+  seoOutputSchema,
+  validateArticle
 } from "@openblog/agents";
 import type { ILogger } from "@openblog/logger";
 import type { PublishArticle, PublishResult } from "@openblog/publishers";
 import { z } from "zod";
 
 import type { LlmPort, MemoryPort, PublishPort, StoredWorkflowStep, TaxonomyPort } from "../ports";
+import { currentUsage, type LlmUsage, trackUsage, withUsageTracking } from "../usage";
 
 export const ARTICLE_GENERATION_WORKFLOW_NAME = "article-generation-workflow" as const;
 
@@ -39,13 +43,22 @@ export const articleWorkflowInputSchema = z.object({
 
 export type ArticleWorkflowInput = z.infer<typeof articleWorkflowInputSchema>;
 
+/** A rule the article broke; mirrors `ArticleViolation` so stored steps can be validated. */
+const violationSchema = z.object({
+  code: z.string(),
+  severity: z.enum(["error", "warning"]),
+  message: z.string()
+});
+
+export type QualityViolation = z.infer<typeof violationSchema>;
+
 const nonEmptyTextSchema = z.string().trim().min(1);
 const classificationSchema = z.object({
   category: nonEmptyTextSchema,
   tags: z.array(z.string())
 });
 
-/** `needs_review` is reserved for quality-gate outcomes; nothing produces it yet. */
+/** `needs_review`: the quality gate rejected the article; it is stored and nothing was published. */
 export type WorkflowRunStatus = "published" | "needs_review" | "failed";
 
 export interface WorkflowFailure {
@@ -99,7 +112,16 @@ export interface FailedWorkflowResult extends ArticleWorkflowOutput {
   publishResult?: PublishResult;
 }
 
-export type ArticleWorkflowResult = PublishedWorkflowResult | FailedWorkflowResult;
+/** The quality gate rejected the article after the allowed regenerations; nothing was published. */
+export interface NeedsReviewWorkflowResult extends ArticleWorkflowOutput {
+  status: "needs_review";
+  failure: WorkflowFailure;
+  violations: QualityViolation[];
+  publishResult?: undefined;
+}
+
+export type ArticleWorkflowResult =
+  PublishedWorkflowResult | NeedsReviewWorkflowResult | FailedWorkflowResult;
 
 export interface ArticleGenerationWorkflow {
   readonly name: typeof ARTICLE_GENERATION_WORKFLOW_NAME;
@@ -131,6 +153,12 @@ export interface CreateArticleGenerationWorkflowOptions {
   defaultCategory?: string;
   /** Maximum number of tags the classifier may return. Defaults to 5. */
   maxTags?: number;
+  quality?: {
+    /** Overrides of the default validation thresholds. */
+    rules?: Partial<ArticleValidationRules>;
+    /** Regenerations allowed after a failed check before parking the run. Defaults to 2. */
+    maxAttempts?: number;
+  };
 }
 
 /** Fields of steps that have not run yet are `undefined`. */
@@ -151,6 +179,12 @@ const graphState = Annotation.Root({
   category: optional<string>(),
   tags: optional<string[]>(),
   publishResult: optional<PublishResult>(),
+  /** Quality gate: regenerations done so far, the latest verdict and the feedback for the writer. */
+  regenerations: Annotation<number>({ default: () => 0, reducer: (_, update) => update }),
+  qualityPassed: optional<boolean>(),
+  qualityViolations: optional<QualityViolation[]>(),
+  qualityFeedback: optional<string>(),
+  llmUsage: optional<LlmUsage>(),
   /** Steps restored from a previous run; their nodes are skipped. */
   completedSteps: optional<string[]>()
 });
@@ -164,6 +198,11 @@ const stepOutputSchemas: Record<string, z.ZodType<ArticleWorkflowUpdate, z.ZodTy
   writer: z.object({ article: nonEmptyTextSchema }),
   editor: z.object({ editedText: nonEmptyTextSchema }),
   seo: z.object({ seoOutput: seoOutputSchema }),
+  quality: z.object({
+    qualityPassed: z.boolean(),
+    qualityViolations: z.array(violationSchema),
+    llmUsage: z.object({ calls: z.number(), totalTokens: z.number() }).optional()
+  }),
   classification: classificationSchema,
   publisher: z.object({ publishResult: publishResultSchema })
 };
@@ -187,6 +226,10 @@ function restoreState(steps: StoredWorkflowStep[]): ArticleWorkflowUpdate {
     const output = schema.parse(stored.output);
     // A publish the publisher rejected is stored as an output but is not a completed step.
     if (output.publishResult && !output.publishResult.success) {
+      continue;
+    }
+    // A rejected article is checked again on resume (the rules may have changed).
+    if (output.qualityPassed === false) {
       continue;
     }
     Object.assign(restored, output);
@@ -274,8 +317,11 @@ function step(
 export function createArticleGenerationWorkflow(
   options: CreateArticleGenerationWorkflowOptions
 ): ArticleGenerationWorkflow {
-  const { logger, llm, publisher, taxonomy, memory, maxTags = 5 } = options;
+  const { logger, publisher, taxonomy, memory, maxTags = 5 } = options;
+  const llm = trackUsage(options.llm);
   const defaultCategory = options.defaultCategory ?? "General";
+  const qualityRules = options.quality?.rules ?? {};
+  const maxRegenerations = Math.max(0, options.quality?.maxAttempts ?? 2);
 
   const plannerAgent = createPlannerAgent(llm);
   const writerAgent = createWriterAgent(llm);
@@ -309,7 +355,11 @@ export function createArticleGenerationWorkflow(
     .addNode(
       "writer",
       step("writer", stepContext, async (state) => {
-        const input = { topic: state.topic, outline: required(state.outline, "outline") };
+        const input = {
+          topic: state.topic,
+          outline: required(state.outline, "outline"),
+          feedback: state.qualityFeedback
+        };
 
         if (memory && state.workflowId) {
           await memory.savePrompt({
@@ -355,6 +405,50 @@ export function createArticleGenerationWorkflow(
         logger.info("SEO output ready", { slug: seoOutput.slug, topic: state.topic });
 
         return { seoOutput };
+      })
+    )
+    .addNode(
+      "quality",
+      step("quality", stepContext, async (state) => {
+        const { passed, violations } = validateArticle(
+          {
+            article: currentArticle(state),
+            draft: state.article,
+            outline: state.outline,
+            seo: state.seoOutput
+          },
+          qualityRules
+        );
+        const llmUsage = currentUsage();
+        const decision = passed
+          ? "pass"
+          : state.regenerations < maxRegenerations
+            ? "regenerate"
+            : "needs_review";
+
+        logger[passed ? "info" : "warn"]("Quality gate decision", {
+          decision,
+          regenerations: state.regenerations,
+          maxRegenerations,
+          violations: violations.map((violation) => violation.code),
+          llmCalls: llmUsage.calls,
+          totalTokens: llmUsage.totalTokens,
+          topic: state.topic
+        });
+
+        return { qualityPassed: passed, qualityViolations: violations, llmUsage };
+      })
+    )
+    .addNode(
+      "regenerate",
+      step("regenerate", stepContext, async (state) => {
+        // The writer, editor, seo and quality nodes must run again, also on a resumed run.
+        const redo = ["writer", "editor", "seo", "quality"];
+        return {
+          regenerations: state.regenerations + 1,
+          qualityFeedback: formatViolations(state.qualityViolations ?? []),
+          completedSteps: (state.completedSteps ?? []).filter((name) => !redo.includes(name))
+        };
       })
     )
     .addNode(
@@ -407,8 +501,15 @@ export function createArticleGenerationWorkflow(
     .addEdge("planner", "writer")
     .addEdge("writer", "editor")
     .addEdge("editor", "seo")
-    .addEdge("seo", "classification")
-    .addEdge("classification", "publisher")
+    .addEdge("seo", "quality")
+    .addConditionalEdges("quality", (state) =>
+      !state.qualityPassed && state.regenerations < maxRegenerations
+        ? "regenerate"
+        : "classification"
+    )
+    .addEdge("regenerate", "writer")
+    // A rejected article is still classified so a reviewer can publish it later.
+    .addConditionalEdges("classification", (state) => (state.qualityPassed ? "publisher" : END))
     .addEdge("publisher", END)
     .compile();
 
@@ -427,11 +528,13 @@ export function createArticleGenerationWorkflow(
         await memory.markRunning(workflowMemory.workflowId);
       }
 
-      const finalState = await workflow.invoke({
-        ...restored,
-        topic,
-        workflowId: workflowMemory?.workflowId
-      });
+      const finalState = await withUsageTracking(() =>
+        workflow.invoke({
+          ...restored,
+          topic,
+          workflowId: workflowMemory?.workflowId
+        })
+      );
 
       const output: ArticleWorkflowOutput = {
         article: required(finalState.article, "article"),
@@ -442,14 +545,29 @@ export function createArticleGenerationWorkflow(
         topic: finalState.topic
       };
       const publishResult = finalState.publishResult;
-      const failure: WorkflowFailure | undefined = publishResult?.success
-        ? undefined
-        : {
-            step: "publisher",
-            code: publishResult?.error?.code ?? "publish_failed",
-            message: publishResult?.error?.message ?? "Publisher did not confirm the publication"
-          };
-      const status: WorkflowRunStatus = failure ? "failed" : "published";
+      const needsReview = !required(finalState.qualityPassed, "qualityPassed");
+      const violations = finalState.qualityViolations ?? [];
+      const failure: WorkflowFailure | undefined = needsReview
+        ? {
+            step: "quality",
+            code: "quality_gate_failed",
+            message: `Article rejected by the quality gate: ${violations
+              .filter((violation) => violation.severity === "error")
+              .map((violation) => violation.code)
+              .join(", ")}`
+          }
+        : publishResult?.success
+          ? undefined
+          : {
+              step: "publisher",
+              code: publishResult?.error?.code ?? "publish_failed",
+              message: publishResult?.error?.message ?? "Publisher did not confirm the publication"
+            };
+      const status: WorkflowRunStatus = needsReview
+        ? "needs_review"
+        : failure
+          ? "failed"
+          : "published";
 
       if (memory && workflowMemory) {
         await memory.finishWorkflow({
@@ -463,7 +581,16 @@ export function createArticleGenerationWorkflow(
         });
       }
 
-      if (failure) {
+      if (needsReview) {
+        logger.warn("Article workflow needs review", {
+          topic,
+          workflow: ARTICLE_GENERATION_WORKFLOW_NAME,
+          regenerations: finalState.regenerations,
+          violations: violations.map((violation) => violation.code),
+          llmCalls: finalState.llmUsage?.calls,
+          totalTokens: finalState.llmUsage?.totalTokens
+        });
+      } else if (failure) {
         logger.error("Article workflow failed", {
           topic,
           workflow: ARTICLE_GENERATION_WORKFLOW_NAME,
@@ -477,6 +604,10 @@ export function createArticleGenerationWorkflow(
           topic,
           workflow: ARTICLE_GENERATION_WORKFLOW_NAME
         });
+      }
+
+      if (failure && needsReview) {
+        return { ...output, status: "needs_review", failure, violations };
       }
 
       return failure

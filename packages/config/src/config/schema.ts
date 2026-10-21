@@ -52,7 +52,16 @@ export const envSchema = z.object({
   OPENBLOG_TAXONOMY_ALLOW_CREATE: envBoolean(false),
   OPENBLOG_TAXONOMY_DEFAULT_CATEGORY: z.string().default("Uncategorized"),
   OPENBLOG_TAXONOMY_MAX_TAGS: z.coerce.number().int().positive().default(5),
-  OPENBLOG_TAXONOMY_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(300)
+  OPENBLOG_TAXONOMY_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(300),
+
+  /** How many times a failing article is regenerated before it is parked as `needs_review`. */
+  OPENBLOG_QUALITY_MAX_ATTEMPTS: z.coerce.number().int().min(0).default(2),
+  OPENBLOG_QUALITY_MIN_WORDS: z.coerce.number().int().positive().default(1000),
+  OPENBLOG_QUALITY_MAX_WORDS: z.coerce.number().int().positive().default(2200),
+  OPENBLOG_QUALITY_MIN_H2: z.coerce.number().int().min(0).default(3),
+  OPENBLOG_QUALITY_MIN_OUTLINE_COVERAGE: z.coerce.number().min(0).max(1).default(0.6),
+  OPENBLOG_QUALITY_MIN_EDIT_RATIO: z.coerce.number().positive().default(0.7),
+  OPENBLOG_QUALITY_MAX_EDIT_RATIO: z.coerce.number().positive().default(1.3)
 });
 
 export type EnvSchema = z.infer<typeof envSchema>;
