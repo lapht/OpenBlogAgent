@@ -23,6 +23,8 @@ export const envSchema = z.object({
   OPENBLOG_ENV: z.enum(["development", "test", "production"]).default("development"),
   OPENBLOG_PORT: z.coerce.number().int().positive().default(3000),
   OPENBLOG_LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
+  /** Human-readable log output (pino-pretty) instead of JSON lines; for development. */
+  OPENBLOG_LOG_PRETTY: envBoolean(false),
   OPENBLOG_MEMORY_DB_PATH: optionalString(),
 
   OPENROUTER_API_KEY: optionalString(), // secret

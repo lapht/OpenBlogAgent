@@ -1,5 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
+import type { ILogger } from "@openblog/logger";
+
 import type { LlmPort } from "./ports";
 
 export interface LlmUsage {
@@ -21,11 +23,20 @@ export function currentUsage(): LlmUsage {
 }
 
 /** Wraps an LLM so each generation adds to the usage of the run it happens in. */
-export function trackUsage(llm: LlmPort): LlmPort {
+export function trackUsage(llm: LlmPort, logger?: ILogger): LlmPort {
   return {
     id: llm.id,
     async generate(request) {
+      const started = Date.now();
       const result = await llm.generate(request);
+      logger?.info("LLM call completed", {
+        provider: llm.id,
+        model: result.model,
+        durationMs: Date.now() - started,
+        promptTokens: result.usage?.promptTokens,
+        completionTokens: result.usage?.completionTokens,
+        totalTokens: result.usage?.totalTokens
+      });
       const usage = storage.getStore();
       if (usage) {
         usage.calls += 1;

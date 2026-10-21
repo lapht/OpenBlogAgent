@@ -327,21 +327,16 @@ This command:
 
 ## Logging
 
-Logging uses Pino JSON logs.
+Logs are Pino JSON lines on **stderr** (stdout carries only a command's result, e.g. `--json`). A failed run can be diagnosed from them alone:
 
-The workflow logs:
-
-- workflow start
-- planner output
-- writer output
-- workflow completion
-- saved output path
-- publish selection and result
-
-Set a custom log level with:
+- Every line written during a run carries `workflowId` (the id `resume` and `approve` take); lines inside a step also carry `step` and `attempt`.
+- Each step ends with a `Step finished` line: `outcome` (`succeeded` or `failed`), `durationMs` and, on failure, `errorCode` and `error`.
+- Each LLM call logs `provider`, `model`, `durationMs` and token usage when the provider reports it.
+- Secrets are redacted (`apiKey`, `authorization`, `password`, `applicationPassword`, ...) and request headers are never logged. The Fastify server uses the same logger.
 
 ```bash
-OPENBLOG_LOG_LEVEL=debug
+OPENBLOG_LOG_LEVEL=debug     # fatal | error | warn | info (default) | debug | trace
+OPENBLOG_LOG_PRETTY=true     # human-readable output for development
 ```
 
 ## Example Run
