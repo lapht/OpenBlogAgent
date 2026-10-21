@@ -62,7 +62,6 @@ function createWordPressTaxonomyProviders(
     endpoint: wordpress.endpoint,
     username: wordpress.username,
     applicationPassword: wordpress.applicationPassword,
-    password: wordpress.password,
     logger,
     config: taxonomyConfig
   };

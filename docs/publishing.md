@@ -22,7 +22,7 @@ The agents only produce content. The publisher layer is responsible for:
 - IPublisher: common interface for all publishers.
 - DefaultPublisherManager: central component that routes the publish request.
 - MarkdownPublisher: writes Markdown with YAML front matter to the output directory.
-- WordPressPublisher: sends content to a WordPress REST endpoint.
+- WordPressPublisher: creates a post (draft by default) through the WordPress REST API. Markdown is rendered to HTML with `marked` and sanitized with `sanitize-html`; the payload includes the slug; the response (`id`, `link`, `status`, `slug`) is returned in `PublishResult.metadata`. Only Application Passwords are supported, and HTTP errors map to distinct codes: `auth_failed` (401), `forbidden` (403), `invalid_request` (other 4xx), `server_error` (5xx), `network_error`, `timeout` and `unexpected_response`.
 - GhostPublisher: prepares a Ghost integration payload and can be extended later.
 
 ## Configuration
@@ -33,7 +33,6 @@ The centralized config system supports:
 - OPENBLOG_OUTPUT_DIR
 - OPENBLOG_WORDPRESS_ENDPOINT
 - OPENBLOG_WORDPRESS_USERNAME
-- OPENBLOG_WORDPRESS_PASSWORD
 - OPENBLOG_WORDPRESS_APPLICATION_PASSWORD
 - OPENBLOG_WORDPRESS_STATUS
 - OPENBLOG_GHOST_ENDPOINT (Ghost is not supported yet)
@@ -42,7 +41,7 @@ The centralized config system supports:
 - OPENBLOG_TAXONOMY_ALLOW_CREATE (`true`|`false`, default `false`)
 - OPENBLOG_TAXONOMY_CATEGORIES / OPENBLOG_TAXONOMY_TAGS (comma-separated static lists) and OPENBLOG_TAXONOMY_FILE (JSON `{ "categories": [], "tags": [] }`; the lists override the file)
 
-`OPENBLOG_WORDPRESS_ENDPOINT` is the base REST URL (e.g. `https://example.com/wp-json/wp/v2`, without `/posts`). All variables are validated in `packages/config` (`loadEnv()`); apps must read configuration only from the parsed object.
+`OPENBLOG_WORDPRESS_ENDPOINT` is the base REST URL (e.g. `https://example.com/wp-json/wp/v2`, without `/posts`; it must end in `/wp-json/wp/v2`). All variables are validated in `packages/config` (`loadEnv()`); apps must read configuration only from the parsed object.
 
 ## Registering a new publisher
 

@@ -115,7 +115,7 @@ describe("Publishing Engine", () => {
     const fetchMock = vi.fn(async () => ({
       ok: false,
       status: 401,
-      text: async () => "rest_forbidden"
+      json: async () => ({ code: "rest_forbidden" })
     }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -134,7 +134,7 @@ describe("Publishing Engine", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.success).toBe(false);
-    expect(result.error?.code).toBe("publish_failed");
+    expect(result.error?.code).toBe("auth_failed");
     expect(result.error?.message).toContain("401");
 
     vi.unstubAllGlobals();

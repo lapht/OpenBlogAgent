@@ -12,7 +12,12 @@ describe("WordPress publisher integration test", () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
       status: 201,
-      text: async () => JSON.stringify({ id: 123, status: "draft" })
+      json: async () => ({
+        id: 123,
+        status: "draft",
+        slug: "integration-test-draft",
+        link: "https://example.com/?p=123"
+      })
     }));
 
     vi.stubGlobal("fetch", fetchMock);
@@ -30,7 +35,6 @@ describe("WordPress publisher integration test", () => {
       {
         endpoint: "https://example.com/wp-json/wp/v2",
         username: "demo_user",
-        password: "dummy_password",
         applicationPassword: "dummy_app_password",
         status: "draft"
       },
@@ -58,6 +62,7 @@ describe("WordPress publisher integration test", () => {
 
     expect(result.success).toBe(true);
     expect(result.publisherId).toBe("wordpress");
+    expect(result.metadata).toMatchObject({ id: 123, link: "https://example.com/?p=123" });
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     const [url, options] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
@@ -71,7 +76,9 @@ describe("WordPress publisher integration test", () => {
     const body = JSON.parse(String(options?.body));
     expect(body.title).toBe(article.title);
     expect(body.status).toBe("draft");
-    expect(body.content).toBe(article.content);
+    expect(body.slug).toBe(article.slug);
+    expect(body.content).toContain("<h1>Integration Test Draft</h1>");
+    expect(body.content).not.toMatch(/^#/);
     expect(body.excerpt).toBe(article.summary);
     expect(body.categories).toEqual([42]);
     expect(body.tags).toEqual([100, 101]);
