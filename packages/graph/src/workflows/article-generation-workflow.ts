@@ -228,9 +228,19 @@ export interface ApprovalResult {
   failure?: WorkflowFailure;
 }
 
+/** A run that is registered (it has an id and is stored as `started`) but has not executed yet. */
+export interface PendingRun {
+  /** Absent without a memory store. */
+  workflowId?: string;
+  /** Executes the run. Call it once. */
+  execute(): Promise<ArticleWorkflowResult>;
+}
+
 export interface ArticleGenerationWorkflow {
   readonly name: typeof ARTICLE_GENERATION_WORKFLOW_NAME;
   run(input: ArticleWorkflowInput): Promise<ArticleWorkflowResult>;
+  /** Registers a run and returns it unexecuted, so a caller can hand out its id and run it later. */
+  begin(input: ArticleWorkflowInput): Promise<PendingRun>;
   /** Continues a run that did not publish, reusing the stored output of its completed steps. */
   /** Publishes a stored article live. Refuses articles that failed the gate without an override reason. */
   approve(workflowId: string, input: ApprovalInput): Promise<ApprovalResult>;
@@ -971,9 +981,13 @@ export function createArticleGenerationWorkflow(
     }
   }
 
-  return {
+  const workflowApi: ArticleGenerationWorkflow = {
     name: ARTICLE_GENERATION_WORKFLOW_NAME,
     async run(input: ArticleWorkflowInput): Promise<ArticleWorkflowResult> {
+      return (await workflowApi.begin(input)).execute();
+    },
+
+    async begin(input: ArticleWorkflowInput): Promise<PendingRun> {
       const parsed = articleWorkflowInputSchema.parse(input);
       const { topic } = parsed;
       const force = Boolean(parsed.force) || allowDuplicates;
@@ -986,20 +1000,25 @@ export function createArticleGenerationWorkflow(
         : null;
 
       // Without a memory store there is no stored id; a throwaway one still correlates the lines.
-      return inRun(workflowMemory?.workflowId ?? randomUUID(), [], async () => {
-        if (workflowMemory?.isDuplicate) {
-          const duplicate: DuplicateInfo = {
-            matchedOn: "topic",
-            workflowId: workflowMemory.duplicateOfWorkflowId ?? undefined
-          };
-          if (!force) {
-            return stopAsDuplicate(topic, workflowMemory, duplicate, "duplicate_topic_check");
-          }
-          logger.warn("Duplicate topic allowed by force", { topic, ...duplicate });
-        }
+      const runId = workflowMemory?.workflowId ?? randomUUID();
+      return {
+        workflowId: workflowMemory?.workflowId,
+        execute: () =>
+          inRun(runId, [], async () => {
+            if (workflowMemory?.isDuplicate) {
+              const duplicate: DuplicateInfo = {
+                matchedOn: "topic",
+                workflowId: workflowMemory.duplicateOfWorkflowId ?? undefined
+              };
+              if (!force) {
+                return stopAsDuplicate(topic, workflowMemory, duplicate, "duplicate_topic_check");
+              }
+              logger.warn("Duplicate topic allowed by force", { topic, ...duplicate });
+            }
 
-        return execute(topic, workflowMemory, force);
-      });
+            return execute(topic, workflowMemory, force);
+          })
+      };
     },
 
     async approve(workflowId: string, input: ApprovalInput): Promise<ApprovalResult> {
@@ -1141,4 +1160,6 @@ export function createArticleGenerationWorkflow(
       });
     }
   };
+
+  return workflowApi;
 }

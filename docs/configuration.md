@@ -65,6 +65,17 @@ OpenRouter is used first when `OPENROUTER_API_KEY` is set; Ollama is used when i
 | --------------------------- | ------- | ------------------------------------------------------------------------------------------------ |
 | `OPENBLOG_ALLOW_DUPLICATES` | `false` | Generate even if the topic, slug or title was already published (same as `--force` on every run) |
 
+## HTTP API
+
+`apps/server` serves the run endpoints described in [Operations](operations.md#http-api). They are disabled (503) until `OPENBLOG_API_KEY` is set.
+
+| Variable                   | Default | Purpose                                                                                |
+| -------------------------- | ------- | -------------------------------------------------------------------------------------- |
+| `OPENBLOG_API_KEY`         | none    | Secret every run request must present; without it the run endpoints answer 503         |
+| `OPENBLOG_CORS_ORIGINS`    | none    | Comma-separated browser origins allowed to call the server; none means no CORS headers |
+| `OPENBLOG_API_CONCURRENCY` | `1`     | Runs executed at the same time                                                         |
+| `OPENBLOG_API_QUEUE_SIZE`  | `10`    | Runs allowed to wait for a free slot; more requests get 429                            |
+
 ## Editorial review
 
 Off by default. When enabled, an article that passed the quality gate gets one more model call that scores SEO, readability, structure, completeness and repetition from 0 to 10. The overall score is the mean of the five (computed by the code, not the model). Below the minimum the run ends as `needs_review` with the violation `editorial_review_below_threshold`; nothing is published. Scores and rationale are stored with the `editorial_review` step, returned in `generate --json` (`review`) and shown by `list`. The extra call counts toward the run budget.

@@ -30,4 +30,4 @@ See [Memory and Persistence](memory.md) for details.
 ## Apps
 
 - `apps/cli`: the supported interface (`generate`, `resume`, `approve`, `list`); also the Docker image's entry point
-- `apps/server`: Fastify app exposing `GET /health` and `GET /version`
+- `apps/server`: Fastify app exposing `GET /health`, `GET /version`, `/openapi.json` and the API-key protected `/runs` endpoints (`apps/server/src/routes/runs.ts`)

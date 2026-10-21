@@ -72,6 +72,25 @@ export interface StoredWorkflowSummary {
   review: StoredReview | null;
 }
 
+/** One stored execution of a step as the HTTP API shows it (without the step output). */
+export interface StoredStepSummary {
+  step: string;
+  status: "succeeded" | "failed";
+  attempt: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+  startedAt: string;
+  completedAt: string;
+  usage: StepUsage | null;
+}
+
+/** One stored run with its steps. */
+export interface StoredRunDetails extends StoredWorkflowSummary {
+  errorMessage: string | null;
+  completedAt: string | null;
+  steps: StoredStepSummary[];
+}
+
 /** Workflow bookkeeping. Implemented by `MemoryService` in the storage package. */
 export interface MemoryPort {
   beginWorkflow(params: {
@@ -97,6 +116,8 @@ export interface MemoryPort {
   markRunning(workflowId: string): Promise<void>;
   /** The most recent runs, newest first. Optional: only the persistent store can list. */
   listWorkflows?(limit?: number): Promise<StoredWorkflowSummary[]>;
+  /** One stored run with its steps; null if the id is unknown. Optional: only the persistent store has it. */
+  getRunDetails?(workflowId: string): Promise<StoredRunDetails | null>;
   /** Stores the final status together with the generated content, also when publishing failed. */
   finishWorkflow(params: {
     workflowId: string;

@@ -62,6 +62,22 @@ With `--json`, stdout holds exactly one JSON object and nothing else (logs go to
 
 `list` returns `{ "command": "list", "status": "ok", "exitCode": 0, "runs": [...] }`. An error that stops the command returns `{ "status": "error", "exitCode": 1, "error": { "code", "message" } }`. Fields are only ever added.
 
+## HTTP API
+
+`npm run build`, then `node apps/server/dist/main.js` (or `npm run dev`). The server wires the same application as the CLI (`createApplication`), so a run started over HTTP is stored, resumable and approvable exactly like a CLI run, and the two share the SQLite store. Set `OPENBLOG_API_KEY` first: the run endpoints answer `503 api_disabled` without it, and `401 unauthorized` when the key is missing or wrong. `/health`, `/version` and `/openapi.json` are public.
+
+Send the key as `Authorization: Bearer <key>` or `X-API-Key: <key>`.
+
+| Endpoint                  | Does                                                                                                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /runs`              | `{ "topic": "...", "force": false }` starts a run in the background: `202 { workflowId, status: "started" }`                                                              |
+| `GET /runs?limit=20`      | The most recent runs with tokens, cost and review                                                                                                                         |
+| `GET /runs/{id}`          | Status, failure, totals and every step execution (`404` for an unknown id)                                                                                                |
+| `POST /runs/{id}/resume`  | `202`; continues from the last good step (`409` if published or already running)                                                                                          |
+| `POST /runs/{id}/approve` | `{ "approvedBy": "...", "overrideReason": "..." }` publishes live and waits for the result; the same refusals as the CLI (`422 gate_not_passed`, `409 already_published`) |
+
+Runs execute in a bounded queue: `OPENBLOG_API_CONCURRENCY` at once, `OPENBLOG_API_QUEUE_SIZE` waiting; beyond that the answer is `429 queue_full` with `Retry-After`. Poll `GET /runs/{id}` until the status is no longer `started` or `running`. A queued run is stored as `started`. If the server stops while a run is executing, that run stays `running` in the store; `resume` it. On shutdown the server waits for running and queued jobs. The OpenAPI document is at `/openapi.json`. Errors have the shape `{ "error": "...", "code": "..." }`.
+
 ## Recovering a failed run
 
 1. `npm start -- list` shows the run and its failed step (`[seo/…]`).

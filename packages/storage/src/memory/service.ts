@@ -317,6 +317,41 @@ export class MemoryService {
     }));
   }
 
+  /** One run with its steps (outputs left out), totals and review, or null if the id is unknown. */
+  async getRunDetails(workflowId: Identifier) {
+    const workflow = this.workflowRepository.getById(workflowId);
+    if (!workflow) {
+      return null;
+    }
+    const steps = this.stepRepository.getByWorkflowId(workflowId);
+    const review = this.stepRepository
+      .latestOutputs([workflowId], "editorial_review")
+      .get(workflowId);
+    return {
+      workflowId: workflow.id,
+      topic: workflow.topic,
+      status: workflow.status,
+      failedStep: workflow.failedStep,
+      errorCode: workflow.errorCode,
+      errorMessage: workflow.errorMessage,
+      createdAt: workflow.createdAt,
+      completedAt: workflow.completedAt,
+      totalTokens: steps.reduce((sum, record) => sum + (record.usage?.totalTokens ?? 0), 0),
+      costUsd: steps.reduce((sum, record) => sum + (record.usage?.costUsd ?? 0), 0),
+      review: (review as { review?: StoredReview } | undefined)?.review ?? null,
+      steps: steps.map((record) => ({
+        step: record.step,
+        status: record.status,
+        attempt: record.attempt,
+        errorCode: record.errorCode,
+        errorMessage: record.errorMessage,
+        startedAt: record.startedAt,
+        completedAt: record.completedAt,
+        usage: record.usage
+      }))
+    };
+  }
+
   async getSteps(workflowId: Identifier): Promise<WorkflowStepRecord[]> {
     return this.stepRepository.getByWorkflowId(workflowId);
   }

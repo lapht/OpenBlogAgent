@@ -27,6 +27,15 @@ export const envSchema = z.object({
   OPENBLOG_LOG_PRETTY: envBoolean(false),
   OPENBLOG_MEMORY_DB_PATH: optionalString(),
 
+  /** Key clients send (`Authorization: Bearer <key>` or `X-API-Key`) to use the run endpoints of the server. */
+  OPENBLOG_API_KEY: optionalString(), // secret
+  /** Comma-separated origins allowed to call the server from a browser. Unset: no cross-origin access. */
+  OPENBLOG_CORS_ORIGINS: optionalString(),
+  /** Runs the server executes at the same time. */
+  OPENBLOG_API_CONCURRENCY: z.coerce.number().int().positive().default(1),
+  /** Runs that may wait for a free slot; further requests get 429. */
+  OPENBLOG_API_QUEUE_SIZE: z.coerce.number().int().min(0).default(10),
+
   OPENROUTER_API_KEY: optionalString(), // secret
   OPENROUTER_MODEL: optionalString(),
   OPENROUTER_SITE_URL: optionalString(),
@@ -99,5 +108,6 @@ export type EnvSchema = z.infer<typeof envSchema>;
 /** Variables holding credentials. Their values must never be logged or echoed. */
 export const SECRET_ENV_KEYS = [
   "OPENROUTER_API_KEY",
+  "OPENBLOG_API_KEY",
   "OPENBLOG_WORDPRESS_APPLICATION_PASSWORD"
 ] as const satisfies readonly (keyof EnvSchema)[];
