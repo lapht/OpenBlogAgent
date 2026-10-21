@@ -4,3 +4,12 @@ node_modules
 coverage
 dist
 **/dist
+.env
+.env.*
+!.env.example
+data
+output
+tests
+docs
+plan
+.github
