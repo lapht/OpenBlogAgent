@@ -5,17 +5,17 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "@openblog/agents": "file:../agents",
-    "@openblog/config": "file:../config",
-    "@openblog/core": "file:../core",
-    "@openblog/graph": "file:../graph",
-    "@openblog/logger": "file:../logger",
-    "@openblog/providers": "file:../providers",
-    "@openblog/publishers": "file:../publishers",
-    "@openblog/shared": "file:../shared",
-    "@openblog/storage": "file:../storage",
-    "@openblog/tools": "file:../tools",
-    "@openblog/types": "file:../types"
+    "@openblog/agents": "*",
+    "@openblog/config": "*",
+    "@openblog/core": "*",
+    "@openblog/graph": "*",
+    "@openblog/logger": "*",
+    "@openblog/providers": "*",
+    "@openblog/publishers": "*",
+    "@openblog/shared": "*",
+    "@openblog/storage": "*",
+    "@openblog/tools": "*",
+    "@openblog/types": "*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

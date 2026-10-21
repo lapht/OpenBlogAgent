@@ -5,9 +5,9 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "better-sqlite3": "^11.7.0",
-    "@openblog/core": "file:../core",
-    "@openblog/types": "file:../types"
+    "@openblog/core": "*",
+    "@openblog/types": "*",
+    "better-sqlite3": "^11.7.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12"

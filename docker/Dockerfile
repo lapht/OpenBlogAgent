@@ -5,7 +5,7 @@ FROM base AS deps
 COPY package*.json tsconfig.base.json ./
 COPY apps ./apps
 COPY packages ./packages
-RUN npm install
+RUN npm ci
 
 FROM deps AS build
 RUN npm run build
