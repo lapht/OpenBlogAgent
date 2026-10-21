@@ -5,6 +5,7 @@ export * from "@openblog/graph";
 export { logger, type ILogger } from "@openblog/logger";
 export * from "@openblog/providers";
 export * from "@openblog/publishers";
+export type { IPublisher } from "@openblog/publishers";
 export * from "@openblog/shared";
 export * from "@openblog/storage";
 export * from "@openblog/tools";
