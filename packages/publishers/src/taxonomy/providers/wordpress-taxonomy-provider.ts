@@ -11,7 +11,6 @@ interface WordPressTaxonomyProviderOptions {
   endpoint: string;
   username?: string;
   applicationPassword?: string;
-  password?: string;
   logger: ILogger;
   config: TaxonomyProviderConfig;
 }
@@ -27,10 +26,8 @@ abstract class WordPressTaxonomyBase {
   }
 
   private authHeader(): string {
-    const { username, applicationPassword, password } = this.options;
-    const token = Buffer.from(
-      `${username ?? ""}:${applicationPassword ?? password ?? ""}`
-    ).toString("base64");
+    const { username, applicationPassword } = this.options;
+    const token = Buffer.from(`${username ?? ""}:${applicationPassword ?? ""}`).toString("base64");
     return `Basic ${token}`;
   }
 

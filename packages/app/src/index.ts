@@ -81,7 +81,6 @@ export async function createApplication(
           ? {
               endpoint: config.OPENBLOG_WORDPRESS_ENDPOINT,
               username: config.OPENBLOG_WORDPRESS_USERNAME,
-              password: config.OPENBLOG_WORDPRESS_PASSWORD,
               applicationPassword: config.OPENBLOG_WORDPRESS_APPLICATION_PASSWORD,
               status: config.OPENBLOG_WORDPRESS_STATUS
             }
@@ -188,7 +187,6 @@ function createWordPressTaxonomy(
   const options = {
     endpoint,
     username: config.OPENBLOG_WORDPRESS_USERNAME,
-    password: config.OPENBLOG_WORDPRESS_PASSWORD,
     applicationPassword: config.OPENBLOG_WORDPRESS_APPLICATION_PASSWORD,
     logger,
     config: taxonomyConfig

@@ -36,7 +36,6 @@ export const envSchema = z.object({
   OPENBLOG_OUTPUT_DIR: z.string().default("output/articles"),
   OPENBLOG_WORDPRESS_ENDPOINT: optionalString(),
   OPENBLOG_WORDPRESS_USERNAME: optionalString(),
-  OPENBLOG_WORDPRESS_PASSWORD: optionalString(), // secret
   OPENBLOG_WORDPRESS_APPLICATION_PASSWORD: optionalString(), // secret
   OPENBLOG_WORDPRESS_STATUS: z.enum(["draft", "publish"]).optional(),
   OPENBLOG_GHOST_ENDPOINT: optionalString(),
@@ -60,7 +59,6 @@ export type EnvSchema = z.infer<typeof envSchema>;
 /** Variables holding credentials. Their values must never be logged or echoed. */
 export const SECRET_ENV_KEYS = [
   "OPENROUTER_API_KEY",
-  "OPENBLOG_WORDPRESS_PASSWORD",
   "OPENBLOG_WORDPRESS_APPLICATION_PASSWORD",
   "OPENBLOG_GHOST_API_KEY"
 ] as const satisfies readonly (keyof EnvSchema)[];
