@@ -56,14 +56,15 @@ jobs:
           docker run --rm --entrypoint node openblogagent:ci
           -e "for (const name of ['config', 'logger', 'shared', 'graph', 'app']) require('@openblog/' + name)"
 
-      - name: CLI entry point starts and rejects a missing topic
+      - name: CLI entry point starts
+        run: |
+          docker run --rm openblogagent:ci --help | grep -q "Usage"
+
+      - name: CLI rejects a missing topic with the usage exit code
         run: |
           set +e
-          output=$(docker run --rm openblogagent:ci 2>&1)
-          code=$?
-          echo "$output"
-          test "$code" -eq 1
-          echo "$output" | grep -q "Missing article topic"
+          docker run --rm openblogagent:ci generate > /dev/null 2>&1
+          test "$?" -eq 64
 
       - name: Container runs as a non-root user
         run: test "$(docker run --rm --entrypoint id openblogagent:ci -u)" != "0"

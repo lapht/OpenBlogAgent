@@ -7,9 +7,8 @@ export interface ILogger {
   debug(message: string, context?: Record<string, unknown>): void;
 }
 
-const pinoLogger = pino({
-  level: process.env.OPENBLOG_LOG_LEVEL ?? "info"
-});
+// Logs go to stderr so that stdout carries only a command's result (`--json`).
+const pinoLogger = pino({ level: process.env.OPENBLOG_LOG_LEVEL ?? "info" }, pino.destination(2));
 
 export const logger: ILogger = {
   info: (message, context) => {

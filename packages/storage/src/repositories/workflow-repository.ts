@@ -120,6 +120,14 @@ export class WorkflowRepository implements IRepositoryContract<WorkflowRecord> {
     return row ? this.mapRow(row) : null;
   }
 
+  /** The most recent runs, newest first. */
+  listRecent(limit: number): WorkflowRecord[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM workflows ORDER BY created_at DESC, rowid DESC LIMIT ?`)
+      .all(limit) as WorkflowRow[];
+    return rows.map((row) => this.mapRow(row));
+  }
+
   /** Flags a run as a duplicate of another stored run (or of a remote post, then `null`). */
   markDuplicate(id: Identifier, duplicateOfWorkflowId: Identifier | null): void {
     this.db

@@ -91,7 +91,7 @@ The image runs the CLI (ADR-022). Data and generated articles live in named volu
 
 ```bash
 docker compose -f docker/docker-compose.yml build
-docker compose -f docker/docker-compose.yml run --rm openblog "Why caching matters"
+docker compose -f docker/docker-compose.yml run --rm openblog generate "Why caching matters"
 ```
 
 To use the server instead: `docker run --rm -p 3000:3000 --entrypoint node openblogagent:local apps/server/dist/main.js`.
@@ -185,7 +185,7 @@ npm run build
 4. Run a test article generation:
 
 ```bash
-npm start "AI agents in software development"
+npm start -- generate "AI agents in software development"
 ```
 
 5. Read the generated file:
@@ -226,6 +226,21 @@ Provider behavior:
 - If OpenRouter is unavailable after retries, the app falls back to Ollama and logs which provider answered.
 - If both fail, the CLI exits with a descriptive error message.
 
+## Command line
+
+`openblog` (`npm start -- <command>` after `npm run build`, or the `bin` of `apps/cli`):
+
+| Command            | What it does                                                           |
+| ------------------ | ---------------------------------------------------------------------- |
+| `generate <topic>` | Runs the workflow for a topic                                          |
+| `resume <id>`      | Continues a failed run from its last good step                         |
+| `approve <id>`     | Publishes a stored article live (`--override "reason"` if gate failed) |
+| `list`             | Shows the most recent runs                                             |
+
+Options: `--dry-run` (everything except the publish call, on a throwaway copy of the database, so nothing is stored), `--publisher <id>`, `--force`, `--json` (one summary object on stdout; logs always go to stderr), `--help`.
+
+Exit codes: `0` ok (published, or stored and waiting for approval), `1` failed, `2` needs review, `3` duplicate, `64` usage error.
+
 ## Input
 
 Input is a single topic string passed from the command line.
@@ -233,17 +248,17 @@ Input is a single topic string passed from the command line.
 Example:
 
 ```bash
-npm start "AI agents in software development"
+npm start -- generate "AI agents in software development"
 ```
 
 Equivalent examples:
 
 ```bash
-npm start "Content strategy for developer tools"
-npm start "How local LLMs change technical writing workflows"
+npm start -- generate "Content strategy for developer tools"
+npm start -- generate "How local LLMs change technical writing workflows"
 ```
 
-A topic that was already published, or an article whose slug or title already exists (stored or on the publishing target), is refused with outcome `duplicate` and exit code 1, before any LLM call in the topic case. Pass `--force` (`npm start -- "topic" --force`) or set `OPENBLOG_ALLOW_DUPLICATES=true` to generate it anyway; the override is recorded on the run.
+A topic that was already published, or an article whose slug or title already exists (stored or on the publishing target), is refused with outcome `duplicate` and exit code 3, before any LLM call in the topic case. Pass `--force` (`npm start -- generate "topic" --force`) or set `OPENBLOG_ALLOW_DUPLICATES=true` to generate it anyway; the override is recorded on the run.
 
 ### Publication policy and approval
 
@@ -301,12 +316,12 @@ date: "{ISO date}"
 Use the `generate` script for a complete end-to-end test:
 
 ```bash
-npm run generate -- "AI agents in software development"
+npm run build && npm run generate -- generate "AI agents in software development"
 ```
 
 This command:
 
-1. Builds all required packages
+1. Uses the packages built by `npm run build` (the scripts no longer rebuild)
 2. Runs the full workflow (Planner → Writer → Editor → SEO → Classification → Publisher)
 3. Prints the output file path
 
@@ -334,7 +349,7 @@ OPENBLOG_LOG_LEVEL=debug
 Command:
 
 ```bash
-npm start "AI agents in software development"
+npm start -- generate "AI agents in software development"
 ```
 
 Expected behavior:
@@ -367,7 +382,7 @@ Useful commands:
 ```bash
 npm install
 npm run build
-npm start "AI agents in software development"
+npm start -- generate "AI agents in software development"
 npm run lint
 npm run test
 ```

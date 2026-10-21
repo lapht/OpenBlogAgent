@@ -5,7 +5,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { hasForceFlag, resolveTopic } from "../../apps/cli/src/run";
+import { parseCommand } from "../../apps/cli/src/args";
 import { reportRunOutcome } from "../../apps/cli/src/report";
 import { createArticleGenerationWorkflow } from "../../packages/graph/src/workflows/article-generation-workflow";
 import { MarkdownPublisher } from "../../packages/publishers/src/markdown";
@@ -93,7 +93,7 @@ describe("duplicate policy", () => {
     expect(result.status).toBe("duplicate");
     expect(result.failure?.code).toBe("duplicate_topic");
     expect(llm.prompts).toHaveLength(0);
-    expect(reportRunOutcome(result, { info() {}, error() {} })).toBe(1);
+    expect(reportRunOutcome(result, { info() {}, error() {} })).toBe(3);
 
     const [published, duplicate] = first.rows(
       "SELECT id, status, is_duplicate, duplicate_of_workflow_id, error_code FROM workflows ORDER BY created_at, rowid"
@@ -227,9 +227,14 @@ describe("markdown publisher lookup", () => {
 });
 
 describe("CLI --force", () => {
-  it("is removed from the topic and detected", () => {
-    expect(hasForceFlag(["My", "topic", "--force"])).toBe(true);
-    expect(hasForceFlag(["My", "topic"])).toBe(false);
-    expect(resolveTopic(["My", "--force", "topic"], undefined)).toBe("My topic");
+  it("is an option, not part of the topic", () => {
+    expect(parseCommand(["generate", "My", "topic", "--force"])).toMatchObject({
+      topic: "My topic",
+      options: { force: true }
+    });
+    expect(parseCommand(["generate", "My", "--force", "topic"])).toMatchObject({
+      topic: "My topic"
+    });
+    expect(parseCommand(["generate", "My", "topic"])).toMatchObject({ options: { force: false } });
   });
 });

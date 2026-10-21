@@ -5,7 +5,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { parseApproveArgs } from "../../apps/cli/src/run";
+import { parseCommand } from "../../apps/cli/src/args";
 import { reportApprovalOutcome, reportRunOutcome } from "../../apps/cli/src/report";
 import { loadEnv } from "../../packages/config/src";
 import {
@@ -249,17 +249,17 @@ describe("approve", () => {
 
 describe("approve command line", () => {
   it("parses the id and the override reason", () => {
-    expect(parseApproveArgs(["some topic"])).toBeUndefined();
-    expect(parseApproveArgs(["approve", "wf-1"])).toEqual({
+    expect(parseCommand(["approve", "wf-1"])).toMatchObject({
+      name: "approve",
       workflowId: "wf-1",
-      overrideReason: undefined
+      options: { override: undefined }
     });
-    expect(parseApproveArgs(["approve", "wf-1", "--override", "checked", "by", "hand"])).toEqual({
-      workflowId: "wf-1",
-      overrideReason: "checked by hand"
+    expect(parseCommand(["approve", "wf-1", "--override", "checked by hand"])).toMatchObject({
+      name: "approve",
+      options: { override: "checked by hand" }
     });
-    expect(() => parseApproveArgs(["approve"])).toThrow(/workflow id/);
-    expect(() => parseApproveArgs(["approve", "wf-1", "--override"])).toThrow(/reason/);
+    expect(() => parseCommand(["approve"])).toThrow(/workflow id/);
+    expect(() => parseCommand(["approve", "wf-1", "--override"])).toThrow();
   });
 });
 

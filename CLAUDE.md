@@ -13,8 +13,8 @@ Use npm (not pnpm, even though `ROADMAP_PLAN.md` mentions it).
 ```bash
 npm install
 npm run build                       # builds all workspaces in dependency order
-npm start "topic here"         # build + run CLI (apps/cli/dist/index.js)
-npm run generate -- "topic"    # same as start
+npm start -- generate "topic here"   # run the built CLI (apps/cli/dist/index.js); does not rebuild
+npm start -- list                    # also: resume <id>, approve <id>; flags --dry-run --publisher --force --json
 npm run build                  # all workspaces
 npm run typecheck              # tsc --noEmit per workspace
 npm run lint                   # eslint . --ext .ts
@@ -43,7 +43,7 @@ TypeScript is strict CommonJS (`tsconfig.base.json`) with `noUnusedLocals`/`noUn
 
 ## Publication
 
-`OPENBLOG_PUBLICATION_POLICY` defaults to `draft`: a run never produces a live post by itself. `npm start -- approve <workflowId> [--override "reason"]` publishes a stored article live (see ADR-021).
+`OPENBLOG_PUBLICATION_POLICY` defaults to `draft`: a run never produces a live post by itself. `openblog approve <workflowId> [--override "reason"]` publishes a stored article live (see ADR-021).
 
 ## Output
 
