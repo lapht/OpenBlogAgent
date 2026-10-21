@@ -29,7 +29,7 @@ Commits must follow Conventional Commits (commitlint via husky; lint-staged runs
 ## Architecture
 
 - **Build order matters.** Workspace packages depend on each other through npm workspace links (`"*"` versions) and resolve via `main: dist/index.js`. After changing a package's source, rebuild it (`npm run build`) before running the CLI. Tests are the exception: they import from `packages/*/src` directly, so no build is needed for `vitest`.
-- **`packages/graph/src/workflows/article-generation-workflow.ts`** is the center of the system. It defines the LangGraph `StateGraph` (the `Annotation.Root` state and node wiring) and depends on ports (`packages/graph/src/ports.ts`), never on adapters. It also defines a Zod `articleWorkflowStateSchema`. Graph state defaults (e.g. `seoOutput` starting as an empty object) must stay compatible with that Zod schema, which is why it accepts an empty passthrough object. Adding a state field means updating both the `Annotation` and the schema.
+- **`packages/graph/src/workflows/article-generation-workflow.ts`** is the center of the system. It defines the LangGraph `StateGraph` (the `Annotation.Root` state and node wiring) and depends on ports (`packages/graph/src/ports.ts`), never on adapters. The state is typed per field: steps that have not run are `undefined`, each node validates its own output with the agent's Zod schema, and `run()` returns an outcome-aware `ArticleWorkflowResult` (`published` | `failed`). Adding a state field means updating the `Annotation` (and the node that produces it).
 - **`packages/agents`**: one folder per agent (`planner`, `writer`, `editor`, `seo`, `classification`) with an `agent.ts`; prompts live in `prompts/` and all JSON replies go through `generateStructured` (`structured-output.ts`).
 - **`packages/app`**: composition root. `createApplication(env, overrides?)` builds providers, publishers, taxonomy and memory once and returns `{ workflow, dispose }`. CLI and server only call it.
 - **`packages/providers`**: `TextGenerationProvider` implementations. OpenRouter is tried first; Ollama is the fallback if OpenRouter is unconfigured or fails. If both fail, the CLI exits with a combined error.
@@ -52,7 +52,7 @@ The markdown publisher writes `{OPENBLOG_OUTPUT_DIR}/{slug}.md` (default `output
 
 ## Local environment
 
-- The local Node is v18 and npm 9, while CI uses Node 20/22. `EBADENGINE` warnings are expected.
+- Local Node is v22 (npm 10) managed by `fnm` (default alias 22, initialised in `~/.zshrc`), matching CI (Node 20/22). In a non-interactive shell run `eval "$(fnm env --shell bash)"; fnm use 22` first, otherwise `/usr/local/bin/node` (v18, too old for Fastify's `diagnostics_channel.tracingChannel`) is picked up.
 - npm requests to the registry can stall for ~85s per batch because of broken IPv6 routing, and `npm ci` can fail with `ETIMEDOUT` on an IPv6 address. Prefix npm commands with `NODE_OPTIONS=--dns-result-order=ipv4first` (e.g. `NODE_OPTIONS=--dns-result-order=ipv4first npm ci`), which makes installs take seconds.
 - Don't run `npx npm@10 ci --dry-run` here: it wiped `node_modules`. If `node_modules` is empty or `tsc: command not found`, run `npm ci`.
 

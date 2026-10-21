@@ -32,21 +32,18 @@ const publishResultSchema = z.object({
     .optional()
 });
 
-const emptySeoOutputSchema = z.object({}).passthrough();
-
-export const articleWorkflowStateSchema = z.object({
-  article: z.string(),
-  category: z.string().default(""),
-  editedText: z.string().optional(),
-  seoOutput: z.union([seoOutputSchema, emptySeoOutputSchema]).optional(),
-  outline: z.array(z.string()),
-  publishResult: publishResultSchema.optional(),
-  tags: z.array(z.string()).default([]),
-  topic: z.string().min(1),
-  workflowId: z.string().optional()
+/** What a caller provides; every other field of the workflow state is produced by a step. */
+export const articleWorkflowInputSchema = z.object({
+  topic: z.string().trim().min(1)
 });
 
-export type ArticleWorkflowState = z.infer<typeof articleWorkflowStateSchema>;
+export type ArticleWorkflowInput = z.infer<typeof articleWorkflowInputSchema>;
+
+const nonEmptyTextSchema = z.string().trim().min(1);
+const classificationSchema = z.object({
+  category: nonEmptyTextSchema,
+  tags: z.array(z.string())
+});
 
 /** `needs_review` is reserved for quality-gate outcomes; nothing produces it yet. */
 export type WorkflowRunStatus = "published" | "needs_review" | "failed";
@@ -79,22 +76,34 @@ function errorCode(error: unknown): string {
   return error instanceof Error && error.name !== "Error" ? error.name : "step_failed";
 }
 
-export interface ArticleWorkflowResult {
-  /** `published` only when the publisher confirmed; otherwise `failed` with `failure` set. */
-  status: WorkflowRunStatus;
-  failure?: WorkflowFailure;
+interface ArticleWorkflowOutput {
   article: string;
   category: string;
   editedText: string;
   seoOutput: SeoOutput;
   tags: string[];
   topic: string;
+}
+
+/** The publisher confirmed the publication. */
+export interface PublishedWorkflowResult extends ArticleWorkflowOutput {
+  status: "published";
+  failure?: undefined;
+  publishResult: PublishResult;
+}
+
+/** Every step ran but the publisher did not confirm; the generated article is still returned. */
+export interface FailedWorkflowResult extends ArticleWorkflowOutput {
+  status: "failed";
+  failure: WorkflowFailure;
   publishResult?: PublishResult;
 }
 
+export type ArticleWorkflowResult = PublishedWorkflowResult | FailedWorkflowResult;
+
 export interface ArticleGenerationWorkflow {
   readonly name: typeof ARTICLE_GENERATION_WORKFLOW_NAME;
-  run(input: ArticleWorkflowState): Promise<ArticleWorkflowResult>;
+  run(input: ArticleWorkflowInput): Promise<ArticleWorkflowResult>;
 }
 
 export interface CreateArticleGenerationWorkflowOptions {
@@ -109,46 +118,46 @@ export interface CreateArticleGenerationWorkflowOptions {
   maxTags?: number;
 }
 
+/** Fields of steps that have not run yet are `undefined`. */
+function optional<T>() {
+  return Annotation<T | undefined>({
+    default: () => undefined,
+    reducer: (_, update) => update
+  });
+}
+
 const graphState = Annotation.Root({
-  article: Annotation<string>({
-    default: () => "",
-    reducer: (_, update) => update
-  }),
-  category: Annotation<string>({
-    default: () => "",
-    reducer: (_, update) => update
-  }),
-  editedText: Annotation<string>({
-    default: () => "",
-    reducer: (_, update) => update
-  }),
-  seoOutput: Annotation<unknown>({
-    default: () => undefined,
-    reducer: (_, update) => update
-  }),
-  outline: Annotation<string[]>({
-    default: () => [],
-    reducer: (_, update) => update
-  }),
-  publishResult: Annotation<unknown>({
-    default: () => undefined,
-    reducer: (_, update) => update
-  }),
-  tags: Annotation<string[]>({
-    default: () => [],
-    reducer: (_, update) => update
-  }),
-  topic: Annotation<string>({
-    default: () => "",
-    reducer: (_, update) => update
-  }),
-  workflowId: Annotation<string | undefined>({
-    default: () => undefined,
-    reducer: (_, update) => update
-  })
+  topic: Annotation<string>(),
+  workflowId: optional<string>(),
+  outline: optional<string[]>(),
+  article: optional<string>(),
+  editedText: optional<string>(),
+  seoOutput: optional<SeoOutput>(),
+  category: optional<string>(),
+  tags: optional<string[]>(),
+  publishResult: optional<PublishResult>()
 });
 
-function step<S, R>(name: string, fn: (state: S) => Promise<R>): (state: S) => Promise<R> {
+export type ArticleWorkflowState = typeof graphState.State;
+type ArticleWorkflowUpdate = typeof graphState.Update;
+
+/** Reads a field a previous step must have produced; a miss is a wiring bug, not user input. */
+function required<T>(value: T | undefined, field: string): T {
+  if (value === undefined) {
+    throw new Error(`Workflow state is missing "${field}"`);
+  }
+  return value;
+}
+
+/** The article as it should be published: the edited text once the editor has run. */
+function currentArticle(state: ArticleWorkflowState): string {
+  return state.editedText ?? required(state.article, "article");
+}
+
+function step(
+  name: string,
+  fn: (state: ArticleWorkflowState) => Promise<ArticleWorkflowUpdate>
+): (state: ArticleWorkflowState) => Promise<ArticleWorkflowUpdate> {
   return async (state) => {
     try {
       return await fn(state);
@@ -173,135 +182,117 @@ export function createArticleGenerationWorkflow(
   const workflow = new StateGraph(graphState)
     .addNode(
       "planner",
-      step("planner", async (state: ArticleWorkflowState) => {
-        const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
-        const input = { topic: parsedState.topic };
+      step("planner", async (state) => {
+        const input = { topic: state.topic };
 
-        if (memory && parsedState.workflowId) {
+        if (memory && state.workflowId) {
           await memory.savePrompt({
-            workflowId: parsedState.workflowId,
+            workflowId: state.workflowId,
             promptType: "planner",
             content: plannerAgent.buildPrompt(input)
           });
         }
 
-        const outline = await plannerAgent.run(input);
+        const outline = plannerOutlineSchema.parse(await plannerAgent.run(input));
 
-        logger.info("Planner output ready", {
-          outline,
-          topic: parsedState.topic
-        });
+        logger.info("Planner output ready", { outline, topic: state.topic });
 
         return { outline };
       })
     )
     .addNode(
       "writer",
-      step("writer", async (state: ArticleWorkflowState) => {
-        const parsedState = articleWorkflowStateSchema
-          .extend({
-            outline: plannerOutlineSchema
-          })
-          .parse(state) as ArticleWorkflowState;
-        const input = { topic: parsedState.topic, outline: parsedState.outline };
+      step("writer", async (state) => {
+        const input = { topic: state.topic, outline: required(state.outline, "outline") };
 
-        if (memory && parsedState.workflowId) {
+        if (memory && state.workflowId) {
           await memory.savePrompt({
-            workflowId: parsedState.workflowId,
+            workflowId: state.workflowId,
             promptType: "writer",
             content: writerAgent.buildPrompt(input)
           });
         }
 
-        const article = await writerAgent.run(input);
+        const article = nonEmptyTextSchema.parse(await writerAgent.run(input));
 
-        logger.info("Writer output ready", {
-          articleLength: article.length,
-          topic: parsedState.topic
-        });
+        logger.info("Writer output ready", { articleLength: article.length, topic: state.topic });
 
         return { article };
       })
     )
     .addNode(
       "editor",
-      step("editor", async (state: ArticleWorkflowState) => {
-        const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
-        const editorOutput = await editorAgent.run({ rawText: parsedState.article });
+      step("editor", async (state) => {
+        const editorOutput = await editorAgent.run({
+          rawText: required(state.article, "article")
+        });
+        const editedText = nonEmptyTextSchema.parse(editorOutput.editedText);
 
         logger.info("Editor output ready", {
           changesSummary: editorOutput.changesSummary,
-          topic: parsedState.topic
+          topic: state.topic
         });
 
-        return { editedText: editorOutput.editedText };
+        return { editedText };
       })
     )
     .addNode(
       "seo",
-      step("seo", async (state: ArticleWorkflowState) => {
-        const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
-        const seoOutput = await seoAgent.run({
-          outline: parsedState.outline,
-          articleText: parsedState.editedText || parsedState.article
-        });
+      step("seo", async (state) => {
+        const seoOutput = seoOutputSchema.parse(
+          await seoAgent.run({
+            outline: required(state.outline, "outline"),
+            articleText: currentArticle(state)
+          })
+        );
 
-        logger.info("SEO output ready", {
-          slug: seoOutput.slug,
-          topic: parsedState.topic
-        });
+        logger.info("SEO output ready", { slug: seoOutput.slug, topic: state.topic });
 
         return { seoOutput };
       })
     )
     .addNode(
       "classification",
-      step("classification", async (state: ArticleWorkflowState) => {
-        const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
-
+      step("classification", async (state) => {
         const availableCategories = taxonomy ? await taxonomy.listCategories() : [defaultCategory];
         const availableTags = taxonomy ? await taxonomy.listTags() : [];
 
-        const classificationOutput = await classificationAgent.run({
-          articleText: parsedState.editedText || parsedState.article,
-          availableCategories,
-          availableTags,
-          maxTags
-        });
+        const { category, tags } = classificationSchema.parse(
+          await classificationAgent.run({
+            articleText: currentArticle(state),
+            availableCategories,
+            availableTags,
+            maxTags
+          })
+        );
 
-        logger.info("Classification output ready", {
-          category: classificationOutput.category,
-          tags: classificationOutput.tags,
-          topic: parsedState.topic
-        });
+        logger.info("Classification output ready", { category, tags, topic: state.topic });
 
-        return {
-          category: classificationOutput.category,
-          tags: classificationOutput.tags
-        };
+        return { category, tags };
       })
     )
     .addNode(
       "publisher",
-      step("publisher", async (state: ArticleWorkflowState) => {
-        const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
-        const seoOutput = parsedState.seoOutput as SeoOutput | undefined;
+      step("publisher", async (state) => {
+        const seoOutput = required(state.seoOutput, "seoOutput");
 
         const articleForPublishing: PublishArticle = {
-          title: seoOutput?.title ?? parsedState.topic,
-          slug: seoOutput?.slug ?? parsedState.topic,
-          summary: seoOutput?.metaDescription ?? parsedState.topic,
-          content: parsedState.editedText || parsedState.article,
+          title: seoOutput.title,
+          slug: seoOutput.slug,
+          summary: seoOutput.metaDescription,
+          content: currentArticle(state),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          tags: parsedState.tags,
-          category: parsedState.category || defaultCategory,
+          tags: required(state.tags, "tags"),
+          category: required(state.category, "category"),
           author: "OpenBlogAgent",
           language: "en"
         };
 
         // The publisher manager logs the outcome; the run's status is decided in `run`.
-        const publishResult = await publisher.publish(articleForPublishing);
+        const publishResult = publishResultSchema.parse(
+          await publisher.publish(articleForPublishing)
+        );
 
         return { publishResult };
       })
@@ -317,29 +308,24 @@ export function createArticleGenerationWorkflow(
 
   return {
     name: ARTICLE_GENERATION_WORKFLOW_NAME,
-    async run(input: ArticleWorkflowState): Promise<ArticleWorkflowResult> {
-      const parsedInput = articleWorkflowStateSchema.parse(input) as ArticleWorkflowState;
+    async run(input: ArticleWorkflowInput): Promise<ArticleWorkflowResult> {
+      const { topic } = articleWorkflowInputSchema.parse(input);
       const workflowMemory = memory
         ? await memory.beginWorkflow({
             workflowName: ARTICLE_GENERATION_WORKFLOW_NAME,
-            topic: parsedInput.topic
+            topic
           })
         : null;
 
       if (workflowMemory?.isDuplicate) {
         logger.warn("Duplicate topic detected", {
-          topic: parsedInput.topic,
+          topic,
           duplicateOfWorkflowId: workflowMemory.duplicateOfWorkflowId
         });
       }
 
-      const initialState = {
-        ...parsedInput,
-        workflowId: workflowMemory?.workflowId
-      } as ArticleWorkflowState;
-
       logger.info("Starting article workflow", {
-        topic: initialState.topic,
+        topic,
         workflow: ARTICLE_GENERATION_WORKFLOW_NAME
       });
 
@@ -348,11 +334,20 @@ export function createArticleGenerationWorkflow(
           await memory.markRunning(workflowMemory.workflowId);
         }
 
-        const finalState = articleWorkflowStateSchema.parse(
-          await workflow.invoke(initialState)
-        ) as ArticleWorkflowState;
+        const finalState = await workflow.invoke({
+          topic,
+          workflowId: workflowMemory?.workflowId
+        });
 
-        const publishResult = finalState.publishResult as PublishResult | undefined;
+        const output: ArticleWorkflowOutput = {
+          article: required(finalState.article, "article"),
+          category: required(finalState.category, "category"),
+          editedText: required(finalState.editedText, "editedText"),
+          seoOutput: required(finalState.seoOutput, "seoOutput"),
+          tags: required(finalState.tags, "tags"),
+          topic: finalState.topic
+        };
+        const publishResult = finalState.publishResult;
         const failure: WorkflowFailure | undefined = publishResult?.success
           ? undefined
           : {
@@ -366,13 +361,8 @@ export function createArticleGenerationWorkflow(
           await memory.finishWorkflow({
             workflowId: workflowMemory.workflowId,
             status,
-            topic: finalState.topic,
-            article: finalState.article,
-            editedText: finalState.editedText || finalState.article,
-            seoOutput: (finalState.seoOutput ?? {}) as Record<string, unknown>,
-            category: finalState.category || defaultCategory,
-            tags: finalState.tags || [],
-            publishResult: publishResult as Record<string, unknown> | undefined,
+            ...output,
+            publishResult: publishResult && { ...publishResult },
             failedStep: failure?.step,
             errorCode: failure?.code,
             errorMessage: failure?.message
@@ -381,7 +371,7 @@ export function createArticleGenerationWorkflow(
 
         if (failure) {
           logger.error("Article workflow failed", {
-            topic: finalState.topic,
+            topic,
             workflow: ARTICLE_GENERATION_WORKFLOW_NAME,
             failedStep: failure.step,
             errorCode: failure.code,
@@ -389,23 +379,19 @@ export function createArticleGenerationWorkflow(
           });
         } else {
           logger.info("Article workflow completed", {
-            articleLength: finalState.article.length,
-            topic: finalState.topic,
+            articleLength: output.article.length,
+            topic,
             workflow: ARTICLE_GENERATION_WORKFLOW_NAME
           });
         }
 
-        return {
-          status,
-          failure,
-          article: finalState.article,
-          category: finalState.category || defaultCategory,
-          editedText: finalState.editedText || finalState.article,
-          seoOutput: finalState.seoOutput as SeoOutput,
-          tags: finalState.tags || [],
-          topic: finalState.topic,
-          publishResult
-        };
+        return failure
+          ? { ...output, status: "failed", failure, publishResult }
+          : {
+              ...output,
+              status: "published",
+              publishResult: required(publishResult, "publishResult")
+            };
       } catch (error) {
         if (memory && workflowMemory) {
           await memory.failWorkflow({

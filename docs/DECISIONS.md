@@ -78,3 +78,10 @@ ADR-style log. Add new entries at the bottom; do not rewrite accepted ones, supe
 - Context: the workflow never checked `publishResult.success`, so a failed publish was stored as `completed`, the CLI logged `Article saved` and exited 0.
 - Decision: `ArticleWorkflowResult.status` is `published | needs_review | failed` and `failure` carries `{ step, code, message }`. A failed or missing publish result yields `failed` with the publisher's error code. Persisted statuses are `started -> running -> published | needs_review | failed` with `failed_step` and `error_code` columns. `finishWorkflow` stores the article even when publishing failed. A throwing step raises `WorkflowStepError` (step, code) and is stored via `failWorkflow`. The CLI exits non-zero unless the status is `published`.
 - Consequence: `needs_review` is only defined, not produced (quality-gate issue). Old `completed` rows are not migrated.
+
+## ADR-013: Workflow state is typed per step and validated where it is produced
+
+- Status: accepted (2026-10-21)
+- Context: every node re-parsed the whole state and cast it back, `seoOutput`/`publishResult` were `unknown`, an empty passthrough schema existed only to admit the initial `{}`, and empty strings stood for "not produced yet".
+- Decision: the `Annotation` fields are typed (`SeoOutput | undefined`, `PublishResult | undefined`, ...) and a node's return type is checked against the state update. Each node validates its output with the Zod schema of its agent. `currentArticle(state)` returns the edited text once it exists. `run()` takes `{ topic }` and returns `ArticleWorkflowResult`, a union of `published` (with a confirmed `publishResult`) and `failed`.
+- Consequence: `articleWorkflowStateSchema` and the empty-object workaround are gone. A missing field after a step is a wiring bug and throws.
