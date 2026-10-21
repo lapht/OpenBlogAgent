@@ -24,7 +24,7 @@ export function createClassificationAgent(provider: TextGenerationProvider): Cla
   return {
     async run(input: ClassificationAgentInput): Promise<ClassificationOutput> {
       const prompt = buildClassificationPrompt(input);
-      const rawOutput = await provider.generate(prompt);
+      const rawOutput = (await provider.generate({ prompt })).text;
       return parseClassificationOutput(rawOutput, input.maxTags);
     }
   };

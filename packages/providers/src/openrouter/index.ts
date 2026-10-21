@@ -1,9 +1,15 @@
-import type { IProvider } from "@openblog/core";
-import { logger } from "@openblog/logger";
+import { requestJson, type RequestPolicy } from "../http";
+import {
+  ProviderError,
+  type GenerateRequest,
+  type GenerateResult,
+  type TextGenerationProvider
+} from "../types";
 
-import type { TextGenerationProvider } from "..";
+export const DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o-mini";
+export const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
-export interface OpenRouterProviderConfig {
+export interface OpenRouterProviderConfig extends RequestPolicy {
   apiKey?: string;
   baseUrl?: string;
   model?: string;
@@ -12,87 +18,86 @@ export interface OpenRouterProviderConfig {
 }
 
 interface OpenRouterChatResponse {
+  model?: string;
   choices?: Array<{
     message?: {
       content?: string;
     };
   }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
 }
 
-export class OpenRouterProvider implements IProvider, TextGenerationProvider {
+export class OpenRouterProvider implements TextGenerationProvider {
   public readonly id = "openrouter";
-  public readonly name = "OpenRouter";
 
   constructor(public readonly config: OpenRouterProviderConfig) {}
 
-  async generate(prompt: string): Promise<string> {
-    if (!this.config.apiKey) {
-      throw new Error("OPENROUTER_API_KEY is required for OpenRouterProvider");
-    }
+  async generate(request: GenerateRequest): Promise<GenerateResult> {
+    const { apiKey } = this.config;
 
-    const maxAttempts = 3;
-    let lastError: unknown;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      logger.debug("Attempting OpenRouter request", {
-        attempt,
-        maxAttempts,
-        model: this.config.model ?? "openai/gpt-4o-mini"
+    if (!apiKey) {
+      throw new ProviderError({
+        kind: "auth",
+        message: "OPENROUTER_API_KEY is required for OpenRouterProvider",
+        provider: this.id,
+        retryable: false
       });
-
-      try {
-        const response = await fetch(
-          `${this.config.baseUrl ?? "https://openrouter.ai/api/v1"}/chat/completions`,
-          {
-            body: JSON.stringify({
-              messages: [
-                {
-                  content: prompt,
-                  role: "user"
-                }
-              ],
-              model: this.config.model ?? "openai/gpt-4o-mini"
-            }),
-            headers: {
-              Authorization: `Bearer ${this.config.apiKey}`,
-              "Content-Type": "application/json",
-              ...(this.config.siteName ? { "X-Title": this.config.siteName } : {}),
-              ...(this.config.siteUrl ? { "HTTP-Referer": this.config.siteUrl } : {})
-            },
-            method: "POST"
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`OpenRouter request failed with status ${response.status}`);
-        }
-
-        const data = (await response.json()) as OpenRouterChatResponse;
-        const content = data.choices?.[0]?.message?.content?.trim();
-
-        if (!content) {
-          throw new Error("OpenRouter returned an empty response");
-        }
-
-        return content;
-      } catch (error) {
-        lastError = error;
-        logger.debug("OpenRouter request failed", {
-          attempt,
-          maxAttempts,
-          message: error instanceof Error ? error.message : String(error)
-        });
-
-        if (attempt < maxAttempts) {
-          logger.debug("Retrying OpenRouter request", {
-            attempt,
-            nextAttempt: attempt + 1,
-            maxAttempts
-          });
-        }
-      }
     }
 
-    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+    const model = this.config.model ?? DEFAULT_OPENROUTER_MODEL;
+    const messages = [
+      ...(request.system ? [{ content: request.system, role: "system" }] : []),
+      { content: request.prompt, role: "user" }
+    ];
+
+    const data = (await requestJson({
+      ...this.config,
+      provider: this.id,
+      url: `${this.config.baseUrl ?? DEFAULT_OPENROUTER_BASE_URL}/chat/completions`,
+      signal: request.signal,
+      secrets: [apiKey],
+      init: {
+        body: JSON.stringify({
+          messages,
+          model,
+          ...(request.maxTokens !== undefined ? { max_tokens: request.maxTokens } : {}),
+          ...(request.temperature !== undefined ? { temperature: request.temperature } : {})
+        }),
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          ...(this.config.siteName ? { "X-Title": this.config.siteName } : {}),
+          ...(this.config.siteUrl ? { "HTTP-Referer": this.config.siteUrl } : {})
+        },
+        method: "POST"
+      }
+    })) as OpenRouterChatResponse | null;
+
+    const text = data?.choices?.[0]?.message?.content?.trim();
+
+    if (!text) {
+      throw new ProviderError({
+        kind: "invalid_response",
+        message: "OpenRouter returned an empty response",
+        provider: this.id,
+        retryable: false
+      });
+    }
+
+    return {
+      text,
+      model: data?.model ?? model,
+      usage: data?.usage
+        ? {
+            promptTokens: data.usage.prompt_tokens,
+            completionTokens: data.usage.completion_tokens,
+            totalTokens: data.usage.total_tokens
+          }
+        : undefined
+    };
   }
 }

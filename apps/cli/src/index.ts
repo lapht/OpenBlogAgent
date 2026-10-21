@@ -74,12 +74,16 @@ async function main(): Promise<void> {
   });
 
   const provider = createDefaultTextGenerationProvider({
-    openRouter: new OpenRouterProvider({
-      apiKey: env.OPENROUTER_API_KEY,
-      model: env.OPENROUTER_MODEL,
-      siteUrl: env.OPENROUTER_SITE_URL,
-      siteName: env.OPENROUTER_SITE_NAME
-    }),
+    // Without an API key OpenRouter is skipped on purpose: a missing key is a
+    // configuration choice, not an outage, so Ollama becomes the primary provider.
+    openRouter: env.OPENROUTER_API_KEY
+      ? new OpenRouterProvider({
+          apiKey: env.OPENROUTER_API_KEY,
+          model: env.OPENROUTER_MODEL,
+          siteUrl: env.OPENROUTER_SITE_URL,
+          siteName: env.OPENROUTER_SITE_NAME
+        })
+      : undefined,
     ollama: new OllamaProvider({
       baseUrl: env.OLLAMA_BASE_URL,
       model: env.OLLAMA_MODEL

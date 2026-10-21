@@ -232,7 +232,7 @@ export function createArticleGenerationWorkflow(
         });
       }
 
-      const plannerRawOutput = await provider.generate(plannerPrompt);
+      const plannerRawOutput = (await provider.generate({ prompt: plannerPrompt })).text;
       const outline = extractJsonArray(plannerRawOutput);
 
       logger.info("Planner output ready", {
@@ -258,7 +258,7 @@ export function createArticleGenerationWorkflow(
         });
       }
 
-      const article = (await provider.generate(writerPrompt)).trim();
+      const article = (await provider.generate({ prompt: writerPrompt })).text.trim();
 
       if (article.length === 0) {
         throw new Error("Writer returned an empty article");
