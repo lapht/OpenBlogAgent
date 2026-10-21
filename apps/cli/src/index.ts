@@ -69,12 +69,6 @@ async function main(): Promise<void> {
     ghostConfigured: Boolean(env.OPENBLOG_GHOST_ENDPOINT)
   });
 
-  logger.debug("DEBUG: OPENROUTER_API_KEY loaded?", {
-    loaded: !!process.env.OPENROUTER_API_KEY,
-    value: process.env.OPENROUTER_API_KEY ? "***" : "NOT_FOUND",
-    model: process.env.OPENROUTER_MODEL
-  });
-
   logger.info("Initializing text generation provider", {
     providerType: process.env.OPENROUTER_API_KEY ? "openrouter" : "ollama"
   });

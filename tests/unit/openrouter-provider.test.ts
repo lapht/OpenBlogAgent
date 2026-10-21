@@ -27,16 +27,11 @@ describe("OpenRouterProvider", () => {
       } as Response);
 
     vi.stubGlobal("fetch", fetchMock);
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     const provider = new OpenRouterProvider({ apiKey: "test-key" });
     const result = await provider.generate("hello");
 
     expect(result).toBe("done");
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(logSpy).toHaveBeenCalledWith(
-      "About to attempt OpenRouter request",
-      expect.objectContaining({ attempt: 1, maxAttempts: 3 })
-    );
   });
 });

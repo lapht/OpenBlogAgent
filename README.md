@@ -352,3 +352,11 @@ npm run test
 ## Documentation
 
 See `docs/` for architecture, package boundaries, development and plugin notes.
+
+## Corporate proxies and custom CAs
+
+TLS certificate verification is always enabled. If you are behind a proxy that re-signs HTTPS traffic, point Node at your CA bundle instead of disabling verification:
+
+```bash
+NODE_EXTRA_CA_CERTS=/path/to/corporate-ca.pem npm run dev
+```

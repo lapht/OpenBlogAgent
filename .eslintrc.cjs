@@ -10,6 +10,10 @@ module.exports = {
   ignorePatterns: ["dist", "node_modules", "coverage"],
   overrides: [
     {
+      files: ["packages/**/*.ts", "apps/**/*.ts"],
+      rules: { "no-console": "error" }
+    },
+    {
       files: ["*.ts"],
       parserOptions: {
         project: false,
