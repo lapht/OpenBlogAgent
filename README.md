@@ -15,7 +15,7 @@ The current milestone is intentionally narrow: one real end-to-end workflow that
 
 ## Current Scope
 
-This repository currently implements this flow:
+The MVP implements this flow:
 
 ```text
 INPUT (topic)
@@ -23,36 +23,36 @@ INPUT (topic)
 -> WRITER (markdown article)
 -> EDITOR (improved text)
 -> SEO AGENT (metadata)
+-> DUPLICATE CHECK + QUALITY GATE (bounded regeneration, otherwise needs_review)
 -> CLASSIFICATION (category, tags)
--> PUBLISHER (DefaultPublisherManager -> Markdown by default)
+-> PUBLISHER (draft by default; Markdown file or WordPress)
 -> OUTPUT (output/articles/{slug}.md)
 ```
 
 See [Current State](docs/CURRENT_STATE.md) for what is verified and what is not, and [Decisions](docs/DECISIONS.md) for the reasoning behind the current shape.
 
-Included in this phase:
+Included:
 
-- CLI entrypoint
-- LangGraph workflow
-- OpenRouter provider
-- Ollama fallback provider
-- Zod validation for workflow state and planner output
-- Pino logging
-- Editor Agent for text improvement
-- SEO Agent for metadata generation
-- Classification agent for category and tags
-- SQLite workflow memory (duplicate-topic detection)
-- Publishing engine with Markdown and WordPress publishers
+- CLI (`generate`, `resume`, `approve`, `list`) with `--dry-run`, `--json` and stable exit codes
+- LangGraph workflow with every step's output stored, so failed runs resume
+- OpenRouter provider with Ollama fallback
+- Editor, SEO and classification agents; deterministic quality gate
+- SQLite workflow memory (duplicate policy, resume, approval)
+- Markdown and WordPress publishers; drafts first, explicit approval
+- Structured logs correlated by run, with secret redaction
+- Docker image and Compose file
 
-Not included in this phase:
+Not included:
 
 - dashboard (removed from the repository; see ADR-009)
 - Ghost publishing (not configurable; `GhostPublisher` always fails with `not_implemented`; planned)
-- plugin system
+- plugin system, scheduler, research engine
 - multi-agent orchestration
 
 ## Documentation
 
+- [Configuration](docs/configuration.md) (every environment variable)
+- [Operations](docs/operations.md) (statuses, exit codes, resume, approve, logs, backups)
 - [Development Guide](docs/development.md)
 - [Architecture Overview](docs/architecture.md)
 - [Packages](docs/packages.md)
@@ -132,99 +132,53 @@ Execution steps:
 
 ## Quick Start
 
-1. Install dependencies:
+From a clean clone to a first draft. You need Node 20 or 22 and either an [OpenRouter](https://openrouter.ai) API key or a running [Ollama](https://ollama.com).
 
 ```bash
-npm install
-```
-
-2. Configure at least one LLM provider.
-
-OpenRouter is the primary provider. Ollama is used when OpenRouter is not configured, and as a fallback when OpenRouter is temporarily unavailable.
-
-Example `.env` for OpenRouter:
-
-```bash
-OPENROUTER_API_KEY=your_openrouter_key
-OPENROUTER_MODEL=openai/gpt-4o-mini
-OPENROUTER_SITE_URL=http://localhost
-OPENROUTER_SITE_NAME=OpenBlogAgent
-```
-
-Example `.env` for Ollama fallback:
-
-```bash
-OLLAMA_BASE_URL=http://127.0.0.1:11434
-OLLAMA_MODEL=llama3.1
-```
-
-Notes:
-
-- `OPENROUTER_API_KEY` is required only if you want to use OpenRouter.
-- `OPENROUTER_MODEL` defaults to `openai/gpt-4o-mini`.
-- `OLLAMA_BASE_URL` defaults to `http://127.0.0.1:11434`.
-- `OLLAMA_MODEL` defaults to `llama3.1`.
-
-Example publishing settings for WordPress (dummy values only):
-
-```bash
-OPENBLOG_DEFAULT_PUBLISHER=wordpress
-OPENBLOG_OUTPUT_DIR=output/articles
-OPENBLOG_WORDPRESS_ENDPOINT=https://example.com/wp-json/wp/v2
-OPENBLOG_WORDPRESS_USERNAME=demo_user
-OPENBLOG_WORDPRESS_APPLICATION_PASSWORD=dummy_app_password
-OPENBLOG_WORDPRESS_STATUS=draft
-```
-
-3. Build only the packages needed by the article workflow:
-
-```bash
+git clone https://github.com/lapht/OpenBlogAgent.git && cd OpenBlogAgent
+npm ci
 npm run build
+cp .env.example .env
 ```
 
-4. Run a test article generation:
+Edit `.env`: set `OPENROUTER_API_KEY` (or point `OLLAMA_BASE_URL` / `OLLAMA_MODEL` at your Ollama and leave the key unset). Everything else has a working default; see [Configuration](docs/configuration.md).
 
-```bash
-npm start -- generate "AI agents in software development"
-```
+1. **Check the setup** (no LLM call, nothing written):
 
-5. Read the generated file:
+   ```bash
+   npm start -- --help
+   npm start -- list        # "No runs stored yet." on a fresh install
+   ```
 
-```bash
-output/articles/{slug}.md
-```
+2. **First dry run**: runs the whole workflow with your provider but never publishes and leaves no trace in the database:
 
-## Runtime Configuration
+   ```bash
+   npm start -- generate "Why caching matters" --dry-run
+   ```
 
-The CLI reads these environment variables:
+   It prints a short summary (`status: awaiting_approval`, title, slug). Add `--json` for a machine-readable summary; logs go to stderr.
 
-| Variable               | Required | Default                  | Purpose                          |
-| ---------------------- | -------- | ------------------------ | -------------------------------- |
-| `OPENROUTER_API_KEY`   | No       | none                     | OpenRouter API key               |
-| `OPENROUTER_MODEL`     | No       | `openai/gpt-4o-mini`     | OpenRouter model name            |
-| `OPENROUTER_SITE_URL`  | No       | none                     | Optional OpenRouter referer      |
-| `OPENROUTER_SITE_NAME` | No       | none                     | Optional OpenRouter title header |
-| `OLLAMA_BASE_URL`      | No       | `http://127.0.0.1:11434` | Ollama server base URL           |
-| `OLLAMA_MODEL`         | No       | `llama3.1`               | Ollama model name                |
+3. **First draft**: the same command without `--dry-run`. With the default `draft` policy the article is written to `output/articles/{slug}.md` with `status: draft` front matter and the run is stored:
 
-Taxonomy (categories and tags offered to the classifier when `OPENBLOG_TAXONOMY_PROVIDER=static`, the default):
+   ```bash
+   npm start -- generate "Why caching matters"
+   npm start -- list
+   ```
 
-| Variable                             | Default         | Purpose                                                                 |
-| ------------------------------------ | --------------- | ----------------------------------------------------------------------- |
-| `OPENBLOG_TAXONOMY_CATEGORIES`       | none            | Comma-separated category names                                          |
-| `OPENBLOG_TAXONOMY_TAGS`             | none            | Comma-separated tag names                                               |
-| `OPENBLOG_TAXONOMY_FILE`             | none            | JSON file `{ "categories": [...], "tags": [...] }`; the lists above win |
-| `OPENBLOG_TAXONOMY_DEFAULT_CATEGORY` | `Uncategorized` | Only category when none is configured; used when none is chosen         |
+4. **Publish it live** when you have read it: `npm start -- approve <workflowId>` (the id is in the summary and in `list`).
 
-With nothing configured the only category is the default one and there are no predefined tags.
+If a run ends `needs_review`, `failed` or `duplicate`, see [Operations](docs/operations.md) for what each status means and how to recover. Running in a container: see [Docker](#docker). To publish to WordPress instead of a file, see [Publishing](docs/publishing.md#wordpress-prerequisites).
+
+## Providers
+
+OpenRouter is used first when `OPENROUTER_API_KEY` is set; otherwise Ollama is used directly. All variables are in [Configuration](docs/configuration.md).
 
 Provider behavior:
 
-- OpenRouter is tried first when `OPENROUTER_API_KEY` is set; otherwise Ollama is used directly.
 - Every request has a timeout (120s by default). Rate limits (429, honoring `Retry-After`), 5xx, timeouts and network errors are retried with exponential backoff and jitter (2 retries).
 - Auth errors (401/402/403) and invalid responses fail immediately and do not fall back to Ollama.
 - If OpenRouter is unavailable after retries, the app falls back to Ollama and logs which provider answered.
-- If both fail, the CLI exits with a descriptive error message.
+- If both fail, the command fails with a descriptive error and exit code 1.
 
 ## Command line
 
@@ -273,57 +227,9 @@ npm start -- approve <workflowId> --override "reason"   # for an article that fa
 
 ## Output
 
-The workflow produces:
+The Markdown publisher writes `output/articles/{slug}.md` (see `OPENBLOG_OUTPUT_DIR`): YAML front matter (title, slug, description, status, category, tags, dates, author, language) followed by the article body. `status` is `draft` until the article is approved. The command prints a summary; `--json` makes it machine-readable ([Operations](docs/operations.md#scripting-with---json)).
 
-- a publish result object with success/error metadata
-
-1. A returned in-memory result:
-
-   ```ts
-   {
-     topic: string;
-     article: string;
-     editedText: string;
-     seoOutput: {
-       title: string;
-       metaDescription: string;
-       slug: string;
-       h1: string;
-       headings: Array<{ level: "H2" | "H3"; text: string }>;
-     }
-   }
-   ```
-
-2. A saved file:
-
-   ```text
-   output/articles/{slug}.md
-   ```
-
-The file includes YAML frontmatter:
-
-```yaml
----
-title: "{seo.title}"
-description: "{seo.metaDescription}"
-slug: "{seo.slug}"
-date: "{ISO date}"
----
-```
-
-## Generate Script
-
-Use the `generate` script for a complete end-to-end test:
-
-```bash
-npm run build && npm run generate -- generate "AI agents in software development"
-```
-
-This command:
-
-1. Uses the packages built by `npm run build` (the scripts no longer rebuild)
-2. Runs the full workflow (Planner → Writer → Editor → SEO → Classification → Publisher)
-3. Prints the output file path
+`npm run generate -- "topic"` is a shortcut for `npm start -- generate "topic"`; both use the packages built by `npm run build`.
 
 ## Logging
 
@@ -339,21 +245,6 @@ OPENBLOG_LOG_LEVEL=debug     # fatal | error | warn | info (default) | debug | t
 OPENBLOG_LOG_PRETTY=true     # human-readable output for development
 ```
 
-## Example Run
-
-Command:
-
-```bash
-npm start -- generate "AI agents in software development"
-```
-
-Expected behavior:
-
-1. The required workflow packages are built.
-2. The planner generates a JSON outline.
-3. The writer generates a complete Markdown article.
-4. The article is saved to `output/articles/{slug}.md`.
-
 ## Troubleshooting
 
 If you see an error similar to:
@@ -368,7 +259,7 @@ then one of these is true:
 - Ollama is not running locally
 - `OLLAMA_BASE_URL` points to the wrong host or port
 
-To use Ollama locally, make sure the Ollama server is running before executing `npm start`.
+To use Ollama locally, make sure the Ollama server is running before executing `npm start`. More recovery steps are in [Operations](docs/operations.md).
 
 ## Development Notes
 
@@ -395,10 +286,6 @@ npm run test
 - Husky + Commitlint + lint-staged
 - GitHub Actions
 - Docker
-
-## Documentation
-
-See `docs/` for architecture, package boundaries, development and plugin notes.
 
 ## Corporate proxies and custom CAs
 

@@ -7,7 +7,7 @@ The publishing engine is a modular layer that allows the article workflow to pub
 The flow is:
 
 ```text
-Topic -> Planner -> Writer -> Publisher -> Output
+Topic -> Planner -> Writer -> Editor -> SEO -> Quality gate -> Classification -> Publisher -> Output
 ```
 
 The agents only produce content. The publisher layer is responsible for:
@@ -16,6 +16,38 @@ The agents only produce content. The publisher layer is responsible for:
 - validating the article payload,
 - publishing to the target destination,
 - returning a typed result.
+
+## Publication policy: drafts first
+
+`OPENBLOG_PUBLICATION_POLICY` decides when an article can go live. It is `draft` by default, so a run never produces a live post by itself:
+
+| Policy                   | After the quality gate passes                                                | Run ends as         |
+| ------------------------ | ---------------------------------------------------------------------------- | ------------------- |
+| `draft` (default)        | Sent to the target as a draft (WordPress draft; a file with `status: draft`) | `awaiting_approval` |
+| `publish_after_approval` | Nothing is sent                                                              | `awaiting_approval` |
+| `publish_if_gate_passes` | Published live immediately (use with care)                                   | `published`         |
+
+An article that fails the gate is never sent, under any policy (`needs_review`). `npm start -- approve <workflowId>` publishes the stored article live, once; see [Operations](operations.md).
+
+## Markdown output
+
+The default publisher. `generate` writes `{OPENBLOG_OUTPUT_DIR}/{slug}.md` (default `output/articles/`): YAML front matter (title, slug, description, status, category, tags, dates, author, language) followed by the article. The `status` is `draft` until `approve` replaces the file with the live version (only a draft written by this publisher is replaced). Any other existing file is never overwritten unless `OPENBLOG_MARKDOWN_OVERWRITE=true`; the publish fails with `already_exists`.
+
+## WordPress prerequisites
+
+1. WordPress 5.6 or later with the REST API reachable (`https://your-site/wp-json/wp/v2/posts` answers). Pretty permalinks must be enabled for `/wp-json`.
+2. A user that may create posts (Author or higher; Editor if you want `OPENBLOG_TAXONOMY_ALLOW_CREATE=true` to create categories and tags).
+3. An **application password** for that user: Users → Profile → Application Passwords. Only application passwords are supported; the site must serve HTTPS or allow application passwords on HTTP.
+4. Configure:
+
+```bash
+OPENBLOG_DEFAULT_PUBLISHER=wordpress
+OPENBLOG_WORDPRESS_ENDPOINT=https://your-site/wp-json/wp/v2
+OPENBLOG_WORDPRESS_USERNAME=bot
+OPENBLOG_WORDPRESS_APPLICATION_PASSWORD=xxxx xxxx xxxx xxxx xxxx xxxx
+```
+
+**Try it on a test site first.** With the default `draft` policy nothing becomes visible, and `npm start -- generate "topic" --dry-run --publisher wordpress` exercises everything but the post itself. Published posts are keyed by slug: publishing again updates the existing post (or fails with `conflict` when `OPENBLOG_WORDPRESS_ON_EXISTING=conflict`).
 
 ## Core concepts
 
@@ -27,8 +59,9 @@ The agents only produce content. The publisher layer is responsible for:
 
 ## Configuration
 
-The centralized config system supports:
+Every variable is described in [Configuration](configuration.md). The ones that matter for publishing:
 
+- OPENBLOG_PUBLICATION_POLICY
 - OPENBLOG_DEFAULT_PUBLISHER
 - OPENBLOG_OUTPUT_DIR
 - OPENBLOG_MARKDOWN_OVERWRITE (`true`|`false`, default `false`)

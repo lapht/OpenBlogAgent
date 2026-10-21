@@ -32,6 +32,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run check:deps
+      - run: npm run check:docs
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format
