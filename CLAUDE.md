@@ -49,6 +49,12 @@ The markdown publisher writes `{OPENBLOG_OUTPUT_DIR}/{slug}.md` (default `output
 - `.env` is present locally and holds real credentials. Don't print or commit it. Use `.env.example` for documentation.
 - `docs/` (architecture, packages, publishing, plugins) has more detail on package boundaries.
 
+## Local environment
+
+- The local Node is v18 and npm 9, while CI uses Node 20/22. `EBADENGINE` warnings are expected.
+- npm requests to the registry can stall for ~85s per batch because of broken IPv6 routing, and `npm ci` can fail with `ETIMEDOUT` on an IPv6 address. Prefix npm commands with `NODE_OPTIONS=--dns-result-order=ipv4first` (e.g. `NODE_OPTIONS=--dns-result-order=ipv4first npm ci`), which makes installs take seconds.
+- Don't run `npx npm@10 ci --dry-run` here: it wiped `node_modules`. If `node_modules` is empty or `tsc: command not found`, run `npm ci`.
+
 ## Issue Workflow
 
 When asked to implement a GitHub issue (`gh issue view <n>`), do the whole flow without asking for further confirmation, as long as there are no errors:
