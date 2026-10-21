@@ -79,6 +79,11 @@ export const envSchema = z.object({
     z.coerce.number().positive().optional()
   ),
 
+  /** Ask the model for a second, editorial opinion on articles that passed the gate. One extra call per run. */
+  OPENBLOG_REVIEW_ENABLED: envBoolean(false),
+  /** Articles whose overall review score (0 to 10) is below this are parked as `needs_review`. */
+  OPENBLOG_REVIEW_MIN_SCORE: z.coerce.number().min(0).max(10).default(7),
+
   /** How many times a failing article is regenerated before it is parked as `needs_review`. */
   OPENBLOG_QUALITY_MAX_ATTEMPTS: z.coerce.number().int().min(0).default(2),
   OPENBLOG_QUALITY_MIN_WORDS: z.coerce.number().int().positive().default(1000),

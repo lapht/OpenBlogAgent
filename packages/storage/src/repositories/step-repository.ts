@@ -88,6 +88,26 @@ export class StepRepository {
     return totals;
   }
 
+  /** Output of the latest succeeded execution of `step` for each run that has one. */
+  latestOutputs(workflowIds: Identifier[], step: string): Map<Identifier, unknown> {
+    const outputs = new Map<Identifier, unknown>();
+    if (workflowIds.length === 0) {
+      return outputs;
+    }
+    const rows = this.db
+      .prepare(
+        `SELECT workflow_id, output_json FROM workflow_steps
+         WHERE step = ? AND status = 'succeeded' AND output_json IS NOT NULL
+           AND workflow_id IN (${workflowIds.map(() => "?").join(", ")})
+         ORDER BY completed_at ASC, attempt ASC, rowid ASC`
+      )
+      .all(step, ...workflowIds) as Array<{ workflow_id: string; output_json: string }>;
+    for (const row of rows) {
+      outputs.set(row.workflow_id, JSON.parse(row.output_json) as unknown);
+    }
+    return outputs;
+  }
+
   getByWorkflowId(workflowId: Identifier): WorkflowStepRecord[] {
     const rows = this.db
       .prepare(

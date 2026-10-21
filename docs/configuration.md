@@ -65,6 +65,15 @@ OpenRouter is used first when `OPENROUTER_API_KEY` is set; Ollama is used when i
 | --------------------------- | ------- | ------------------------------------------------------------------------------------------------ |
 | `OPENBLOG_ALLOW_DUPLICATES` | `false` | Generate even if the topic, slug or title was already published (same as `--force` on every run) |
 
+## Editorial review
+
+Off by default. When enabled, an article that passed the quality gate gets one more model call that scores SEO, readability, structure, completeness and repetition from 0 to 10. The overall score is the mean of the five (computed by the code, not the model). Below the minimum the run ends as `needs_review` with the violation `editorial_review_below_threshold`; nothing is published. Scores and rationale are stored with the `editorial_review` step, returned in `generate --json` (`review`) and shown by `list`. The extra call counts toward the run budget.
+
+| Variable                    | Default | Purpose                                                  |
+| --------------------------- | ------- | -------------------------------------------------------- |
+| `OPENBLOG_REVIEW_ENABLED`   | `false` | Turn the editorial review on                             |
+| `OPENBLOG_REVIEW_MIN_SCORE` | `7`     | Minimum overall score (0 to 10) for the article to go on |
+
 ## Run budget
 
 Token usage (and the cost the provider reports, which OpenRouter does and Ollama does not) is stored for every step execution and summed per run; `list` shows the totals. A run that goes over a limit stops with the error code `budget_exceeded`, is stored as `failed` and exits with code 1. The limits cover the whole run including regenerations and, on `resume`, what earlier attempts already used.

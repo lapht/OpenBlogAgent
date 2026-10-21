@@ -5,10 +5,12 @@ import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import {
   createClassificationAgent,
   createEditorAgent,
+  createEditorialReviewAgent,
   createPlannerAgent,
   createSeoAgent,
   createWriterAgent,
   type ArticleValidationRules,
+  type EditorialReview,
   formatViolations,
   plannerOutlineSchema,
   type SeoOutput,
@@ -83,6 +85,19 @@ const classificationSchema = z.object({
   tags: z.array(z.string())
 });
 
+/** An editorial review as stored with a step and returned with the run. */
+const reviewSchema = z.object({
+  scores: z.object({
+    seo: z.number(),
+    readability: z.number(),
+    structure: z.number(),
+    completeness: z.number(),
+    repetition: z.number()
+  }),
+  overall: z.number(),
+  rationale: z.string()
+});
+
 /** `needs_review`: the quality gate rejected the article; it is stored and nothing was published. */
 export type WorkflowRunStatus =
   "published" | "awaiting_approval" | "needs_review" | "failed" | "duplicate";
@@ -132,6 +147,8 @@ interface ArticleWorkflowOutput {
   seoOutput: SeoOutput;
   tags: string[];
   topic: string;
+  /** The editorial review, when it is enabled and the article passed the gate. */
+  review?: EditorialReview;
 }
 
 /** The publisher confirmed the publication. */
@@ -247,6 +264,12 @@ export interface CreateArticleGenerationWorkflowOptions {
   allowDuplicates?: boolean;
   /** When articles go live. Defaults to `draft`: never live without `approve`. */
   publicationPolicy?: PublicationPolicy;
+  /** Optional LLM second opinion on articles that passed the deterministic gate. Off by default. */
+  review?: {
+    enabled?: boolean;
+    /** Minimum overall score (0 to 10); lower scores park the article as `needs_review`. Defaults to 7. */
+    minScore?: number;
+  };
   /** Per-run token and cost limits; a run that exceeds them stops with `budget_exceeded`. */
   budget?: UsageBudget;
   quality?: {
@@ -283,6 +306,7 @@ const graphState = Annotation.Root({
   force: Annotation<boolean>({ default: () => false, reducer: (_, update) => update }),
   duplicate: optional<DuplicateInfo>(),
   llmUsage: optional<LlmUsage>(),
+  review: optional<EditorialReview>(),
   /** Steps restored from a previous run; their nodes are skipped. */
   completedSteps: optional<string[]>()
 });
@@ -310,6 +334,11 @@ const stepOutputSchemas: Record<string, z.ZodType<ArticleWorkflowUpdate, z.ZodTy
     qualityPassed: z.boolean(),
     qualityViolations: z.array(violationSchema),
     llmUsage: usageSchema.optional()
+  }),
+  editorial_review: z.object({
+    review: reviewSchema,
+    qualityPassed: z.boolean().optional(),
+    qualityViolations: z.array(violationSchema).optional()
   }),
   classification: classificationSchema,
   publisher: z.object({ publishResult: publishResultSchema })
@@ -476,6 +505,9 @@ export function createArticleGenerationWorkflow(
   const editorAgent = createEditorAgent(llm);
   const seoAgent = createSeoAgent(llm);
   const classificationAgent = createClassificationAgent(llm);
+  const reviewAgent = createEditorialReviewAgent(llm);
+  const reviewEnabled = options.review?.enabled ?? false;
+  const reviewMinScore = options.review?.minScore ?? 7;
 
   const stepContext: StepContext = { logger, memory };
 
@@ -626,10 +658,45 @@ export function createArticleGenerationWorkflow(
       })
     )
     .addNode(
+      "editorial_review",
+      step("editorial_review", stepContext, async (state) => {
+        const seoOutput = required(state.seoOutput, "seoOutput");
+        const review = await reviewAgent.run({
+          outline: required(state.outline, "outline"),
+          articleText: currentArticle(state),
+          title: seoOutput.title,
+          metaDescription: seoOutput.metaDescription
+        });
+        const passed = review.overall >= reviewMinScore;
+
+        logger[passed ? "info" : "warn"]("Editorial review decision", {
+          decision: passed ? "pass" : "needs_review",
+          overall: review.overall,
+          minScore: reviewMinScore,
+          scores: review.scores,
+          topic: state.topic
+        });
+
+        if (passed) {
+          return { review };
+        }
+        const violation: QualityViolation = {
+          code: "editorial_review_below_threshold",
+          severity: "error",
+          message: `Editorial review scored ${review.overall}/10, below the minimum ${reviewMinScore}: ${review.rationale}`
+        };
+        return {
+          review,
+          qualityPassed: false,
+          qualityViolations: [...(state.qualityViolations ?? []), violation]
+        };
+      })
+    )
+    .addNode(
       "regenerate",
       step("regenerate", stepContext, async (state) => {
         // The writer, editor, seo and quality nodes must run again, also on a resumed run.
-        const redo = ["writer", "editor", "seo", "duplicate_check", "quality"];
+        const redo = ["writer", "editor", "seo", "duplicate_check", "quality", "editorial_review"];
         return {
           regenerations: state.regenerations + 1,
           qualityFeedback: formatViolations(state.qualityViolations ?? []),
@@ -693,11 +760,13 @@ export function createArticleGenerationWorkflow(
     .addConditionalEdges("duplicate_check", (state) =>
       state.duplicate && !state.force ? END : "quality"
     )
-    .addConditionalEdges("quality", (state) =>
-      !state.qualityPassed && state.regenerations < maxRegenerations
-        ? "regenerate"
-        : "classification"
-    )
+    .addConditionalEdges("quality", (state) => {
+      if (!state.qualityPassed) {
+        return state.regenerations < maxRegenerations ? "regenerate" : "classification";
+      }
+      return reviewEnabled ? "editorial_review" : "classification";
+    })
+    .addEdge("editorial_review", "classification")
     .addEdge("regenerate", "writer")
     // A rejected article is still classified so a reviewer can publish it later.
     .addConditionalEdges("classification", (state) =>
@@ -791,7 +860,8 @@ export function createArticleGenerationWorkflow(
         editedText: required(finalState.editedText, "editedText"),
         seoOutput: required(finalState.seoOutput, "seoOutput"),
         tags: required(finalState.tags, "tags"),
-        topic: finalState.topic
+        topic: finalState.topic,
+        review: finalState.review
       };
       const publishResult = finalState.publishResult;
       const needsReview = !required(finalState.qualityPassed, "qualityPassed");

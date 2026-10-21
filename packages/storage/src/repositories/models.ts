@@ -104,6 +104,13 @@ export interface WorkflowStepRecord {
   usage: StepUsageRecord | null;
 }
 
+/** The editorial review a run stored with its `editorial_review` step. */
+export interface StoredReview {
+  overall: number;
+  scores: Record<string, number>;
+  rationale: string;
+}
+
 export interface StepUsageRecord {
   calls: number;
   promptTokens: number;

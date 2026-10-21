@@ -154,7 +154,8 @@ describe("CLI commands", () => {
       outputPath: path.join(dir, "out", "a-title.md"),
       remoteUrl: null,
       failure: null,
-      violations: []
+      violations: [],
+      review: null
     });
     expect(fs.existsSync(path.join(dir, "out", "a-title.md"))).toBe(true);
   });
