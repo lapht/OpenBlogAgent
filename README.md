@@ -42,12 +42,12 @@ Included in this phase:
 - SEO Agent for metadata generation
 - Classification agent for category and tags
 - SQLite workflow memory (duplicate-topic detection)
-- Publishing engine with Markdown and WordPress publishers (Ghost is a stub, see "Not included")
+- Publishing engine with Markdown and WordPress publishers
 
 Not included in this phase:
 
 - dashboard (removed from the repository; see ADR-009)
-- Ghost publishing (`GhostPublisher` only prepares a payload and makes no HTTP call; planned)
+- Ghost publishing (not configurable; `GhostPublisher` always fails with `not_implemented`; planned)
 - plugin system
 - multi-agent orchestration
 
@@ -163,15 +163,6 @@ OPENBLOG_WORDPRESS_ENDPOINT=https://example.com/wp-json/wp/v2
 OPENBLOG_WORDPRESS_USERNAME=demo_user
 OPENBLOG_WORDPRESS_APPLICATION_PASSWORD=dummy_app_password
 OPENBLOG_WORDPRESS_STATUS=draft
-```
-
-The Ghost publisher is not supported yet (it only prepares a payload). Settings for reference:
-
-```bash
-OPENBLOG_DEFAULT_PUBLISHER=ghost
-OPENBLOG_GHOST_ENDPOINT=https://example.ghost.io/ghost/api/content/posts/
-OPENBLOG_GHOST_API_KEY=dummy_ghost_api_key
-OPENBLOG_GHOST_STATUS=draft
 ```
 
 3. Build only the packages needed by the article workflow:

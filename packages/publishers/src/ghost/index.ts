@@ -45,40 +45,18 @@ export class GhostPublisher implements IPublisher {
     return article.target === "ghost";
   }
 
+  /** Never reports success: no Ghost Admin API call exists yet (tracked in the Post-MVP milestone). */
   async publish(article: PublishArticle): Promise<PublishResult> {
-    const validation = await this.validate(article);
-
-    if (!validation.valid) {
-      this.logger.error("Ghost publisher validation failed", {
-        slug: article.slug,
-        issues: validation.issues
-      });
-
-      return {
-        success: false,
-        publisherId: this.id,
-        publisherName: this.name,
-        error: {
-          code: "validation_failed",
-          message: "Ghost publisher validation failed",
-          details: { issues: validation.issues }
-        }
-      };
-    }
-
-    this.logger.info("Ghost publisher payload prepared", {
-      slug: article.slug,
-      status: this.config.status ?? "draft"
-    });
+    this.logger.error("Ghost publisher is not implemented", { slug: article.slug });
 
     return {
-      success: true,
+      success: false,
       publisherId: this.id,
       publisherName: this.name,
-      metadata: {
-        slug: article.slug,
-        status: this.config.status ?? "draft",
-        endpoint: this.config.endpoint
+      error: {
+        code: "not_implemented",
+        message: "The Ghost publisher is not implemented; nothing was published",
+        details: { slug: article.slug }
       }
     };
   }

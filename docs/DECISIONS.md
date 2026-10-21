@@ -17,8 +17,8 @@ ADR-style log. Add new entries at the bottom; do not rewrite accepted ones, supe
 ## ADR-003: Ghost is documented as not implemented
 
 - Status: accepted
-- Context: `GhostPublisher` builds a payload and returns success without any HTTP call.
-- Decision: README, roadmap and `.env.example` mark Ghost as unsupported until it is implemented (backlog: Ghost publisher issues).
+- Context: `GhostPublisher` built a payload and returned success without any HTTP call.
+- Decision: Ghost is removed from the factory, env schema, `.env.example` and README until it is implemented (Post-MVP). The class stays only as a placeholder whose `publish` fails with `not_implemented`, so no publisher can claim success without doing the work.
 
 ## ADR-004: Tests assert real behavior against current contracts
 
