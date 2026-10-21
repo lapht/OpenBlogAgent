@@ -5,6 +5,7 @@ import { createArticleGenerationWorkflow } from "@openblog/graph";
 import { logger } from "@openblog/logger";
 import {
   createPublishersFromConfig,
+  DefaultPublisherManager,
   StaticCategoryProvider,
   StaticTagProvider,
   WordPressCategoryProvider,
@@ -186,13 +187,15 @@ async function main(): Promise<void> {
 
   const workflow = createArticleGenerationWorkflow({
     logger,
-    provider,
-    memoryService: memoryStore.memoryService,
-    publishers,
-    defaultPublisherId,
-    categoryProvider,
-    tagProvider,
-    taxonomyConfig
+    llm: provider,
+    publisher: new DefaultPublisherManager(logger, publishers, { defaultPublisherId }),
+    taxonomy: {
+      listCategories: async () => (await categoryProvider.list()).map((entry) => entry.name),
+      listTags: async () => (await tagProvider.list()).map((entry) => entry.name)
+    },
+    memory: memoryStore.memoryService,
+    defaultCategory: taxonomyConfig.defaultCategory,
+    maxTags: taxonomyConfig.maxTags
   });
 
   try {

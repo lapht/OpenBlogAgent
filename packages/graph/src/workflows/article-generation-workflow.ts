@@ -2,26 +2,20 @@ import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import {
   createClassificationAgent,
   createEditorAgent,
+  createPlannerAgent,
   createSeoAgent,
-  generateStructured,
+  createWriterAgent,
+  plannerOutlineSchema,
   type SeoOutput,
   seoOutputSchema
 } from "@openblog/agents";
 import type { ILogger } from "@openblog/logger";
-import type { TextGenerationProvider } from "@openblog/providers";
-import {
-  DefaultPublisherManager,
-  type ICategoryProvider,
-  type IPublisher,
-  type ITagProvider,
-  type PublishArticle,
-  type PublishResult
-} from "@openblog/publishers";
+import type { PublishArticle, PublishResult } from "@openblog/publishers";
 import { z } from "zod";
 
-export const ARTICLE_GENERATION_WORKFLOW_NAME = "article-generation-workflow" as const;
+import type { LlmPort, MemoryPort, PublishPort, TaxonomyPort } from "../ports";
 
-export const plannerOutlineSchema = z.array(z.string().min(1)).min(3);
+export const ARTICLE_GENERATION_WORKFLOW_NAME = "article-generation-workflow" as const;
 
 const publishResultSchema = z.object({
   success: z.boolean(),
@@ -64,34 +58,6 @@ export interface ArticleWorkflowResult {
   publishResult?: PublishResult;
 }
 
-export interface WorkflowMemoryService {
-  beginWorkflow(params: {
-    workflowName: string;
-    topic: string;
-    metadata?: Record<string, unknown>;
-  }): Promise<{
-    workflowId: string;
-    isDuplicate: boolean;
-    duplicateOfWorkflowId: string | null;
-  }>;
-  savePrompt(params: {
-    workflowId: string;
-    promptType: "planner" | "writer";
-    content: string;
-  }): Promise<void>;
-  completeWorkflow(params: {
-    workflowId: string;
-    topic: string;
-    article: string;
-    editedText: string;
-    seoOutput: Record<string, unknown>;
-    category: string;
-    tags: string[];
-    publishResult?: Record<string, unknown>;
-  }): Promise<void>;
-  failWorkflow(params: { workflowId: string; errorMessage: string }): Promise<void>;
-}
-
 export interface ArticleGenerationWorkflow {
   readonly name: typeof ARTICLE_GENERATION_WORKFLOW_NAME;
   run(input: ArticleWorkflowState): Promise<ArticleWorkflowResult>;
@@ -99,18 +65,14 @@ export interface ArticleGenerationWorkflow {
 
 export interface CreateArticleGenerationWorkflowOptions {
   logger: ILogger;
-  provider: TextGenerationProvider;
-  memoryService?: WorkflowMemoryService;
-  publishers?: IPublisher[];
-  defaultPublisherId?: string;
-  categoryProvider?: ICategoryProvider;
-  tagProvider?: ITagProvider;
-  taxonomyConfig?: {
-    allowCreate: boolean;
-    defaultCategory: string;
-    maxTags: number;
-    cacheTtlSeconds: number;
-  };
+  llm: LlmPort;
+  publisher: PublishPort;
+  taxonomy?: TaxonomyPort;
+  memory?: MemoryPort;
+  /** Category used when the classifier has none to choose from. Defaults to "General". */
+  defaultCategory?: string;
+  /** Maximum number of tags the classifier may return. Defaults to 5. */
+  maxTags?: number;
 }
 
 const graphState = Annotation.Root({
@@ -152,78 +114,32 @@ const graphState = Annotation.Root({
   })
 });
 
-function buildPlannerPrompt(topic: string): string {
-  return [
-    "You are a pragmatic content strategist.",
-    `Create a simple and practical article outline for the topic: ${topic}`,
-    "Return valid JSON only.",
-    'Use this exact shape: ["Section title", "Section title"]',
-    "Create 4 to 6 sections maximum.",
-    "Avoid overly broad, academic, or redundant sections.",
-    "The outline should be suitable for a clear blog post, not a long-form essay.",
-    "Include an introduction and a conclusion through the section titles."
-  ].join("\n");
-}
-
-function buildWriterPrompt(topic: string, outline: string[]): string {
-  return [
-    "You are a clear and concise technical blog writer.",
-    `Write a Markdown article about: ${topic}`,
-    "Requirements:",
-    "- Do not include an H1 title.",
-    "- Start directly with the introduction.",
-    "- Use H2 sections aligned with the outline.",
-    "- Keep the article between 1200 and 1,800 words.",
-    "- Write in a clear, practical, human tone.",
-    "- Prefer short paragraphs and simple explanations.",
-    "- Avoid unnecessary depth, filler, repetition, and academic style.",
-    "- If the topic is technical, explain only what is useful to the reader.",
-    "- End with a short practical conclusion.",
-    "Outline:",
-    ...outline.map((section, index) => `${index + 1}. ${section}`)
-  ].join("\n");
-}
-
 export function createArticleGenerationWorkflow(
   options: CreateArticleGenerationWorkflowOptions
 ): ArticleGenerationWorkflow {
-  const {
-    logger,
-    provider,
-    memoryService,
-    publishers = [],
-    defaultPublisherId,
-    categoryProvider,
-    tagProvider,
-    taxonomyConfig
-  } = options;
+  const { logger, llm, publisher, taxonomy, memory, maxTags = 5 } = options;
+  const defaultCategory = options.defaultCategory ?? "General";
 
-  const editorAgent = createEditorAgent(provider);
-  const seoAgent = createSeoAgent(provider);
-  const classificationAgent = createClassificationAgent(provider);
-  const publisherManager = new DefaultPublisherManager(logger, publishers, {
-    defaultPublisherId
-  });
+  const plannerAgent = createPlannerAgent(llm);
+  const writerAgent = createWriterAgent(llm);
+  const editorAgent = createEditorAgent(llm);
+  const seoAgent = createSeoAgent(llm);
+  const classificationAgent = createClassificationAgent(llm);
 
   const workflow = new StateGraph(graphState)
     .addNode("planner", async (state: ArticleWorkflowState) => {
       const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
-      const plannerPrompt = buildPlannerPrompt(parsedState.topic);
+      const input = { topic: parsedState.topic };
 
-      if (memoryService && parsedState.workflowId) {
-        await memoryService.savePrompt({
+      if (memory && parsedState.workflowId) {
+        await memory.savePrompt({
           workflowId: parsedState.workflowId,
           promptType: "planner",
-          content: plannerPrompt
+          content: plannerAgent.buildPrompt(input)
         });
       }
 
-      const outline = await generateStructured(provider, {
-        prompt: plannerPrompt,
-        schema: plannerOutlineSchema,
-        shape: "array",
-        label: "Planner"
-      });
+      const outline = await plannerAgent.run(input);
 
       logger.info("Planner output ready", {
         outline,
@@ -238,21 +154,17 @@ export function createArticleGenerationWorkflow(
           outline: plannerOutlineSchema
         })
         .parse(state) as ArticleWorkflowState;
+      const input = { topic: parsedState.topic, outline: parsedState.outline };
 
-      const writerPrompt = buildWriterPrompt(parsedState.topic, parsedState.outline);
-      if (memoryService && parsedState.workflowId) {
-        await memoryService.savePrompt({
+      if (memory && parsedState.workflowId) {
+        await memory.savePrompt({
           workflowId: parsedState.workflowId,
           promptType: "writer",
-          content: writerPrompt
+          content: writerAgent.buildPrompt(input)
         });
       }
 
-      const article = (await provider.generate({ prompt: writerPrompt })).text.trim();
-
-      if (article.length === 0) {
-        throw new Error("Writer returned an empty article");
-      }
+      const article = await writerAgent.run(input);
 
       logger.info("Writer output ready", {
         articleLength: article.length,
@@ -289,17 +201,14 @@ export function createArticleGenerationWorkflow(
     .addNode("classification", async (state: ArticleWorkflowState) => {
       const parsedState = articleWorkflowStateSchema.parse(state) as ArticleWorkflowState;
 
-      const availableCategories = categoryProvider
-        ? (await categoryProvider.list()).map((category) => category.name)
-        : [taxonomyConfig?.defaultCategory ?? "General"];
-
-      const availableTags = tagProvider ? (await tagProvider.list()).map((tag) => tag.name) : [];
+      const availableCategories = taxonomy ? await taxonomy.listCategories() : [defaultCategory];
+      const availableTags = taxonomy ? await taxonomy.listTags() : [];
 
       const classificationOutput = await classificationAgent.run({
         articleText: parsedState.editedText || parsedState.article,
         availableCategories,
         availableTags,
-        maxTags: taxonomyConfig?.maxTags ?? 5
+        maxTags
       });
 
       logger.info("Classification output ready", {
@@ -325,12 +234,12 @@ export function createArticleGenerationWorkflow(
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         tags: parsedState.tags,
-        category: parsedState.category || taxonomyConfig?.defaultCategory || "General",
+        category: parsedState.category || defaultCategory,
         author: "OpenBlogAgent",
         language: "en"
       };
 
-      const publishResult = await publisherManager.publish(articleForPublishing);
+      const publishResult = await publisher.publish(articleForPublishing);
       logger.info("Publishing completed", {
         slug: articleForPublishing.slug,
         success: publishResult.success
@@ -351,8 +260,8 @@ export function createArticleGenerationWorkflow(
     name: ARTICLE_GENERATION_WORKFLOW_NAME,
     async run(input: ArticleWorkflowState): Promise<ArticleWorkflowResult> {
       const parsedInput = articleWorkflowStateSchema.parse(input) as ArticleWorkflowState;
-      const workflowMemory = memoryService
-        ? await memoryService.beginWorkflow({
+      const workflowMemory = memory
+        ? await memory.beginWorkflow({
             workflowName: ARTICLE_GENERATION_WORKFLOW_NAME,
             topic: parsedInput.topic
           })
@@ -380,14 +289,14 @@ export function createArticleGenerationWorkflow(
           await workflow.invoke(initialState)
         ) as ArticleWorkflowState;
 
-        if (memoryService && workflowMemory) {
-          await memoryService.completeWorkflow({
+        if (memory && workflowMemory) {
+          await memory.completeWorkflow({
             workflowId: workflowMemory.workflowId,
             topic: finalState.topic,
             article: finalState.article,
             editedText: finalState.editedText || finalState.article,
             seoOutput: (finalState.seoOutput ?? {}) as Record<string, unknown>,
-            category: finalState.category || taxonomyConfig?.defaultCategory || "General",
+            category: finalState.category || defaultCategory,
             tags: finalState.tags || [],
             publishResult:
               (finalState.publishResult as Record<string, unknown> | undefined) ?? undefined
@@ -402,7 +311,7 @@ export function createArticleGenerationWorkflow(
 
         return {
           article: finalState.article,
-          category: finalState.category || taxonomyConfig?.defaultCategory || "General",
+          category: finalState.category || defaultCategory,
           editedText: finalState.editedText || finalState.article,
           seoOutput: finalState.seoOutput as SeoOutput,
           tags: finalState.tags || [],
@@ -410,8 +319,8 @@ export function createArticleGenerationWorkflow(
           publishResult: finalState.publishResult as PublishResult | undefined
         };
       } catch (error) {
-        if (memoryService && workflowMemory) {
-          await memoryService.failWorkflow({
+        if (memory && workflowMemory) {
+          await memory.failWorkflow({
             workflowId: workflowMemory.workflowId,
             errorMessage: error instanceof Error ? error.message : String(error)
           });
