@@ -54,7 +54,7 @@ async function main(): Promise<void> {
   const topic = resolveTopic();
   const env = loadEnv();
   const memoryStore = await createSQLiteMemoryService({
-    filePath: process.env.OPENBLOG_MEMORY_DB_PATH
+    filePath: env.OPENBLOG_MEMORY_DB_PATH
   });
 
   logger.info("CLI starting article generation", {
@@ -70,19 +70,19 @@ async function main(): Promise<void> {
   });
 
   logger.info("Initializing text generation provider", {
-    providerType: process.env.OPENROUTER_API_KEY ? "openrouter" : "ollama"
+    providerType: env.OPENROUTER_API_KEY ? "openrouter" : "ollama"
   });
 
   const provider = createDefaultTextGenerationProvider({
     openRouter: new OpenRouterProvider({
-      apiKey: process.env.OPENROUTER_API_KEY,
-      model: process.env.OPENROUTER_MODEL,
-      siteUrl: process.env.OPENROUTER_SITE_URL,
-      siteName: process.env.OPENROUTER_SITE_NAME
+      apiKey: env.OPENROUTER_API_KEY,
+      model: env.OPENROUTER_MODEL,
+      siteUrl: env.OPENROUTER_SITE_URL,
+      siteName: env.OPENROUTER_SITE_NAME
     }),
     ollama: new OllamaProvider({
-      baseUrl: process.env.OLLAMA_BASE_URL,
-      model: process.env.OLLAMA_MODEL
+      baseUrl: env.OLLAMA_BASE_URL,
+      model: env.OLLAMA_MODEL
     })
   });
 
@@ -91,6 +91,13 @@ async function main(): Promise<void> {
     wordpress: Boolean(env.OPENBLOG_WORDPRESS_ENDPOINT),
     ghost: Boolean(env.OPENBLOG_GHOST_ENDPOINT)
   });
+
+  const taxonomyConfig = {
+    allowCreate: env.OPENBLOG_TAXONOMY_ALLOW_CREATE,
+    defaultCategory: env.OPENBLOG_TAXONOMY_DEFAULT_CATEGORY,
+    maxTags: env.OPENBLOG_TAXONOMY_MAX_TAGS,
+    cacheTtlSeconds: env.OPENBLOG_TAXONOMY_CACHE_TTL_SECONDS
+  };
 
   const publishers = createPublishersFromConfig(
     {
@@ -114,26 +121,12 @@ async function main(): Promise<void> {
           }
         : undefined,
       defaultPublisherId: env.OPENBLOG_DEFAULT_PUBLISHER,
-      taxonomy: env.OPENBLOG_TAXONOMY_ALLOW_CREATE
-        ? {
-            allowCreate: env.OPENBLOG_TAXONOMY_ALLOW_CREATE,
-            defaultCategory: env.OPENBLOG_TAXONOMY_DEFAULT_CATEGORY,
-            maxTags: env.OPENBLOG_TAXONOMY_MAX_TAGS,
-            cacheTtlSeconds: env.OPENBLOG_TAXONOMY_CACHE_TTL_SECONDS
-          }
-        : undefined
+      taxonomy: taxonomyConfig
     },
     logger
   );
 
   const defaultPublisherId = env.OPENBLOG_DEFAULT_PUBLISHER;
-
-  const taxonomyConfig = {
-    allowCreate: env.OPENBLOG_TAXONOMY_ALLOW_CREATE,
-    defaultCategory: env.OPENBLOG_TAXONOMY_DEFAULT_CATEGORY,
-    maxTags: env.OPENBLOG_TAXONOMY_MAX_TAGS,
-    cacheTtlSeconds: env.OPENBLOG_TAXONOMY_CACHE_TTL_SECONDS
-  };
 
   const categoryProvider =
     env.OPENBLOG_TAXONOMY_PROVIDER === "wordpress" && env.OPENBLOG_WORDPRESS_ENDPOINT

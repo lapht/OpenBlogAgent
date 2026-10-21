@@ -148,14 +148,14 @@ Example publishing settings for WordPress (dummy values only):
 ```bash
 OPENBLOG_DEFAULT_PUBLISHER=wordpress
 OPENBLOG_OUTPUT_DIR=output/articles
-OPENBLOG_WORDPRESS_ENDPOINT=https://example.com/wp-json/wp/v2/posts
+OPENBLOG_WORDPRESS_ENDPOINT=https://example.com/wp-json/wp/v2
 OPENBLOG_WORDPRESS_USERNAME=demo_user
 OPENBLOG_WORDPRESS_PASSWORD=dummy_password
 OPENBLOG_WORDPRESS_APPLICATION_PASSWORD=dummy_app_password
 OPENBLOG_WORDPRESS_STATUS=draft
 ```
 
-The same pattern works for Ghost with:
+The Ghost publisher is not supported yet (it only prepares a payload). Settings for reference:
 
 ```bash
 OPENBLOG_DEFAULT_PUBLISHER=ghost
