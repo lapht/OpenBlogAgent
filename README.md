@@ -133,7 +133,7 @@ npm install
 
 2. Configure at least one LLM provider.
 
-OpenRouter is the primary provider. Ollama is used as a fallback if OpenRouter is not configured or fails.
+OpenRouter is the primary provider. Ollama is used when OpenRouter is not configured, and as a fallback when OpenRouter is temporarily unavailable.
 
 Example `.env` for OpenRouter:
 
@@ -212,8 +212,10 @@ The CLI reads these environment variables:
 
 Provider behavior:
 
-- OpenRouter is tried first.
-- If OpenRouter is unavailable or not configured, the app tries Ollama.
+- OpenRouter is tried first when `OPENROUTER_API_KEY` is set; otherwise Ollama is used directly.
+- Every request has a timeout (120s by default). Rate limits (429, honoring `Retry-After`), 5xx, timeouts and network errors are retried with exponential backoff and jitter (2 retries).
+- Auth errors (401/402/403) and invalid responses fail immediately and do not fall back to Ollama.
+- If OpenRouter is unavailable after retries, the app falls back to Ollama and logs which provider answered.
 - If both fail, the CLI exits with a descriptive error message.
 
 ## Input
@@ -326,12 +328,12 @@ Expected behavior:
 If you see an error similar to:
 
 ```text
-No LLM provider available. OpenRouter failed: OPENROUTER_API_KEY is required for OpenRouterProvider. Ollama failed: fetch failed.
+No LLM provider available. openrouter failed: openrouter request failed with status 503. ollama failed: ollama request failed: fetch failed.
 ```
 
 then one of these is true:
 
-- `OPENROUTER_API_KEY` is not configured
+- OpenRouter is temporarily unavailable or rate limiting you
 - Ollama is not running locally
 - `OLLAMA_BASE_URL` points to the wrong host or port
 

@@ -30,7 +30,7 @@ export function createSeoAgent(provider: TextGenerationProvider): SeoAgent {
   return {
     async run(input: SeoAgentInput): Promise<SeoOutput> {
       const prompt = buildSeoPrompt(input);
-      const rawOutput = await provider.generate(prompt);
+      const rawOutput = (await provider.generate({ prompt })).text;
       return parseSeoOutput(rawOutput);
     }
   };

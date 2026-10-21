@@ -22,11 +22,6 @@ export interface ITool {
   name: string;
 }
 
-export interface IProvider {
-  id: Identifier;
-  name: string;
-}
-
 export interface IPublisher {
   id: Identifier;
   name: string;

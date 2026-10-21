@@ -6,14 +6,16 @@ import { createSeoAgent } from "../../packages/agents/src/seo/agent";
 describe("SEO agent output parsing", () => {
   it("normalizes overly long metadata and string headings from model output", async () => {
     const provider = {
-      generate: async () =>
-        JSON.stringify({
+      generate: async () => ({
+        model: "test",
+        text: JSON.stringify({
           title: "A".repeat(70),
           metaDescription: "B".repeat(200),
           slug: "my-slug",
           h1: "Example H1",
           headings: ["Overview", "Approach", "Conclusion"]
         })
+      })
     };
 
     const agent = createSeoAgent(provider as never);
@@ -33,7 +35,7 @@ describe("SEO agent output parsing", () => {
 
   it("includes the raw response in the error when SEO JSON is invalid", async () => {
     const provider = {
-      generate: async () => "not valid json"
+      generate: async () => ({ model: "test", text: "not valid json" })
     };
 
     const agent = createSeoAgent(provider as never);
@@ -48,7 +50,7 @@ describe("SEO agent output parsing", () => {
 
   it("includes the raw response in the error when editor JSON is invalid", async () => {
     const provider = {
-      generate: async () => "```json\n{not valid json}\n```"
+      generate: async () => ({ model: "test", text: "```json\n{not valid json}\n```" })
     };
 
     const agent = createEditorAgent(provider as never);

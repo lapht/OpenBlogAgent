@@ -21,7 +21,7 @@ export function createEditorAgent(provider: TextGenerationProvider): EditorAgent
   return {
     async run(input: EditorAgentInput): Promise<EditorOutput> {
       const prompt = buildEditorPrompt(input);
-      const rawOutput = await provider.generate(prompt);
+      const rawOutput = (await provider.generate({ prompt })).text;
       return parseEditorOutput(rawOutput);
     }
   };
