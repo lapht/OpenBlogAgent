@@ -1,5 +1,6 @@
 export * from "./classification/agent";
 export * from "./structured-output";
+export * from "./quality";
 export * from "./planner/agent";
 export * from "./writer/agent";
 
