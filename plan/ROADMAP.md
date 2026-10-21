@@ -21,15 +21,15 @@ Build a robust, open and extensible platform for automated blog operations.
 
 ## Phase 2 - Runtime Contracts
 
-- [ ] Unified typed provider contract with timeouts and error classification (OpenRouter and Ollama providers exist)
+- [x] Unified typed provider contract with timeouts and error classification (OpenRouter and Ollama)
 - [ ] Expand graph runtime contracts and execution abstractions
 - [ ] Finalize plugin contract surface in SDK
 
 ## Phase 3 - Infrastructure Adapters
 
-- [x] SQLite memory storage (`packages/storage`; not yet transactional or versioned)
-- [x] Markdown publisher (needs safe file names and no silent overwrite)
-- [~] WordPress publisher (exists, tested with mocked HTTP only; Markdown conversion, taxonomy fixes pending)
+- [x] SQLite memory storage (`packages/storage`; transactional, versioned migrations)
+- [x] Markdown publisher (safe file names, no silent overwrite)
+- [~] WordPress publisher (idempotent, drafts first, taxonomy resolution; tested with mocked HTTP only, never against a real site)
 - [ ] Ghost publisher — **not implemented**: `GhostPublisher` only prepares a payload and makes no HTTP call
 - [ ] Tool adapters and capability registration model
 
@@ -37,12 +37,12 @@ Build a robust, open and extensible platform for automated blog operations.
 
 - [ ] Workflow assembly model
 - [ ] Agent role composition model
-- [ ] Execution lifecycle and observability contracts
+- [~] Execution lifecycle and observability (statuses, resume, run-correlated logs done; metrics and tracing planned)
 
 ## Phase 5 - Product Surface
 
 - [ ] Dashboard implementation
-- [~] CLI (topic argument only; no stable flags or exit codes yet)
+- [x] CLI (`generate`, `resume`, `approve`, `list`; `--dry-run`, `--json`; documented exit codes)
 - [ ] Plugin developer examples
 
 ## Phase 6 - Production Readiness
