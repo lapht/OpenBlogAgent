@@ -1,10 +1,26 @@
 import type { Identifier } from "@openblog/types";
 
-/** `started -> running -> published | needs_review | failed`, or `duplicate` when stopped by the duplicate policy. */
+/**
+ * `started -> running -> published | awaiting_approval | needs_review | failed`, or `duplicate`
+ * when stopped by the duplicate policy. `awaiting_approval`: the article passed the quality gate
+ * and waits for `approve`; `needs_review`: it failed the gate.
+ */
 export type WorkflowStatus =
-  "started" | "running" | "published" | "needs_review" | "failed" | "duplicate";
+  | "started"
+  | "running"
+  | "published"
+  | "awaiting_approval"
+  | "needs_review"
+  | "failed"
+  | "duplicate";
 
-export type FinalWorkflowStatus = Extract<WorkflowStatus, "published" | "needs_review" | "failed">;
+export type FinalWorkflowStatus = Extract<
+  WorkflowStatus,
+  "published" | "awaiting_approval" | "needs_review" | "failed"
+>;
+
+/** Where a stored article stands in the review flow. */
+export type ArticleReviewState = "needs_review" | "approved" | "published";
 
 export interface WorkflowRecord {
   id: Identifier;
@@ -59,6 +75,13 @@ export interface ArticleRecord {
   publishRemoteId: string | null;
   publishRemoteUrl: string | null;
   publishRemoteStatus: string | null;
+  reviewState: ArticleReviewState;
+  /** Whether the quality gate passed; null when unknown (articles stored before the gate existed). */
+  gatePassed: boolean | null;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  /** Why an article that failed the gate was approved anyway. */
+  approvalOverrideReason: string | null;
   createdAt: string;
   updatedAt: string;
 }

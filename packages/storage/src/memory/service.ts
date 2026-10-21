@@ -39,9 +39,22 @@ export interface FinishWorkflowParams {
   category: string;
   tags: string[];
   publishResult?: Record<string, unknown>;
+  /** Whether the quality gate passed. Defaults to true for a published or awaiting run, else unknown. */
+  gatePassed?: boolean;
   failedStep?: string;
   errorCode?: string;
   errorMessage?: string;
+}
+
+export interface BeginApprovalParams {
+  workflowId: Identifier;
+  approvedBy: string;
+  overrideReason?: string;
+}
+
+export interface CompleteApprovalParams {
+  workflowId: Identifier;
+  publishResult: Record<string, unknown> & { success?: boolean };
 }
 
 export interface MarkDuplicateParams {
@@ -197,9 +210,52 @@ export class MemoryService {
         publishRemoteId: remote.id,
         publishRemoteUrl: remote.url,
         publishRemoteStatus: remote.status,
+        reviewState: params.status === "published" ? "published" : "needs_review",
+        gatePassed:
+          params.gatePassed ??
+          (params.status === "published" || params.status === "awaiting_approval" ? true : null),
+        approvedBy: null,
+        approvedAt: null,
+        approvalOverrideReason: null,
         createdAt: now,
         updatedAt: now
       });
+    });
+  }
+
+  /** The stored article of a run with the status of that run, or null if there is none. */
+  async loadArticle(workflowId: Identifier) {
+    const workflow = this.workflowRepository.getById(workflowId);
+    const article = this.articleRepository.getByWorkflowId(workflowId);
+    return workflow && article ? { workflowStatus: workflow.status, article } : null;
+  }
+
+  /** Records who approved the article and when, before it is sent to the publisher. */
+  async beginApproval(params: BeginApprovalParams): Promise<void> {
+    this.articleRepository.markApproved(params.workflowId, {
+      approvedBy: params.approvedBy,
+      approvedAt: new Date().toISOString(),
+      overrideReason: params.overrideReason ?? null
+    });
+  }
+
+  /** Stores the publish that followed an approval; the article and run become published only on success. */
+  async completeApproval(params: CompleteApprovalParams): Promise<void> {
+    this.runInTransaction(() => {
+      const published = params.publishResult.success === true;
+      this.articleRepository.recordApprovalPublish(params.workflowId, {
+        published,
+        publishResult: params.publishResult,
+        remote: publishRemote(params.publishResult)
+      });
+      if (published) {
+        this.workflowRepository.updateStatus(
+          params.workflowId,
+          "published",
+          new Date().toISOString(),
+          null
+        );
+      }
     });
   }
 

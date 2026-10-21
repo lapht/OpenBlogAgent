@@ -39,6 +39,15 @@ export const envSchema = z.object({
   OPENBLOG_WORDPRESS_ENDPOINT: optionalString(),
   OPENBLOG_WORDPRESS_USERNAME: optionalString(),
   OPENBLOG_WORDPRESS_APPLICATION_PASSWORD: optionalString(), // secret
+  /**
+   * When a generated article goes live. `draft` (default): sent to the target as a draft, live only
+   * after `approve`. `publish_after_approval`: kept in the store, nothing sent until `approve`.
+   * `publish_if_gate_passes`: published live as soon as the quality gate passes (risky).
+   */
+  OPENBLOG_PUBLICATION_POLICY: z
+    .enum(["draft", "publish_after_approval", "publish_if_gate_passes"])
+    .default("draft"),
+  /** Default WordPress status for direct publisher use; the workflow sets it from the policy. */
   OPENBLOG_WORDPRESS_STATUS: z.enum(["draft", "publish"]).optional(),
   /** When a WordPress post with the same slug exists: update it or fail with `conflict`. */
   OPENBLOG_WORDPRESS_ON_EXISTING: z.enum(["update", "conflict"]).default("update"),

@@ -45,6 +45,7 @@ async function setup(options: { remote?: boolean; allowDuplicates?: boolean } = 
     llm: scriptedProvider(...Array.from({ length: 4 }, replies).flat()),
     memory: handle.memoryService,
     quality: lenientQuality,
+    publicationPolicy: "publish_if_gate_passes",
     allowDuplicates: options.allowDuplicates,
     publisher: {
       publish: async (article) => {
@@ -83,6 +84,7 @@ describe("duplicate policy", () => {
       llm,
       memory: first.handle.memoryService,
       quality: lenientQuality,
+      publicationPolicy: "publish_if_gate_passes",
       publisher: { publish: async () => ({ success: true, publisherId: "f", publisherName: "F" }) }
     });
 

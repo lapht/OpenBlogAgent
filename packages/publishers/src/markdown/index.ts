@@ -1,4 +1,4 @@
-import { access, mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { stringify } from "yaml";
@@ -30,6 +30,16 @@ export function slugify(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+/** True when the file exists and its front matter says `status: draft`. */
+async function isDraftFile(filePath: string): Promise<boolean> {
+  try {
+    const frontMatter = (await readFile(filePath, "utf8")).split(/^---\s*$/m)[1] ?? "";
+    return /^status:\s*draft\s*$/m.test(frontMatter);
+  } catch {
+    return false;
+  }
 }
 
 export class MarkdownPublisher implements IPublisher {
@@ -118,9 +128,11 @@ export class MarkdownPublisher implements IPublisher {
 
     try {
       await mkdir(outputDir, { recursive: true });
+      // Going live replaces the draft this publisher wrote earlier; any other file is protected.
+      const replacesDraft = article.status === "publish" && (await isDraftFile(outputPath));
       await writeFile(outputPath, contents, {
         encoding: "utf8",
-        flag: this.config.overwrite ? "w" : "wx"
+        flag: this.config.overwrite || replacesDraft ? "w" : "wx"
       });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "EEXIST") {
@@ -171,7 +183,8 @@ export class MarkdownPublisher implements IPublisher {
       createdAt: article.createdAt,
       updatedAt: article.updatedAt,
       author: article.author,
-      language: article.language
+      language: article.language,
+      ...(article.status ? { status: article.status } : {})
     });
 
     return `---\n${frontMatter}---\n\n${article.content}\n`;

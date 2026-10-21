@@ -72,7 +72,16 @@ const classificationSchema = z.object({
 });
 
 /** `needs_review`: the quality gate rejected the article; it is stored and nothing was published. */
-export type WorkflowRunStatus = "published" | "needs_review" | "failed" | "duplicate";
+export type WorkflowRunStatus =
+  "published" | "awaiting_approval" | "needs_review" | "failed" | "duplicate";
+
+/**
+ * When an article goes live:
+ * - `draft` (default): sent to the target as a draft once the gate passes; live only after `approve`.
+ * - `publish_after_approval`: nothing is sent until `approve`.
+ * - `publish_if_gate_passes`: published live as soon as the gate passes (risky; explicit opt-in).
+ */
+export type PublicationPolicy = "draft" | "publish_after_approval" | "publish_if_gate_passes";
 
 export interface WorkflowFailure {
   step: string;
@@ -103,6 +112,8 @@ function errorCode(error: unknown): string {
 }
 
 interface ArticleWorkflowOutput {
+  /** Id of the stored run (what `approve` takes); absent without a memory store. */
+  workflowId?: string;
   article: string;
   category: string;
   editedText: string;
@@ -125,6 +136,14 @@ export interface FailedWorkflowResult extends ArticleWorkflowOutput {
   publishResult?: PublishResult;
 }
 
+/** The article passed the gate; under the active policy it waits for `approve` before going live. */
+export interface AwaitingApprovalWorkflowResult extends ArticleWorkflowOutput {
+  status: "awaiting_approval";
+  failure?: undefined;
+  /** The draft the target accepted; absent under `publish_after_approval`. */
+  publishResult?: PublishResult;
+}
+
 /** The quality gate rejected the article after the allowed regenerations; nothing was published. */
 export interface NeedsReviewWorkflowResult extends ArticleWorkflowOutput {
   status: "needs_review";
@@ -136,6 +155,7 @@ export interface NeedsReviewWorkflowResult extends ArticleWorkflowOutput {
 /** The duplicate policy stopped the run before anything was published. */
 export interface DuplicateWorkflowResult {
   status: "duplicate";
+  workflowId?: string;
   topic: string;
   failure: WorkflowFailure;
   duplicateOf: DuplicateInfo;
@@ -144,14 +164,47 @@ export interface DuplicateWorkflowResult {
 
 export type ArticleWorkflowResult =
   | PublishedWorkflowResult
+  | AwaitingApprovalWorkflowResult
   | NeedsReviewWorkflowResult
   | DuplicateWorkflowResult
   | FailedWorkflowResult;
+
+export type ApprovalErrorCode =
+  "memory_unavailable" | "not_found" | "already_published" | "gate_not_passed" | "not_publishable";
+
+/** Thrown when an article cannot be approved; nothing is published or changed. */
+export class ApprovalError extends Error {
+  readonly code: ApprovalErrorCode;
+
+  constructor(code: ApprovalErrorCode, message: string) {
+    super(message);
+    this.name = "ApprovalError";
+    this.code = code;
+  }
+}
+
+export interface ApprovalInput {
+  /** Who approves (the CLI user); recorded with the time. */
+  approvedBy: string;
+  /** Required to approve an article that did not pass the quality gate; recorded. */
+  overrideReason?: string;
+}
+
+export interface ApprovalResult {
+  status: "published" | "failed";
+  workflowId: string;
+  title: string;
+  slug: string;
+  publishResult: PublishResult;
+  failure?: WorkflowFailure;
+}
 
 export interface ArticleGenerationWorkflow {
   readonly name: typeof ARTICLE_GENERATION_WORKFLOW_NAME;
   run(input: ArticleWorkflowInput): Promise<ArticleWorkflowResult>;
   /** Continues a run that did not publish, reusing the stored output of its completed steps. */
+  /** Publishes a stored article live. Refuses articles that failed the gate without an override reason. */
+  approve(workflowId: string, input: ApprovalInput): Promise<ApprovalResult>;
   resume(workflowId: string, options?: { force?: boolean }): Promise<ArticleWorkflowResult>;
 }
 
@@ -180,6 +233,8 @@ export interface CreateArticleGenerationWorkflowOptions {
   maxTags?: number;
   /** Generate duplicates without `force` on every run (OPENBLOG_ALLOW_DUPLICATES). */
   allowDuplicates?: boolean;
+  /** When articles go live. Defaults to `draft`: never live without `approve`. */
+  publicationPolicy?: PublicationPolicy;
   quality?: {
     /** Overrides of the default validation thresholds. */
     rules?: Partial<ArticleValidationRules>;
@@ -356,6 +411,7 @@ export function createArticleGenerationWorkflow(
   const defaultCategory = options.defaultCategory ?? "General";
   const qualityRules = options.quality?.rules ?? {};
   const allowDuplicates = options.allowDuplicates ?? false;
+  const policy = options.publicationPolicy ?? "draft";
   const maxRegenerations = Math.max(0, options.quality?.maxAttempts ?? 2);
 
   const plannerAgent = createPlannerAgent(llm);
@@ -559,7 +615,9 @@ export function createArticleGenerationWorkflow(
           tags: required(state.tags, "tags"),
           category: required(state.category, "category"),
           author: "OpenBlogAgent",
-          language: "en"
+          language: "en",
+          // Only this policy ever sends a live post straight from a run.
+          status: policy === "publish_if_gate_passes" ? "publish" : "draft"
         };
 
         // The publisher manager logs the outcome; the run's status is decided in `run`.
@@ -585,7 +643,9 @@ export function createArticleGenerationWorkflow(
     )
     .addEdge("regenerate", "writer")
     // A rejected article is still classified so a reviewer can publish it later.
-    .addConditionalEdges("classification", (state) => (state.qualityPassed ? "publisher" : END))
+    .addConditionalEdges("classification", (state) =>
+      state.qualityPassed && policy !== "publish_after_approval" ? "publisher" : END
+    )
     .addEdge("publisher", END)
     .compile();
 
@@ -622,7 +682,13 @@ export function createArticleGenerationWorkflow(
       errorCode: failure.code
     });
 
-    return { status: "duplicate", topic, failure, duplicateOf: duplicate };
+    return {
+      status: "duplicate",
+      workflowId: workflowMemory?.workflowId,
+      topic,
+      failure,
+      duplicateOf: duplicate
+    };
   }
 
   async function execute(
@@ -670,6 +736,10 @@ export function createArticleGenerationWorkflow(
       const publishResult = finalState.publishResult;
       const needsReview = !required(finalState.qualityPassed, "qualityPassed");
       const violations = finalState.qualityViolations ?? [];
+      const awaitingApproval =
+        !needsReview &&
+        (policy === "publish_after_approval" ||
+          (policy === "draft" && publishResult?.success === true));
       const failure: WorkflowFailure | undefined = needsReview
         ? {
             step: "quality",
@@ -679,7 +749,7 @@ export function createArticleGenerationWorkflow(
               .map((violation) => violation.code)
               .join(", ")}`
           }
-        : publishResult?.success
+        : awaitingApproval || publishResult?.success
           ? undefined
           : {
               step: "publisher",
@@ -690,7 +760,9 @@ export function createArticleGenerationWorkflow(
         ? "needs_review"
         : failure
           ? "failed"
-          : "published";
+          : awaitingApproval
+            ? "awaiting_approval"
+            : "published";
 
       if (memory && workflowMemory) {
         await memory.finishWorkflow({
@@ -698,6 +770,7 @@ export function createArticleGenerationWorkflow(
           status,
           ...output,
           publishResult: publishResult && { ...publishResult },
+          gatePassed: !needsReview,
           failedStep: failure?.step,
           errorCode: failure?.code,
           errorMessage: failure?.message
@@ -721,6 +794,13 @@ export function createArticleGenerationWorkflow(
           errorCode: failure.code,
           error: failure.message
         });
+      } else if (awaitingApproval) {
+        logger.info("Article workflow waiting for approval", {
+          topic,
+          workflow: ARTICLE_GENERATION_WORKFLOW_NAME,
+          policy,
+          workflowId: workflowMemory?.workflowId
+        });
       } else {
         logger.info("Article workflow completed", {
           articleLength: output.article.length,
@@ -729,14 +809,21 @@ export function createArticleGenerationWorkflow(
         });
       }
 
+      const id = workflowMemory?.workflowId;
+
       if (failure && needsReview) {
-        return { ...output, status: "needs_review", failure, violations };
+        return { ...output, workflowId: id, status: "needs_review", failure, violations };
+      }
+
+      if (awaitingApproval) {
+        return { ...output, workflowId: id, status: "awaiting_approval", publishResult };
       }
 
       return failure
-        ? { ...output, status: "failed", failure, publishResult }
+        ? { ...output, workflowId: id, status: "failed", failure, publishResult }
         : {
             ...output,
+            workflowId: id,
             status: "published",
             publishResult: required(publishResult, "publishResult")
           };
@@ -780,6 +867,101 @@ export function createArticleGenerationWorkflow(
       }
 
       return execute(topic, workflowMemory, force);
+    },
+
+    async approve(workflowId: string, input: ApprovalInput): Promise<ApprovalResult> {
+      if (!memory) {
+        throw new ApprovalError(
+          "memory_unavailable",
+          "Approving an article requires a memory store"
+        );
+      }
+      const stored = await memory.loadArticle(workflowId);
+      if (!stored) {
+        throw new ApprovalError("not_found", `No stored article for workflow ${workflowId}`);
+      }
+
+      const { article } = stored;
+      if (article.reviewState === "published") {
+        throw new ApprovalError(
+          "already_published",
+          `The article of workflow ${workflowId} is already published`
+        );
+      }
+
+      const overrideReason = input.overrideReason?.trim() || undefined;
+      const gatePassed = article.gatePassed === true;
+      if (!gatePassed && !overrideReason) {
+        throw new ApprovalError(
+          "gate_not_passed",
+          `The article of workflow ${workflowId} did not pass the quality gate; approve it with an override reason to publish it anyway`
+        );
+      }
+
+      const description = article.seo.metaDescription;
+      if (!article.title || !article.slug || typeof description !== "string") {
+        throw new ApprovalError(
+          "not_publishable",
+          `The stored article of workflow ${workflowId} has no title, slug or description`
+        );
+      }
+
+      await memory.beginApproval({
+        workflowId,
+        approvedBy: input.approvedBy,
+        overrideReason: gatePassed ? undefined : overrideReason
+      });
+      logger.info("Article approved", {
+        workflowId,
+        approvedBy: input.approvedBy,
+        overridden: !gatePassed,
+        overrideReason: gatePassed ? undefined : overrideReason
+      });
+
+      const now = new Date().toISOString();
+      // The publisher looks the slug up first, so retrying after a failed approval does not duplicate.
+      const publishResult = publishResultSchema.parse(
+        await publisher.publish({
+          title: article.title,
+          slug: article.slug,
+          summary: description,
+          content: article.editedMarkdown,
+          createdAt: now,
+          updatedAt: now,
+          tags: article.tags,
+          category: article.category ?? defaultCategory,
+          author: "OpenBlogAgent",
+          language: "en",
+          status: "publish"
+        })
+      );
+      await memory.completeApproval({ workflowId, publishResult: { ...publishResult } });
+
+      const result = {
+        workflowId,
+        title: article.title,
+        slug: article.slug,
+        publishResult
+      };
+      if (publishResult.success) {
+        logger.info("Approved article published", { workflowId, slug: article.slug });
+        return { ...result, status: "published" };
+      }
+
+      logger.error("Publishing the approved article failed", {
+        workflowId,
+        errorCode: publishResult.error?.code,
+        error: publishResult.error?.message
+      });
+      return {
+        ...result,
+        status: "failed",
+        failure: {
+          step: "publisher",
+          code: publishResult.error?.code ?? "publish_failed",
+          message: publishResult.error?.message ?? "Publisher did not confirm the publication"
+        }
+      };
     },
 
     async resume(

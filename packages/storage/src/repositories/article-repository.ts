@@ -2,7 +2,7 @@ import type { Database } from "better-sqlite3";
 import type { Identifier } from "@openblog/types";
 
 import type { IRepositoryContract } from "./index";
-import type { ArticleRecord } from "./models";
+import type { ArticleRecord, ArticleReviewState } from "./models";
 
 interface ArticleRow {
   id: string;
@@ -19,6 +19,11 @@ interface ArticleRow {
   publish_remote_id: string | null;
   publish_remote_url: string | null;
   publish_remote_status: string | null;
+  review_state: ArticleReviewState;
+  gate_passed: number | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  approval_override_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -44,6 +49,11 @@ export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
           publish_remote_id,
           publish_remote_url,
           publish_remote_status,
+          review_state,
+          gate_passed,
+          approved_by,
+          approved_at,
+          approval_override_reason,
           created_at,
           updated_at
          FROM articles
@@ -72,9 +82,14 @@ export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
           publish_remote_id,
           publish_remote_url,
           publish_remote_status,
+          review_state,
+          gate_passed,
+          approved_by,
+          approved_at,
+          approval_override_reason,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(workflow_id) DO UPDATE SET
           topic = excluded.topic,
           title = excluded.title,
@@ -88,6 +103,11 @@ export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
           publish_remote_id = excluded.publish_remote_id,
           publish_remote_url = excluded.publish_remote_url,
           publish_remote_status = excluded.publish_remote_status,
+          review_state = excluded.review_state,
+          gate_passed = excluded.gate_passed,
+          approved_by = excluded.approved_by,
+          approved_at = excluded.approved_at,
+          approval_override_reason = excluded.approval_override_reason,
           updated_at = excluded.updated_at`
       )
       .run(
@@ -105,6 +125,11 @@ export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
         model.publishRemoteId,
         model.publishRemoteUrl,
         model.publishRemoteStatus,
+        model.reviewState,
+        model.gatePassed === null ? null : model.gatePassed ? 1 : 0,
+        model.approvedBy,
+        model.approvedAt,
+        model.approvalOverrideReason,
         model.createdAt,
         model.updatedAt
       );
@@ -128,6 +153,11 @@ export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
           publish_remote_id,
           publish_remote_url,
           publish_remote_status,
+          review_state,
+          gate_passed,
+          approved_by,
+          approved_at,
+          approval_override_reason,
           created_at,
           updated_at
          FROM articles
@@ -136,6 +166,61 @@ export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
       .get(workflowId) as ArticleRow | undefined;
 
     return row ? this.mapRow(row) : null;
+  }
+
+  /** Marks the article as approved by `approvedBy`, before it is sent to the publisher. */
+  markApproved(
+    workflowId: Identifier,
+    approval: { approvedBy: string; approvedAt: string; overrideReason: string | null }
+  ): void {
+    this.db
+      .prepare(
+        `UPDATE articles
+         SET review_state = 'approved',
+             approved_by = ?,
+             approved_at = ?,
+             approval_override_reason = ?,
+             updated_at = ?
+         WHERE workflow_id = ?`
+      )
+      .run(
+        approval.approvedBy,
+        approval.approvedAt,
+        approval.overrideReason,
+        new Date().toISOString(),
+        workflowId
+      );
+  }
+
+  /** Stores the outcome of the publish that followed an approval; `published` only on success. */
+  recordApprovalPublish(
+    workflowId: Identifier,
+    publish: {
+      published: boolean;
+      publishResult: Record<string, unknown>;
+      remote: { id: string | null; url: string | null; status: string | null };
+    }
+  ): void {
+    this.db
+      .prepare(
+        `UPDATE articles
+         SET review_state = ?,
+             publish_result_json = ?,
+             publish_remote_id = ?,
+             publish_remote_url = ?,
+             publish_remote_status = ?,
+             updated_at = ?
+         WHERE workflow_id = ?`
+      )
+      .run(
+        publish.published ? "published" : "approved",
+        JSON.stringify(publish.publishResult),
+        publish.remote.id,
+        publish.remote.url,
+        publish.remote.status,
+        new Date().toISOString(),
+        workflowId
+      );
   }
 
   /**
@@ -153,7 +238,7 @@ export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
          FROM articles a
          JOIN workflows w ON w.id = a.workflow_id
          WHERE a.workflow_id != ?
-           AND w.status IN ('published', 'needs_review')
+           AND w.status IN ('published', 'awaiting_approval', 'needs_review')
            AND (a.slug = ? OR lower(a.title) = lower(?))
          ORDER BY a.created_at ASC
          LIMIT 1`
@@ -184,6 +269,11 @@ export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
       publishRemoteId: row.publish_remote_id,
       publishRemoteUrl: row.publish_remote_url,
       publishRemoteStatus: row.publish_remote_status,
+      reviewState: row.review_state,
+      gatePassed: row.gate_passed === null ? null : row.gate_passed === 1,
+      approvedBy: row.approved_by,
+      approvedAt: row.approved_at,
+      approvalOverrideReason: row.approval_override_reason,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };

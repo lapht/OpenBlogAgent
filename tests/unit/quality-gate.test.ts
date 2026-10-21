@@ -55,6 +55,7 @@ function setup(
     logger,
     llm,
     quality,
+    publicationPolicy: "publish_if_gate_passes",
     taxonomy: { listCategories: async () => ["News"], listTags: async () => ["ai"] },
     publisher: {
       publish: async (article) => {

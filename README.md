@@ -234,6 +234,17 @@ npm start "How local LLMs change technical writing workflows"
 
 A topic that was already published, or an article whose slug or title already exists (stored or on the publishing target), is refused with outcome `duplicate` and exit code 1, before any LLM call in the topic case. Pass `--force` (`npm start -- "topic" --force`) or set `OPENBLOG_ALLOW_DUPLICATES=true` to generate it anyway; the override is recorded on the run.
 
+### Publication policy and approval
+
+By default (`OPENBLOG_PUBLICATION_POLICY=draft`) nothing goes live on its own: after the quality gate passes, the article is sent to the target as a draft and the run ends as `awaiting_approval` (exit code 0). Publish it live with:
+
+```bash
+npm start -- approve <workflowId>
+npm start -- approve <workflowId> --override "reason"   # for an article that failed the quality gate
+```
+
+`approve` records who approved and when, publishes once, and refuses articles that are already published or did not pass the gate (unless overridden with a recorded reason). `publish_after_approval` sends nothing until `approve`; `publish_if_gate_passes` publishes live as soon as the gate passes and should be used with care.
+
 ## Output
 
 The workflow produces:

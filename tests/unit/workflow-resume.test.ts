@@ -64,6 +64,7 @@ async function setup(llm: ReturnType<typeof flakyProvider>, publishOk = true) {
     logger,
     llm,
     quality: lenientQuality,
+    publicationPolicy: "publish_if_gate_passes",
     memory: handle.memoryService,
     publisher: {
       publish: async (article) => {

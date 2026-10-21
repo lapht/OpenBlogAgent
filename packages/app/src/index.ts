@@ -140,6 +140,7 @@ export async function createApplication(
     defaultCategory: taxonomyConfig.defaultCategory,
     maxTags: taxonomyConfig.maxTags,
     allowDuplicates: config.OPENBLOG_ALLOW_DUPLICATES,
+    publicationPolicy: config.OPENBLOG_PUBLICATION_POLICY,
     quality: {
       maxAttempts: config.OPENBLOG_QUALITY_MAX_ATTEMPTS,
       rules: {
