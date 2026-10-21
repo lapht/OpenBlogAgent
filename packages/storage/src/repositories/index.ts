@@ -1,11 +1,6 @@
 import type { Identifier } from "@openblog/types";
 
-import type {
-  ArticleRecord,
-  PromptRecord,
-  TopicRecord,
-  WorkflowRecord
-} from "./models";
+import type { ArticleRecord, PromptRecord, TopicRecord, WorkflowRecord } from "./models";
 
 export interface IRepositoryContract<TModel = unknown> {
   getById(id: Identifier): Promise<TModel | null>;

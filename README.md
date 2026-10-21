@@ -237,7 +237,7 @@ The workflow produces:
        slug: string;
        h1: string;
        headings: Array<{ level: "H2" | "H3"; text: string }>;
-     };
+     }
    }
    ```
 

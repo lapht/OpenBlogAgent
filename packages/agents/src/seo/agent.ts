@@ -117,22 +117,11 @@ function extractOuterJsonObject(text: string): string | null {
 
 function normalizeSeoOutput(parsed: Record<string, unknown>): SeoOutput {
   return {
-    title:
-      typeof parsed.title === "string"
-        ? parsed.title.trim().slice(0, 60)
-        : "",
+    title: typeof parsed.title === "string" ? parsed.title.trim().slice(0, 60) : "",
     metaDescription:
-      typeof parsed.metaDescription === "string"
-        ? parsed.metaDescription.trim().slice(0, 155)
-        : "",
-    slug:
-      typeof parsed.slug === "string"
-        ? normalizeSlug(parsed.slug)
-        : "",
-    h1:
-      typeof parsed.h1 === "string"
-        ? parsed.h1.trim()
-        : "",
+      typeof parsed.metaDescription === "string" ? parsed.metaDescription.trim().slice(0, 155) : "",
+    slug: typeof parsed.slug === "string" ? normalizeSlug(parsed.slug) : "",
+    h1: typeof parsed.h1 === "string" ? parsed.h1.trim() : "",
     headings: normalizeHeadings(parsed.headings)
   };
 }

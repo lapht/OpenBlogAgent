@@ -72,16 +72,22 @@ describe("memory service", () => {
 
     const db = new Database(dbPath, { readonly: true });
     const workflows = db
-      .prepare("SELECT id, status, is_duplicate, duplicate_of_workflow_id FROM workflows ORDER BY created_at ASC")
+      .prepare(
+        "SELECT id, status, is_duplicate, duplicate_of_workflow_id FROM workflows ORDER BY created_at ASC"
+      )
       .all() as Array<{
       id: string;
       status: string;
       is_duplicate: number;
       duplicate_of_workflow_id: string | null;
     }>;
-    const promptsCount = db.prepare("SELECT COUNT(*) AS count FROM prompts").get() as { count: number };
+    const promptsCount = db.prepare("SELECT COUNT(*) AS count FROM prompts").get() as {
+      count: number;
+    };
     const topic = db.prepare("SELECT hit_count FROM topics LIMIT 1").get() as { hit_count: number };
-    const articlesCount = db.prepare("SELECT COUNT(*) AS count FROM articles").get() as { count: number };
+    const articlesCount = db.prepare("SELECT COUNT(*) AS count FROM articles").get() as {
+      count: number;
+    };
 
     db.close();
 

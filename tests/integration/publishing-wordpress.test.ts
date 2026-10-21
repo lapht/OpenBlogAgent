@@ -28,7 +28,8 @@ describe("WordPress publisher integration test", () => {
       title: "Integration Test Draft",
       slug: "integration-test-draft",
       summary: "Draft created by the integration test",
-      content: "# Integration Test Draft\n\nThis is a draft article created by the integration test.",
+      content:
+        "# Integration Test Draft\n\nThis is a draft article created by the integration test.",
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
       tags: ["test", "integration"],

@@ -1,6 +1,11 @@
 import type { ILogger } from "@openblog/logger";
 import { TtlCache } from "../cache";
-import type { ICategoryProvider, ITagProvider, TaxonomyEntry, TaxonomyProviderConfig } from "../types";
+import type {
+  ICategoryProvider,
+  ITagProvider,
+  TaxonomyEntry,
+  TaxonomyProviderConfig
+} from "../types";
 
 interface WordPressTaxonomyProviderOptions {
   endpoint: string;
@@ -23,7 +28,9 @@ abstract class WordPressTaxonomyBase {
 
   private authHeader(): string {
     const { username, applicationPassword, password } = this.options;
-    const token = Buffer.from(`${username ?? ""}:${applicationPassword ?? password ?? ""}`).toString("base64");
+    const token = Buffer.from(
+      `${username ?? ""}:${applicationPassword ?? password ?? ""}`
+    ).toString("base64");
     return `Basic ${token}`;
   }
 
@@ -77,7 +84,9 @@ export class WordPressCategoryProvider extends WordPressTaxonomyBase implements 
     if (match) return match;
 
     this.options.logger.warn("Category not found, falling back", { requested: name });
-    const fallback = entries.find((e) => e.name.toLowerCase() === this.options.config.defaultCategory.toLowerCase());
+    const fallback = entries.find(
+      (e) => e.name.toLowerCase() === this.options.config.defaultCategory.toLowerCase()
+    );
     if (fallback) return fallback;
 
     return this.createOne(name);
