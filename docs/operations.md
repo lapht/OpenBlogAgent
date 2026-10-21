@@ -11,7 +11,7 @@ Run after `npm run build` as `npm start -- <command>` (or `openblog <command>` f
 | `generate <topic>` | Plan, write, edit, add SEO metadata, check quality, classify and publish as the policy allows |
 | `resume <id>`      | Continue a `failed` run from its last good step; finished steps are not repeated              |
 | `approve <id>`     | Publish a stored article live; `--override "reason"` if it failed the quality gate            |
-| `list`             | The 20 most recent runs, newest first, with status and failed step                            |
+| `list`             | The 20 most recent runs, newest first, with status, failed step, total tokens and cost        |
 
 Options: `--dry-run`, `--publisher <id>`, `--force`, `--json`, `--help`. `--dry-run` runs everything except the publish call, on a throwaway copy of the database: nothing is stored, written or sent, and earlier runs are still visible to duplicate checks, `resume` and `approve`.
 

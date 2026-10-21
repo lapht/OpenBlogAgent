@@ -9,7 +9,11 @@ import {
   TopicRepository,
   WorkflowRepository
 } from "../repositories";
-import type { FinalWorkflowStatus, WorkflowStepRecord } from "../repositories/models";
+import type {
+  FinalWorkflowStatus,
+  StepUsageRecord,
+  WorkflowStepRecord
+} from "../repositories/models";
 
 export interface WorkflowStartParams {
   workflowName: string;
@@ -82,6 +86,7 @@ export interface RecordStepParams {
   errorMessage?: string;
   startedAt: string;
   completedAt: string;
+  usage?: StepUsageRecord;
 }
 
 /** Runs `fn` atomically: every write inside commits together or not at all. */
@@ -270,7 +275,8 @@ export class MemoryService {
       errorCode: params.errorCode ?? null,
       errorMessage: params.errorMessage ?? null,
       startedAt: params.startedAt,
-      completedAt: params.completedAt
+      completedAt: params.completedAt,
+      usage: params.usage ?? null
     });
   }
 
@@ -282,19 +288,26 @@ export class MemoryService {
     return {
       topic: workflow.topic,
       status: workflow.status,
-      steps: this.stepRepository.getByWorkflowId(workflowId)
+      steps: this.stepRepository.getByWorkflowId(workflowId).map((record) => ({
+        ...record,
+        usage: record.usage ?? undefined
+      }))
     };
   }
 
   /** The most recent runs, newest first, as `list` shows them. */
   async listWorkflows(limit = 20) {
-    return this.workflowRepository.listRecent(limit).map((workflow) => ({
+    const workflows = this.workflowRepository.listRecent(limit);
+    const totals = this.stepRepository.totalsByWorkflow(workflows.map((workflow) => workflow.id));
+    return workflows.map((workflow) => ({
       workflowId: workflow.id,
       topic: workflow.topic,
       status: workflow.status,
       failedStep: workflow.failedStep,
       errorCode: workflow.errorCode,
-      createdAt: workflow.createdAt
+      createdAt: workflow.createdAt,
+      totalTokens: totals.get(workflow.id)?.totalTokens ?? 0,
+      costUsd: totals.get(workflow.id)?.costUsd ?? 0
     }));
   }
 

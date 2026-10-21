@@ -28,6 +28,7 @@ interface OpenRouterChatResponse {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
+    cost?: number;
   };
 }
 
@@ -64,6 +65,8 @@ export class OpenRouterProvider implements TextGenerationProvider {
         body: JSON.stringify({
           messages,
           model,
+          // Ask OpenRouter to report the cost of the call next to the token counts.
+          usage: { include: true },
           ...(request.maxTokens !== undefined ? { max_tokens: request.maxTokens } : {}),
           ...(request.temperature !== undefined ? { temperature: request.temperature } : {})
         }),
@@ -95,7 +98,8 @@ export class OpenRouterProvider implements TextGenerationProvider {
         ? {
             promptTokens: data.usage.prompt_tokens,
             completionTokens: data.usage.completion_tokens,
-            totalTokens: data.usage.total_tokens
+            totalTokens: data.usage.total_tokens,
+            cost: typeof data.usage.cost === "number" ? data.usage.cost : undefined
           }
         : undefined
     };

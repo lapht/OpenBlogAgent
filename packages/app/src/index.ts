@@ -146,6 +146,10 @@ export async function createApplication(
     maxTags: taxonomyConfig.maxTags,
     allowDuplicates: config.OPENBLOG_ALLOW_DUPLICATES,
     publicationPolicy: config.OPENBLOG_PUBLICATION_POLICY,
+    budget: {
+      maxTokens: config.OPENBLOG_MAX_TOKENS_PER_RUN,
+      maxCostUsd: config.OPENBLOG_MAX_COST_PER_RUN
+    },
     quality: {
       maxAttempts: config.OPENBLOG_QUALITY_MAX_ATTEMPTS,
       rules: {

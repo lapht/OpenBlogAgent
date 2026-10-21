@@ -20,7 +20,16 @@ import type { PublishArticle, PublishResult } from "@openblog/publishers";
 import { z } from "zod";
 
 import type { LlmPort, MemoryPort, PublishPort, StoredWorkflowStep, TaxonomyPort } from "../ports";
-import { currentUsage, type LlmUsage, trackUsage, withUsageTracking } from "../usage";
+import {
+  addUsage,
+  currentUsage,
+  emptyUsage,
+  type LlmUsage,
+  trackUsage,
+  type UsageBudget,
+  usageSince,
+  withUsageTracking
+} from "../usage";
 
 export const ARTICLE_GENERATION_WORKFLOW_NAME = "article-generation-workflow" as const;
 
@@ -238,6 +247,8 @@ export interface CreateArticleGenerationWorkflowOptions {
   allowDuplicates?: boolean;
   /** When articles go live. Defaults to `draft`: never live without `approve`. */
   publicationPolicy?: PublicationPolicy;
+  /** Per-run token and cost limits; a run that exceeds them stops with `budget_exceeded`. */
+  budget?: UsageBudget;
   quality?: {
     /** Overrides of the default validation thresholds. */
     rules?: Partial<ArticleValidationRules>;
@@ -279,6 +290,15 @@ const graphState = Annotation.Root({
 export type ArticleWorkflowState = typeof graphState.State;
 type ArticleWorkflowUpdate = typeof graphState.Update;
 
+/** Older runs stored only calls and tokens, so every other field defaults to 0. */
+const usageSchema = z.object({
+  calls: z.number().default(0),
+  promptTokens: z.number().default(0),
+  completionTokens: z.number().default(0),
+  totalTokens: z.number().default(0),
+  costUsd: z.number().default(0)
+});
+
 /** Shape of what each step stores, used to restore state when a run is resumed. */
 const stepOutputSchemas: Record<string, z.ZodType<ArticleWorkflowUpdate, z.ZodTypeDef, unknown>> = {
   planner: z.object({ outline: plannerOutlineSchema }),
@@ -289,7 +309,7 @@ const stepOutputSchemas: Record<string, z.ZodType<ArticleWorkflowUpdate, z.ZodTy
   quality: z.object({
     qualityPassed: z.boolean(),
     qualityViolations: z.array(violationSchema),
-    llmUsage: z.object({ calls: z.number(), totalTokens: z.number() }).optional()
+    llmUsage: usageSchema.optional()
   }),
   classification: classificationSchema,
   publisher: z.object({ publishResult: publishResultSchema })
@@ -370,7 +390,9 @@ function step(
   const record = async (
     state: ArticleWorkflowState,
     startedAt: string,
-    result: { output: ArticleWorkflowUpdate } | { error: WorkflowStepError }
+    result: ({ output: ArticleWorkflowUpdate } | { error: WorkflowStepError }) & {
+      usage: LlmUsage;
+    }
   ): Promise<void> => {
     if (!memory || !state.workflowId) {
       return;
@@ -381,6 +403,7 @@ function step(
         step: name,
         startedAt,
         completedAt: new Date().toISOString(),
+        usage: result.usage,
         ...("output" in result
           ? { status: "succeeded", output: result.output }
           : {
@@ -411,15 +434,19 @@ function step(
 
       const startedAt = new Date().toISOString();
       const started = Date.now();
+      const usageBefore = currentUsage();
       try {
         const output = await fn(state);
-        await record(state, startedAt, { output });
+        await record(state, startedAt, { output, usage: usageSince(usageBefore, currentUsage()) });
         logger.info("Step finished", { outcome: "succeeded", durationMs: Date.now() - started });
         return output;
       } catch (error) {
         const stepError =
           error instanceof WorkflowStepError ? error : new WorkflowStepError(name, error);
-        await record(state, startedAt, { error: stepError });
+        await record(state, startedAt, {
+          error: stepError,
+          usage: usageSince(usageBefore, currentUsage())
+        });
         logger.error("Step finished", {
           outcome: "failed",
           durationMs: Date.now() - started,
@@ -437,7 +464,7 @@ export function createArticleGenerationWorkflow(
 ): ArticleGenerationWorkflow {
   const { publisher, taxonomy, memory, maxTags = 5 } = options;
   const logger = withScope(options.logger);
-  const llm = trackUsage(options.llm, logger);
+  const llm = trackUsage(options.llm, logger, options.budget);
   const defaultCategory = options.defaultCategory ?? "General";
   const qualityRules = options.quality?.rules ?? {};
   const allowDuplicates = options.allowDuplicates ?? false;
@@ -725,7 +752,8 @@ export function createArticleGenerationWorkflow(
     topic: string,
     workflowMemory: { workflowId: string } | null,
     force: boolean,
-    restored: ArticleWorkflowUpdate = {}
+    restored: ArticleWorkflowUpdate = {},
+    priorUsage: LlmUsage = emptyUsage()
   ): Promise<ArticleWorkflowResult> {
     logger.info("Starting article workflow", {
       topic,
@@ -737,13 +765,15 @@ export function createArticleGenerationWorkflow(
         await memory.markRunning(workflowMemory.workflowId);
       }
 
-      const finalState = await withUsageTracking(() =>
-        workflow.invoke({
-          ...restored,
-          topic,
-          force,
-          workflowId: workflowMemory?.workflowId
-        })
+      const finalState = await withUsageTracking(
+        () =>
+          workflow.invoke({
+            ...restored,
+            topic,
+            force,
+            workflowId: workflowMemory?.workflowId
+          }),
+        priorUsage
       );
 
       if (finalState.duplicate && !force) {
@@ -1031,7 +1061,12 @@ export function createArticleGenerationWorkflow(
           stored.topic,
           { workflowId },
           Boolean(resumeOptions.force) || allowDuplicates,
-          restored
+          restored,
+          // The budget covers the whole run, so what earlier attempts spent still counts.
+          stored.steps.reduce(
+            (total, previous) => addUsage(total, previous.usage ?? emptyUsage()),
+            emptyUsage()
+          )
         );
       });
     }

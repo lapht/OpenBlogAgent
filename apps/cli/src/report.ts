@@ -121,7 +121,14 @@ export function formatRunList(runs: StoredWorkflowSummary[]): string {
   return runs
     .map(
       (run) =>
-        [run.workflowId, run.status.padEnd(17), run.createdAt, run.topic].join("  ") +
+        [
+          run.workflowId,
+          run.status.padEnd(17),
+          run.createdAt,
+          `${run.totalTokens} tok`.padStart(12),
+          `$${run.costUsd.toFixed(4)}`.padStart(9),
+          run.topic
+        ].join("  ") +
         (run.failedStep ? `  [${run.failedStep}${run.errorCode ? `/${run.errorCode}` : ""}]` : "")
     )
     .join("\n");

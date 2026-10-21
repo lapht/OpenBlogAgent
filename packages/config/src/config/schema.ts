@@ -68,6 +68,17 @@ export const envSchema = z.object({
   /** Generate a topic, slug or title that was already published (same as passing `--force` on every run). */
   OPENBLOG_ALLOW_DUPLICATES: envBoolean(false),
 
+  /** Stop a run that has used more than this many tokens (all steps and regenerations). Unset: no limit. */
+  OPENBLOG_MAX_TOKENS_PER_RUN: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().int().positive().optional()
+  ),
+  /** Stop a run whose provider-reported cost exceeds this many USD. Unset: no limit. */
+  OPENBLOG_MAX_COST_PER_RUN: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().positive().optional()
+  ),
+
   /** How many times a failing article is regenerated before it is parked as `needs_review`. */
   OPENBLOG_QUALITY_MAX_ATTEMPTS: z.coerce.number().int().min(0).default(2),
   OPENBLOG_QUALITY_MIN_WORDS: z.coerce.number().int().positive().default(1000),

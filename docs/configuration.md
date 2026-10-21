@@ -65,6 +65,15 @@ OpenRouter is used first when `OPENROUTER_API_KEY` is set; Ollama is used when i
 | --------------------------- | ------- | ------------------------------------------------------------------------------------------------ |
 | `OPENBLOG_ALLOW_DUPLICATES` | `false` | Generate even if the topic, slug or title was already published (same as `--force` on every run) |
 
+## Run budget
+
+Token usage (and the cost the provider reports, which OpenRouter does and Ollama does not) is stored for every step execution and summed per run; `list` shows the totals. A run that goes over a limit stops with the error code `budget_exceeded`, is stored as `failed` and exits with code 1. The limits cover the whole run including regenerations and, on `resume`, what earlier attempts already used.
+
+| Variable                      | Default | Purpose                                                     |
+| ----------------------------- | ------- | ----------------------------------------------------------- |
+| `OPENBLOG_MAX_TOKENS_PER_RUN` | none    | Maximum total tokens (prompt + completion) of one run       |
+| `OPENBLOG_MAX_COST_PER_RUN`   | none    | Maximum cost of one run in USD, as reported by the provider |
+
 ## Quality gate
 
 The gate checks the finished article and regenerates it up to `OPENBLOG_QUALITY_MAX_ATTEMPTS` times; if it still fails the run ends as `needs_review` and nothing is published.

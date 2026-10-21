@@ -100,4 +100,14 @@ export interface WorkflowStepRecord {
   errorMessage: string | null;
   startedAt: string;
   completedAt: string;
+  /** Provider usage of this execution; null for steps stored before usage was tracked. */
+  usage: StepUsageRecord | null;
+}
+
+export interface StepUsageRecord {
+  calls: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  costUsd: number;
 }

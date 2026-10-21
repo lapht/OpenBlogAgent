@@ -23,6 +23,17 @@ export interface StoredWorkflowStep {
   status: "succeeded" | "failed";
   attempt: number;
   output?: unknown;
+  /** Provider usage of this execution; absent for steps stored before usage was tracked. */
+  usage?: StepUsage;
+}
+
+/** What the provider calls of one step execution consumed. */
+export interface StepUsage {
+  calls: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  costUsd: number;
 }
 
 /** A stored article as `approve` needs it. */
@@ -47,6 +58,9 @@ export interface StoredWorkflowSummary {
   failedStep: string | null;
   errorCode: string | null;
   createdAt: string;
+  /** Provider usage summed over every stored step of the run. */
+  totalTokens: number;
+  costUsd: number;
 }
 
 /** Workflow bookkeeping. Implemented by `MemoryService` in the storage package. */
@@ -101,6 +115,7 @@ export interface MemoryPort {
     errorMessage?: string;
     startedAt: string;
     completedAt: string;
+    usage?: StepUsage;
   }): Promise<void>;
   /** Ends a run stopped by the duplicate policy; `duplicateOfWorkflowId` is null for a remote post. */
   markDuplicate(params: {
