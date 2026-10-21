@@ -9,15 +9,18 @@ import {
 
 describe("WordPress publisher integration test", () => {
   it("creates a draft article payload for a configured WordPress endpoint", async () => {
-    const fetchMock = vi.fn(async () => ({
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => ({
       ok: true,
-      status: 201,
-      json: async () => ({
-        id: 123,
-        status: "draft",
-        slug: "integration-test-draft",
-        link: "https://example.com/?p=123"
-      })
+      status: init?.method === "GET" ? 200 : 201,
+      json: async () =>
+        init?.method === "GET"
+          ? []
+          : {
+              id: 123,
+              status: "draft",
+              slug: "integration-test-draft",
+              link: "https://example.com/?p=123"
+            }
     }));
 
     vi.stubGlobal("fetch", fetchMock);
@@ -63,9 +66,9 @@ describe("WordPress publisher integration test", () => {
     expect(result.success).toBe(true);
     expect(result.publisherId).toBe("wordpress");
     expect(result.metadata).toMatchObject({ id: 123, link: "https://example.com/?p=123" });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
 
-    const [url, options] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const [url, options] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
     expect(url).toBe("https://example.com/wp-json/wp/v2/posts");
     expect(options.method).toBe("POST");
     expect(options.headers).toMatchObject({

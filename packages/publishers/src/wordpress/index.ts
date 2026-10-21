@@ -34,6 +34,11 @@ export interface WordPressPublisherConfig {
   applicationPassword?: string;
   status?: "draft" | "publish";
   timeoutMs?: number;
+  /**
+   * What to do when a post with the same slug already exists: `update` it in place (default) or
+   * fail with a `conflict` result.
+   */
+  onExisting?: "update" | "conflict";
 }
 
 export class WordPressPublisher implements IPublisher {
@@ -113,19 +118,46 @@ export class WordPressPublisher implements IPublisher {
       });
 
       const postEndpoint = `${normalizeWordPressEndpoint(this.config.endpoint)}/posts`;
+      const headers = {
+        "Content-Type": "application/json",
+        Authorization: basicAuthHeader(
+          this.config.username ?? "",
+          this.config.applicationPassword ?? ""
+        )
+      };
+
+      // Look the slug up before every write, so a retry after a timeout finds the earlier post.
+      const existing = await this.findExisting(postEndpoint, article.slug, headers);
+
+      if (existing && (this.config.onExisting ?? "update") === "conflict") {
+        this.logger.warn("WordPress post with this slug already exists", {
+          slug: article.slug,
+          id: existing.id
+        });
+        return {
+          success: false,
+          publisherId: this.id,
+          publisherName: this.name,
+          error: {
+            code: "conflict",
+            message: `A WordPress post with slug "${article.slug}" already exists (id ${existing.id})`,
+            details: { slug: article.slug, id: existing.id, link: existing.link }
+          }
+        };
+      }
+
+      // An update never changes the status of a post that is already live unless asked to publish.
+      const updatePayload: Partial<typeof payload> = { ...payload };
+      if (this.config.status !== "publish") {
+        delete updatePayload.status;
+      }
 
       const response = await wordpressFetch(
-        postEndpoint,
+        existing ? `${postEndpoint}/${existing.id}` : postEndpoint,
         {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: basicAuthHeader(
-              this.config.username ?? "",
-              this.config.applicationPassword ?? ""
-            )
-          },
-          body: JSON.stringify(payload)
+          method: existing ? "PUT" : "POST",
+          headers,
+          body: JSON.stringify(existing ? updatePayload : payload)
         },
         this.config.timeoutMs
       );
@@ -148,7 +180,8 @@ export class WordPressPublisher implements IPublisher {
           link: parsed.data.link,
           status: parsed.data.status,
           slug: parsed.data.slug,
-          endpoint: postEndpoint
+          endpoint: postEndpoint,
+          action: existing ? "updated" : "created"
         }
       };
     } catch (error) {
@@ -171,5 +204,32 @@ export class WordPressPublisher implements IPublisher {
         }
       };
     }
+  }
+
+  /** The post with exactly this slug in any status, or undefined. Lookup failures abort the publish. */
+  private async findExisting(
+    postEndpoint: string,
+    slug: string,
+    headers: Record<string, string>
+  ): Promise<z.infer<typeof postResponseSchema> | undefined> {
+    const query = new URLSearchParams({ slug, status: "any" });
+    const response = await wordpressFetch(
+      `${postEndpoint}?${query.toString()}`,
+      { method: "GET", headers },
+      this.config.timeoutMs
+    );
+    const parsed = z
+      .array(postResponseSchema)
+      .safeParse(await response.json().catch(() => undefined));
+
+    if (!parsed.success) {
+      throw new WordPressRequestError(
+        "unexpected_response",
+        "WordPress returned an invalid response when looking up the post by slug",
+        response.status
+      );
+    }
+
+    return parsed.data.find((post) => post.slug === slug);
   }
 }

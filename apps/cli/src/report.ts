@@ -22,7 +22,10 @@ export function reportRunOutcome(
     title: result.seoOutput?.title,
     slug: result.seoOutput?.slug,
     publisherId: result.publishResult?.publisherId,
-    outputPath: result.publishResult?.outputPath
+    outputPath: result.publishResult?.outputPath,
+    remoteId: result.publishResult?.metadata?.id,
+    remoteUrl: result.publishResult?.metadata?.link,
+    remoteStatus: result.publishResult?.metadata?.status
   });
 
   logger.info("Article saved", {

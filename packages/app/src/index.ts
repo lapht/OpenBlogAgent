@@ -85,7 +85,8 @@ export async function createApplication(
               endpoint: config.OPENBLOG_WORDPRESS_ENDPOINT,
               username: config.OPENBLOG_WORDPRESS_USERNAME,
               applicationPassword: config.OPENBLOG_WORDPRESS_APPLICATION_PASSWORD,
-              status: config.OPENBLOG_WORDPRESS_STATUS
+              status: config.OPENBLOG_WORDPRESS_STATUS,
+              onExisting: config.OPENBLOG_WORDPRESS_ON_EXISTING
             }
           : undefined,
         defaultPublisherId: config.OPENBLOG_DEFAULT_PUBLISHER,
