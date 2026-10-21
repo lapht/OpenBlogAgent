@@ -17,7 +17,7 @@ interface TopicRow {
 export class TopicRepository implements IRepositoryContract<TopicRecord> {
   constructor(private readonly db: Database) {}
 
-  async getById(id: Identifier): Promise<TopicRecord | null> {
+  getById(id: Identifier): TopicRecord | null {
     const row = this.db
       .prepare(
         `SELECT
@@ -36,7 +36,7 @@ export class TopicRepository implements IRepositoryContract<TopicRecord> {
     return row ? this.mapRow(row) : null;
   }
 
-  async save(model: TopicRecord): Promise<void> {
+  save(model: TopicRecord): void {
     this.db
       .prepare(
         `INSERT INTO topics (
@@ -63,7 +63,7 @@ export class TopicRepository implements IRepositoryContract<TopicRecord> {
       );
   }
 
-  async getByNormalizedTopic(normalizedTopic: string): Promise<TopicRecord | null> {
+  getByNormalizedTopic(normalizedTopic: string): TopicRecord | null {
     const row = this.db
       .prepare(
         `SELECT

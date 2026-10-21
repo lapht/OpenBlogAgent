@@ -85,3 +85,10 @@ ADR-style log. Add new entries at the bottom; do not rewrite accepted ones, supe
 - Context: every node re-parsed the whole state and cast it back, `seoOutput`/`publishResult` were `unknown`, an empty passthrough schema existed only to admit the initial `{}`, and empty strings stood for "not produced yet".
 - Decision: the `Annotation` fields are typed (`SeoOutput | undefined`, `PublishResult | undefined`, ...) and a node's return type is checked against the state update. Each node validates its output with the Zod schema of its agent. `currentArticle(state)` returns the edited text once it exists. `run()` takes `{ topic }` and returns `ArticleWorkflowResult`, a union of `published` (with a confirmed `publishResult`) and `failed`.
 - Consequence: `articleWorkflowStateSchema` and the empty-object workaround are gone. A missing field after a step is a wiring bug and throws.
+
+## ADR-014: Storage is versioned, transactional and keeps step artifacts
+
+- Status: accepted (2026-10-21)
+- Context: the DB directory was never created, multi-statement operations were not atomic, the schema was a single `CREATE TABLE IF NOT EXISTS` block, outputs of intermediate steps were lost, and a failed first run counted as the original of a duplicate.
+- Decision: the connection creates the DB directory; `data/` and `*.db*` are git-ignored. Migrations are an ordered list applied under `BEGIN IMMEDIATE` and tracked with `PRAGMA user_version` (v1 is the original schema and adopts unversioned databases; v2 adds `workflow_steps` and `articles.publish_remote_{id,url,status}`). Repositories are synchronous; `MemoryService` wraps `beginWorkflow` and `finishWorkflow` in one transaction. Each workflow step execution is stored in `workflow_steps` (output or error, attempt number) through `MemoryPort.recordStep`; a recording failure only logs a warning. Duplicates are detected against published runs only.
+- Consequence: never edit a released migration, append one. `topics.first_workflow_id` is informational. Resuming runs from stored steps is a later issue.

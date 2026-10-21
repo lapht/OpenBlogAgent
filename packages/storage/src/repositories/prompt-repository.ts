@@ -15,7 +15,7 @@ interface PromptRow {
 export class PromptRepository implements IRepositoryContract<PromptRecord> {
   constructor(private readonly db: Database) {}
 
-  async getById(id: Identifier): Promise<PromptRecord | null> {
+  getById(id: Identifier): PromptRecord | null {
     const row = this.db
       .prepare(
         `SELECT
@@ -32,7 +32,7 @@ export class PromptRepository implements IRepositoryContract<PromptRecord> {
     return row ? this.mapRow(row) : null;
   }
 
-  async save(model: PromptRecord): Promise<void> {
+  save(model: PromptRecord): void {
     this.db
       .prepare(
         `INSERT INTO prompts (
@@ -51,7 +51,7 @@ export class PromptRepository implements IRepositoryContract<PromptRecord> {
       .run(model.id, model.workflowId, model.promptType, model.content, model.createdAt);
   }
 
-  async getByWorkflowId(workflowId: Identifier): Promise<PromptRecord[]> {
+  getByWorkflowId(workflowId: Identifier): PromptRecord[] {
     const rows = this.db
       .prepare(
         `SELECT

@@ -27,6 +27,7 @@ describe("article workflow with fake ports", () => {
     const published: PublishArticle[] = [];
     const prompts: string[] = [];
     const calls: string[] = [];
+    const steps: string[] = [];
     const publishResult = { success: true, publisherId: "fake", publisherName: "Fake" };
     const logger = { info() {}, warn() {}, error() {}, debug() {} };
 
@@ -58,6 +59,9 @@ describe("article workflow with fake ports", () => {
         finishWorkflow: async ({ status }) => {
           calls.push(`finish:${status}`);
         },
+        recordStep: async ({ step, status }) => {
+          steps.push(`${step}:${status}`);
+        },
         failWorkflow: async () => {
           calls.push("fail");
         }
@@ -88,6 +92,14 @@ describe("article workflow with fake ports", () => {
       "prompt:planner",
       "prompt:writer",
       "finish:published"
+    ]);
+    expect(steps).toEqual([
+      "planner:succeeded",
+      "writer:succeeded",
+      "editor:succeeded",
+      "seo:succeeded",
+      "classification:succeeded",
+      "publisher:succeeded"
     ]);
     expect(prompts[0]).toContain("Fake topic");
     expect(llm.prompts).toHaveLength(5);
@@ -123,6 +135,7 @@ describe("article workflow with fake ports", () => {
         finishWorkflow: async (params) => {
           finished.push(params);
         },
+        recordStep: async () => {},
         failWorkflow: async (params) => {
           throw new Error(`unexpected failWorkflow: ${JSON.stringify(params)}`);
         }
@@ -164,6 +177,7 @@ describe("article workflow with fake ports", () => {
         savePrompt: async () => {},
         markRunning: async () => {},
         finishWorkflow: async () => {},
+        recordStep: async () => {},
         failWorkflow: async (params) => {
           failures.push(params);
         }
