@@ -58,4 +58,8 @@ When asked to implement a GitHub issue (`gh issue view <n>`), do the whole flow 
 3. Commit with a Conventional Commits message that references the issue (`Closes #<n>`).
 4. Push and open the PR with `gh pr create --base main`, with `Closes #<n>` in the body.
 
+5. Cleanup, once the PR is open and pushed: switch back to `main`, then delete the local issue branch (`git branch -d <branch>`) and remove any worktree created for it (`git worktree remove <path>`, then `git worktree prune`). Don't delete the remote branch (the PR needs it). If the branch has unpushed or unmerged work, don't force-delete it, and report that instead.
+
 If a step fails (checks, push, PR creation), stop and report the error instead of proceeding. Never commit `.env`.
+
+`npm ci` in CI fails if `package-lock.json` is out of sync with any workspace `package.json`. When you add or change a dependency, regenerate the lockfile (`npm install --package-lock-only --ignore-scripts`) and commit it.
