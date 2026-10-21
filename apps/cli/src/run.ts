@@ -4,45 +4,26 @@ import { loadEnv } from "@openblog/config";
 import { createApplication, type ApplicationOverrides } from "@openblog/app";
 import { logger } from "@openblog/logger";
 
-import { reportApprovalOutcome, reportRunOutcome } from "./report";
+import { HELP, parseCommand, UsageError, type ParsedCommand } from "./args";
+import { createDryRunPublisher, prepareDryRunWorkspace, type DryRunWorkspace } from "./dry-run";
+import {
+  EXIT,
+  formatRunList,
+  formatSummary,
+  reportApprovalOutcome,
+  reportRunOutcome,
+  summarizeApproval,
+  summarizeRun,
+  type CliSummary
+} from "./report";
 
-export const FORCE_FLAG = "--force";
-export const APPROVE_COMMAND = "approve";
-export const OVERRIDE_FLAG = "--override";
-
-export interface ApproveArgs {
-  workflowId: string;
-  overrideReason?: string;
-}
-
-/**
- * Parses `approve <workflowId> [--override "reason"]`; undefined when argv is not an approve
- * command (so the arguments are a topic). Throws when the command is incomplete.
- */
-export function parseApproveArgs(argv: string[]): ApproveArgs | undefined {
-  if (argv[0] !== APPROVE_COMMAND) {
-    return undefined;
-  }
-  const rest = argv.slice(1);
-  const overrideIndex = rest.indexOf(OVERRIDE_FLAG);
-  const overrideReason =
-    overrideIndex >= 0
-      ? rest
-          .slice(overrideIndex + 1)
-          .join(" ")
-          .trim()
-      : undefined;
-  const workflowId = (overrideIndex >= 0 ? rest.slice(0, overrideIndex) : rest).join(" ").trim();
-
-  if (!workflowId) {
-    throw new Error(
-      'Missing workflow id. Example: npm start -- approve <workflowId> [--override "reason"]'
-    );
-  }
-  if (overrideIndex >= 0 && !overrideReason) {
-    throw new Error(`${OVERRIDE_FLAG} needs a reason`);
-  }
-  return { workflowId, overrideReason };
+export interface RunCliOptions {
+  argv?: string[];
+  env?: NodeJS.ProcessEnv;
+  overrides?: ApplicationOverrides;
+  /** Where results go; defaults to the process streams. */
+  stdout?: (text: string) => void;
+  stderr?: (text: string) => void;
 }
 
 /** Who is running the command, recorded as the approver. */
@@ -54,87 +35,96 @@ function currentUser(): string {
   }
 }
 
-/** True when `--force` is among the arguments (generate even if the topic is a duplicate). */
-export function hasForceFlag(argv: string[] = process.argv.slice(2)): boolean {
-  return argv.includes(FORCE_FLAG);
-}
-
-export function resolveTopic(
-  argv: string[] = process.argv.slice(2),
-  npmArgv: string | undefined = process.env.npm_config_argv
-): string {
-  const directTopic = argv
-    .filter((arg) => arg !== FORCE_FLAG)
-    .join(" ")
-    .trim();
-  if (directTopic.length > 0) {
-    return directTopic;
-  }
-
-  if (npmArgv) {
-    try {
-      const parsed = JSON.parse(npmArgv) as { original?: string[] };
-      const originalArgs = parsed.original ?? [];
-      const startIndex = originalArgs.findIndex((arg) => arg === "start");
-      const topicFromNpm = originalArgs
-        .slice(startIndex >= 0 ? startIndex + 1 : 0)
-        .filter((arg) => arg !== "--" && arg !== FORCE_FLAG)
-        .join(" ")
-        .trim();
-
-      if (topicFromNpm.length > 0) {
-        return topicFromNpm;
-      }
-    } catch (error) {
-      logger.debug("Unable to parse npm argv", {
-        error: error instanceof Error ? error.message : String(error)
-      });
-    }
-  }
-
-  throw new Error('Missing article topic. Example: npm start "AI agents in software development"');
-}
-
-export interface RunCliOptions {
-  argv?: string[];
-  env?: NodeJS.ProcessEnv;
-  overrides?: ApplicationOverrides;
-}
-
-/** Parses arguments, builds the application and runs the workflow. Returns the exit code. */
+/** Parses arguments, builds the application and runs one command. Returns the exit code. */
 export async function runCli(options: RunCliOptions = {}): Promise<number> {
-  let topic = "";
+  const stdout = options.stdout ?? ((text: string) => void process.stdout.write(`${text}\n`));
+  const stderr = options.stderr ?? ((text: string) => void process.stderr.write(`${text}\n`));
+
+  let command: ParsedCommand;
+  try {
+    command = parseCommand(options.argv ?? process.argv.slice(2));
+  } catch (error) {
+    if (!(error instanceof UsageError)) throw error;
+    stderr(`${error.message}\n\n${HELP}`);
+    return EXIT.usage;
+  }
+
+  if (command.name === "help") {
+    stdout(HELP);
+    return EXIT.ok;
+  }
+
+  const { options: flags } = command;
+  const emit = (summary: object, human: string): void =>
+    stdout(flags.json ? JSON.stringify(summary) : human);
+  let workspace: DryRunWorkspace | undefined;
 
   try {
-    const approve = parseApproveArgs(options.argv ?? process.argv.slice(2));
-    if (approve) {
-      const app = await createApplication(loadEnv(options.env), options.overrides);
-      try {
-        const result = await app.workflow.approve(approve.workflowId, {
-          approvedBy: currentUser(),
-          overrideReason: approve.overrideReason
-        });
-        return reportApprovalOutcome(result, logger);
-      } finally {
-        await app.dispose();
-      }
+    const source = { ...(options.env ?? process.env) };
+    let config = loadEnv(source);
+    let overrides = options.overrides;
+
+    // --publisher wins over OPENBLOG_DEFAULT_PUBLISHER; a dry run needs a name for its stand-in.
+    const publisherId = flags.publisher ?? config.OPENBLOG_DEFAULT_PUBLISHER;
+    if (flags.publisher) {
+      config = loadEnv({ ...source, OPENBLOG_DEFAULT_PUBLISHER: flags.publisher });
     }
 
-    topic = resolveTopic(options.argv);
-    const app = await createApplication(loadEnv(options.env), options.overrides);
+    if (flags.dryRun && command.name !== "list") {
+      const dryId = publisherId ?? "markdown";
+      workspace = prepareDryRunWorkspace(config);
+      config = loadEnv({
+        ...source,
+        OPENBLOG_DEFAULT_PUBLISHER: dryId,
+        OPENBLOG_MEMORY_DB_PATH: workspace.dbPath
+      });
+      overrides = { ...overrides, publishers: [createDryRunPublisher(dryId)] };
+    }
 
+    const app = await createApplication(config, overrides);
     try {
-      const result = await app.workflow.run({ topic, force: hasForceFlag(options.argv) });
-
-      return reportRunOutcome(result, logger);
+      switch (command.name) {
+        case "list": {
+          const runs = await app.listRuns();
+          emit({ command: "list", status: "ok", exitCode: EXIT.ok, runs }, formatRunList(runs));
+          return EXIT.ok;
+        }
+        case "approve": {
+          const result = await app.workflow.approve(command.workflowId, {
+            approvedBy: currentUser(),
+            overrideReason: flags.override
+          });
+          const code = reportApprovalOutcome(result, logger);
+          const summary = summarizeApproval(result, flags.dryRun);
+          emit(summary, formatSummary(summary));
+          return code;
+        }
+        case "resume":
+        case "generate": {
+          const result =
+            command.name === "resume"
+              ? await app.workflow.resume(command.workflowId, { force: flags.force })
+              : await app.workflow.run({ topic: command.topic, force: flags.force });
+          const code = reportRunOutcome(result, logger);
+          const summary: CliSummary = summarizeRun(command.name, result, flags.dryRun);
+          emit(summary, formatSummary(summary));
+          return code;
+        }
+      }
+      return EXIT.failed;
     } finally {
       await app.dispose();
     }
   } catch (error) {
-    logger.error("Article generation failed", {
-      topic,
-      error: error instanceof Error ? error.message : String(error)
-    });
-    return 1;
+    const message = error instanceof Error ? error.message : String(error);
+    const code = error instanceof Error && "code" in error ? String(error.code) : "error";
+    logger.error("Command failed", { command: command.name, errorCode: code, error: message });
+    emit(
+      { command: command.name, status: "error", exitCode: EXIT.failed, error: { code, message } },
+      `error: ${message}`
+    );
+    return EXIT.failed;
+  } finally {
+    workspace?.cleanup();
   }
 }

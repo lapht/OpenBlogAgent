@@ -200,7 +200,7 @@ describe("CLI entry", () => {
 
   it("runs a topic end-to-end with a fake provider and exits 0", async () => {
     const code = await runCli({
-      argv: ["My", "topic"],
+      argv: ["generate", "My", "topic"],
       env: env(),
       overrides: { llm: scriptedProvider(...replies()) }
     });
@@ -211,7 +211,7 @@ describe("CLI entry", () => {
 
   it("exits 1 when the workflow fails", async () => {
     const code = await runCli({
-      argv: ["topic"],
+      argv: ["generate", "topic"],
       env: env(),
       overrides: { llm: scriptedProvider("not json") }
     });
@@ -219,14 +219,11 @@ describe("CLI entry", () => {
     expect(code).toBe(1);
   });
 
-  it("exits 1 when the topic is missing", async () => {
-    const saved = process.env.npm_config_argv;
-    delete process.env.npm_config_argv;
-
-    try {
-      expect(await runCli({ argv: [], env: env() })).toBe(1);
-    } finally {
-      if (saved !== undefined) process.env.npm_config_argv = saved;
-    }
+  it("exits 64 when the topic is missing", async () => {
+    const stderr: string[] = [];
+    expect(
+      await runCli({ argv: ["generate"], env: env(), stderr: (text) => stderr.push(text) })
+    ).toBe(64);
+    expect(stderr.join()).toContain("Missing article topic");
   });
 });

@@ -39,6 +39,16 @@ export interface StoredArticle {
   gatePassed: boolean | null;
 }
 
+/** One stored run as `list` shows it. */
+export interface StoredWorkflowSummary {
+  workflowId: string;
+  topic: string;
+  status: string;
+  failedStep: string | null;
+  errorCode: string | null;
+  createdAt: string;
+}
+
 /** Workflow bookkeeping. Implemented by `MemoryService` in the storage package. */
 export interface MemoryPort {
   beginWorkflow(params: {
@@ -62,6 +72,8 @@ export interface MemoryPort {
     steps: StoredWorkflowStep[];
   } | null>;
   markRunning(workflowId: string): Promise<void>;
+  /** The most recent runs, newest first. Optional: only the persistent store can list. */
+  listWorkflows?(limit?: number): Promise<StoredWorkflowSummary[]>;
   /** Stores the final status together with the generated content, also when publishing failed. */
   finishWorkflow(params: {
     workflowId: string;

@@ -3,7 +3,8 @@ import {
   createArticleGenerationWorkflow,
   type ArticleGenerationWorkflow,
   type LlmPort,
-  type MemoryPort
+  type MemoryPort,
+  type StoredWorkflowSummary
 } from "@openblog/graph";
 import { logger as defaultLogger, type ILogger } from "@openblog/logger";
 import {
@@ -43,6 +44,8 @@ export interface ApplicationOverrides {
 
 export interface Application {
   workflow: ArticleGenerationWorkflow;
+  /** The most recent stored runs, newest first. */
+  listRuns(limit?: number): Promise<StoredWorkflowSummary[]>;
   /** What was wired, for diagnostics. */
   info: {
     publisherIds: string[];
@@ -126,6 +129,8 @@ export async function createApplication(
     ? undefined
     : await createSQLiteMemoryService({ filePath: config.OPENBLOG_MEMORY_DB_PATH });
 
+  const memory = overrides.memory ?? memoryStore?.memoryService;
+
   const workflow = createArticleGenerationWorkflow({
     logger,
     llm,
@@ -136,7 +141,7 @@ export async function createApplication(
       listCategories: async () => (await categories.list()).map((entry) => entry.name),
       listTags: async () => (await tags.list()).map((entry) => entry.name)
     },
-    memory: overrides.memory ?? memoryStore?.memoryService,
+    memory,
     defaultCategory: taxonomyConfig.defaultCategory,
     maxTags: taxonomyConfig.maxTags,
     allowDuplicates: config.OPENBLOG_ALLOW_DUPLICATES,
@@ -162,6 +167,9 @@ export async function createApplication(
 
   return {
     workflow,
+    async listRuns(limit = 20): Promise<StoredWorkflowSummary[]> {
+      return (await memory?.listWorkflows?.(limit)) ?? [];
+    },
     info: { publisherIds: publishers.map((publisher) => publisher.id), taxonomyProvider },
     async dispose(): Promise<void> {
       await memoryStore?.disconnect();

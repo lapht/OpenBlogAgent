@@ -1,5 +1,131 @@
-import type { ApprovalResult, ArticleWorkflowResult } from "@openblog/graph";
+import type { ApprovalResult, ArticleWorkflowResult, StoredWorkflowSummary } from "@openblog/graph";
 import type { ILogger } from "@openblog/logger";
+
+/** Documented exit codes (see `--help`). */
+export const EXIT = {
+  ok: 0,
+  failed: 1,
+  needsReview: 2,
+  duplicate: 3,
+  usage: 64
+} as const;
+
+/** The stable object `--json` prints. Fields only get added, never renamed. */
+export interface CliSummary {
+  command: "generate" | "resume" | "approve";
+  status: string;
+  exitCode: number;
+  dryRun: boolean;
+  workflowId: string | null;
+  topic: string | null;
+  title: string | null;
+  slug: string | null;
+  publisherId: string | null;
+  outputPath: string | null;
+  remoteUrl: string | null;
+  failure: { step: string; code: string; message: string } | null;
+  violations: Array<{ code: string; severity: string; message: string }>;
+}
+
+export interface ListSummary {
+  command: "list";
+  status: "ok";
+  exitCode: 0;
+  runs: StoredWorkflowSummary[];
+}
+
+export interface ErrorSummary {
+  command: string;
+  status: "error";
+  exitCode: number;
+  error: { code: string; message: string };
+}
+
+const text = (value: unknown): string | null => (typeof value === "string" ? value : null);
+
+export function exitCodeForRun(result: ArticleWorkflowResult): number {
+  switch (result.status) {
+    case "published":
+    case "awaiting_approval":
+      return EXIT.ok;
+    case "needs_review":
+      return EXIT.needsReview;
+    case "duplicate":
+      return EXIT.duplicate;
+    default:
+      return EXIT.failed;
+  }
+}
+
+export function summarizeRun(
+  command: "generate" | "resume",
+  result: ArticleWorkflowResult,
+  dryRun: boolean
+): CliSummary {
+  const full = result.status === "duplicate" ? undefined : result;
+  return {
+    command,
+    status: result.status,
+    exitCode: exitCodeForRun(result),
+    dryRun,
+    workflowId: result.workflowId ?? null,
+    topic: result.topic,
+    title: full?.seoOutput?.title ?? null,
+    slug: full?.seoOutput?.slug ?? null,
+    publisherId: full?.publishResult?.publisherId ?? null,
+    outputPath: full?.publishResult?.outputPath ?? null,
+    remoteUrl: text(full?.publishResult?.metadata?.link),
+    failure: result.failure ?? null,
+    violations: result.status === "needs_review" ? result.violations : []
+  };
+}
+
+export function summarizeApproval(result: ApprovalResult, dryRun: boolean): CliSummary {
+  return {
+    command: "approve",
+    status: result.status,
+    exitCode: result.status === "published" ? EXIT.ok : EXIT.failed,
+    dryRun,
+    workflowId: result.workflowId,
+    topic: null,
+    title: result.title,
+    slug: result.slug,
+    publisherId: result.publishResult.publisherId,
+    outputPath: result.publishResult.outputPath ?? null,
+    remoteUrl: text(result.publishResult.metadata?.link),
+    failure: result.failure ?? null,
+    violations: []
+  };
+}
+
+/** Short human-readable result for stdout when `--json` is not used. */
+export function formatSummary(summary: CliSummary): string {
+  const lines = [
+    `${summary.dryRun ? "[dry run] " : ""}${summary.command}: ${summary.status}`,
+    summary.workflowId && `workflow: ${summary.workflowId}`,
+    summary.title && `title: ${summary.title}`,
+    summary.slug && `slug: ${summary.slug}`,
+    summary.outputPath && `file: ${summary.outputPath}`,
+    summary.remoteUrl && `url: ${summary.remoteUrl}`,
+    summary.failure &&
+      `failure: ${summary.failure.step}/${summary.failure.code}: ${summary.failure.message}`,
+    ...summary.violations.map((violation) => `violation: ${violation.code}: ${violation.message}`)
+  ];
+  return lines.filter(Boolean).join("\n");
+}
+
+export function formatRunList(runs: StoredWorkflowSummary[]): string {
+  if (runs.length === 0) {
+    return "No runs stored yet.";
+  }
+  return runs
+    .map(
+      (run) =>
+        [run.workflowId, run.status.padEnd(17), run.createdAt, run.topic].join("  ") +
+        (run.failedStep ? `  [${run.failedStep}${run.errorCode ? `/${run.errorCode}` : ""}]` : "")
+    )
+    .join("\n");
+}
 
 /** Logs the outcome of `approve` and returns the exit code: 0 only when the article went live. */
 export function reportApprovalOutcome(
@@ -43,9 +169,9 @@ export function reportRunOutcome(
       workflowId: result.workflowId,
       draftOutputPath: result.publishResult?.outputPath,
       draftRemoteUrl: result.publishResult?.metadata?.link,
-      approveWith: result.workflowId ? `npm start -- approve ${result.workflowId}` : undefined
+      approveWith: result.workflowId ? `openblog approve ${result.workflowId}` : undefined
     });
-    return 0;
+    return EXIT.ok;
   }
 
   if (result.status !== "published") {
@@ -57,7 +183,7 @@ export function reportRunOutcome(
       error: result.failure?.message ?? `Run ended with status ${result.status}`,
       violations: result.status === "needs_review" ? result.violations : undefined
     });
-    return 1;
+    return exitCodeForRun(result);
   }
 
   logger.info("Workflow completed successfully", {

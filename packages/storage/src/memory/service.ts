@@ -286,6 +286,18 @@ export class MemoryService {
     };
   }
 
+  /** The most recent runs, newest first, as `list` shows them. */
+  async listWorkflows(limit = 20) {
+    return this.workflowRepository.listRecent(limit).map((workflow) => ({
+      workflowId: workflow.id,
+      topic: workflow.topic,
+      status: workflow.status,
+      failedStep: workflow.failedStep,
+      errorCode: workflow.errorCode,
+      createdAt: workflow.createdAt
+    }));
+  }
+
   async getSteps(workflowId: Identifier): Promise<WorkflowStepRecord[]> {
     return this.stepRepository.getByWorkflowId(workflowId);
   }
