@@ -5,13 +5,9 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
+    "@openblog/app": "*",
     "@openblog/config": "*",
-    "@openblog/graph": "*",
-    "@openblog/logger": "*",
-    "@openblog/providers": "*",
-    "@openblog/publishers": "*",
-    "@openblog/storage": "*",
-    "dotenv": "^16.4.5"
+    "@openblog/logger": "*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

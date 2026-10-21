@@ -43,6 +43,12 @@ export const envSchema = z.object({
   OPENBLOG_GHOST_API_KEY: optionalString(), // secret
   OPENBLOG_GHOST_STATUS: z.enum(["draft", "publish"]).optional(),
   OPENBLOG_TAXONOMY_PROVIDER: z.enum(["static", "wordpress"]).default("static"),
+  /** Comma-separated category names offered to the classifier (static taxonomy). */
+  OPENBLOG_TAXONOMY_CATEGORIES: optionalString(),
+  /** Comma-separated tag names offered to the classifier (static taxonomy). */
+  OPENBLOG_TAXONOMY_TAGS: optionalString(),
+  /** JSON file `{ "categories": [...], "tags": [...] }`; the lists above override it. */
+  OPENBLOG_TAXONOMY_FILE: optionalString(),
   OPENBLOG_TAXONOMY_ALLOW_CREATE: envBoolean(false),
   OPENBLOG_TAXONOMY_DEFAULT_CATEGORY: z.string().default("Uncategorized"),
   OPENBLOG_TAXONOMY_MAX_TAGS: z.coerce.number().int().positive().default(5),

@@ -1,6 +1,7 @@
 import fastify, { type FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 
+import type { Application } from "@openblog/app";
 import { logger } from "@openblog/logger";
 import { DEFAULT_REQUEST_ID_HEADER, OPENBLOG_NAME } from "@openblog/shared";
 
@@ -9,8 +10,16 @@ import { registerErrorHandler } from "./plugins/error-handler";
 import { registerHealthRoute } from "./routes/health";
 import { registerVersionRoute, type VersionPayload } from "./routes/version";
 
+declare module "fastify" {
+  interface FastifyInstance {
+    application?: Application;
+  }
+}
+
 export interface BuildServerOptions {
   version?: VersionPayload;
+  /** Application built by `createApplication`; disposed when the server closes. */
+  application?: Application;
 }
 
 export const buildServer = async (options?: BuildServerOptions): Promise<FastifyInstance> => {
@@ -19,6 +28,12 @@ export const buildServer = async (options?: BuildServerOptions): Promise<Fastify
     requestIdHeader: DEFAULT_REQUEST_ID_HEADER,
     genReqId: () => randomUUID()
   });
+
+  if (options?.application) {
+    const { application } = options;
+    app.decorate("application", application);
+    app.addHook("onClose", async () => application.dispose());
+  }
 
   registerErrorHandler(app);
   await registerCors(app);

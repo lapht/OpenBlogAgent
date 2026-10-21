@@ -9,6 +9,7 @@
 
 ## Domain Packages
 
+- `@openblog/app`: composition root, `createApplication(config, overrides?)` builds the workflow from validated config and returns `{ workflow, info, dispose }`
 - `@openblog/graph`
 - `@openblog/agents`
 - `@openblog/providers`

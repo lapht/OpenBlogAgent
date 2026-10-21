@@ -9,8 +9,7 @@ import {
   WordPressCategoryProvider,
   WordPressTagProvider
 } from "./taxonomy/providers/wordpress-taxonomy-provider";
-//import { StaticCategoryProvider, StaticTagProvider } from "./taxonomy/providers/static-taxonomy-provider";
-import type { TaxonomyProviderConfig } from "./taxonomy/types";
+import type { ICategoryProvider, ITagProvider, TaxonomyProviderConfig } from "./taxonomy/types";
 
 export interface PublisherFactoryConfig {
   markdown?: MarkdownPublisherConfig;
@@ -18,6 +17,8 @@ export interface PublisherFactoryConfig {
   ghost?: GhostPublisherConfig;
   defaultPublisherId?: string;
   taxonomy?: TaxonomyProviderConfig;
+  /** Providers the WordPress publisher uses to resolve names to ids. Built from `wordpress` when omitted. */
+  wordpressTaxonomy?: { categoryProvider: ICategoryProvider; tagProvider: ITagProvider };
 }
 
 export function createPublishersFromConfig(
@@ -31,30 +32,8 @@ export function createPublishersFromConfig(
   }
 
   if (config.wordpress) {
-    const taxonomyConfig: TaxonomyProviderConfig = {
-      allowCreate: config.taxonomy?.allowCreate || false,
-      defaultCategory: config.taxonomy?.defaultCategory || "Uncategorized",
-      maxTags: config.taxonomy?.maxTags || 5,
-      cacheTtlSeconds: config.taxonomy?.cacheTtlSeconds || 300
-    };
-
-    const categoryProvider = new WordPressCategoryProvider({
-      endpoint: config.wordpress.endpoint,
-      username: config.wordpress.username,
-      applicationPassword: config.wordpress.applicationPassword,
-      password: config.wordpress.password,
-      logger,
-      config: taxonomyConfig
-    });
-
-    const tagProvider = new WordPressTagProvider({
-      endpoint: config.wordpress.endpoint,
-      username: config.wordpress.username,
-      applicationPassword: config.wordpress.applicationPassword,
-      password: config.wordpress.password,
-      logger,
-      config: taxonomyConfig
-    });
+    const { categoryProvider, tagProvider } =
+      config.wordpressTaxonomy ?? createWordPressTaxonomyProviders(config, logger);
 
     publishers.push(
       new WordPressPublisher(config.wordpress, logger, categoryProvider, tagProvider)
@@ -66,4 +45,30 @@ export function createPublishersFromConfig(
   }
 
   return publishers;
+}
+
+function createWordPressTaxonomyProviders(
+  config: PublisherFactoryConfig & { wordpress?: WordPressPublisherConfig },
+  logger: ILogger
+): { categoryProvider: ICategoryProvider; tagProvider: ITagProvider } {
+  const wordpress = config.wordpress as WordPressPublisherConfig;
+  const taxonomyConfig: TaxonomyProviderConfig = {
+    allowCreate: config.taxonomy?.allowCreate || false,
+    defaultCategory: config.taxonomy?.defaultCategory || "Uncategorized",
+    maxTags: config.taxonomy?.maxTags || 5,
+    cacheTtlSeconds: config.taxonomy?.cacheTtlSeconds || 300
+  };
+  const options = {
+    endpoint: wordpress.endpoint,
+    username: wordpress.username,
+    applicationPassword: wordpress.applicationPassword,
+    password: wordpress.password,
+    logger,
+    config: taxonomyConfig
+  };
+
+  return {
+    categoryProvider: new WordPressCategoryProvider(options),
+    tagProvider: new WordPressTagProvider(options)
+  };
 }

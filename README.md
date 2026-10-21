@@ -68,6 +68,7 @@ apps/
   server/
   cli/
 packages/
+  app/
   graph/
   agents/
   providers/
@@ -204,6 +205,17 @@ The CLI reads these environment variables:
 | `OPENROUTER_SITE_NAME` | No       | none                     | Optional OpenRouter title header |
 | `OLLAMA_BASE_URL`      | No       | `http://127.0.0.1:11434` | Ollama server base URL           |
 | `OLLAMA_MODEL`         | No       | `llama3.1`               | Ollama model name                |
+
+Taxonomy (categories and tags offered to the classifier when `OPENBLOG_TAXONOMY_PROVIDER=static`, the default):
+
+| Variable                             | Default         | Purpose                                                                 |
+| ------------------------------------ | --------------- | ----------------------------------------------------------------------- |
+| `OPENBLOG_TAXONOMY_CATEGORIES`       | none            | Comma-separated category names                                          |
+| `OPENBLOG_TAXONOMY_TAGS`             | none            | Comma-separated tag names                                               |
+| `OPENBLOG_TAXONOMY_FILE`             | none            | JSON file `{ "categories": [...], "tags": [...] }`; the lists above win |
+| `OPENBLOG_TAXONOMY_DEFAULT_CATEGORY` | `Uncategorized` | Only category when none is configured; used when none is chosen         |
+
+With nothing configured the only category is the default one and there are no predefined tags.
 
 Provider behavior:
 

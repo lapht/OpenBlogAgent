@@ -64,3 +64,10 @@ ADR-style log. Add new entries at the bottom; do not rewrite accepted ones, supe
 - Context: the workflow file embedded the planner/writer prompts and parser, built `DefaultPublisherManager` itself and redefined the memory contract.
 - Decision: `@openblog/graph` only orchestrates. It defines ports in `packages/graph/src/ports.ts` (`LlmPort`, `PublishPort`, `TaxonomyPort`, `MemoryPort`) and `createArticleGenerationWorkflow` receives them (`llm`, `publisher`, `taxonomy`, `memory`). The CLI is the bootstrap: it builds `DefaultPublisherManager`, the taxonomy adapter and the memory service. Planner and writer are agents like the others; all prompts live in `packages/agents/src/prompts/*` with a `*_PROMPT_VERSION` constant.
 - Consequence: graph imports only types from adapter packages; the workflow is tested end-to-end with fakes. Bump the version constant when a prompt changes.
+
+## ADR-011: One composition root builds the application from config
+
+- Status: accepted (2026-10-21)
+- Context: the CLI built providers, publishers, taxonomy and the workflow itself; WordPress taxonomy providers were created twice and default categories/tags were hard-coded.
+- Decision: `createApplication(config, overrides?)` in `packages/app` is the only place adapters are constructed. It returns `{ workflow, info, dispose }`; `overrides` replace adapters in tests. WordPress taxonomy providers are built once and shared by the publisher and the classifier. Static categories/tags come from `OPENBLOG_TAXONOMY_CATEGORIES`/`_TAGS` or `OPENBLOG_TAXONOMY_FILE` (lists win over the file); with nothing configured the only category is `OPENBLOG_TAXONOMY_DEFAULT_CATEGORY`.
+- Consequence: the CLI (`runCli`) only handles arguments and exit codes, and the server can build the same application (`buildServer({ application })`). The previous built-in category/tag lists are gone: set the variables to restore a taxonomy.
