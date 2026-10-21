@@ -209,6 +209,18 @@ export class MemoryService {
     });
   }
 
+  async loadWorkflow(workflowId: Identifier) {
+    const workflow = this.workflowRepository.getById(workflowId);
+    if (!workflow) {
+      return null;
+    }
+    return {
+      topic: workflow.topic,
+      status: workflow.status,
+      steps: this.stepRepository.getByWorkflowId(workflowId)
+    };
+  }
+
   async getSteps(workflowId: Identifier): Promise<WorkflowStepRecord[]> {
     return this.stepRepository.getByWorkflowId(workflowId);
   }

@@ -59,6 +59,7 @@ describe("article workflow with fake ports", () => {
         finishWorkflow: async ({ status }) => {
           calls.push(`finish:${status}`);
         },
+        loadWorkflow: async () => null,
         recordStep: async ({ step, status }) => {
           steps.push(`${step}:${status}`);
         },
@@ -135,6 +136,7 @@ describe("article workflow with fake ports", () => {
         finishWorkflow: async (params) => {
           finished.push(params);
         },
+        loadWorkflow: async () => null,
         recordStep: async () => {},
         failWorkflow: async (params) => {
           throw new Error(`unexpected failWorkflow: ${JSON.stringify(params)}`);
@@ -177,6 +179,7 @@ describe("article workflow with fake ports", () => {
         savePrompt: async () => {},
         markRunning: async () => {},
         finishWorkflow: async () => {},
+        loadWorkflow: async () => null,
         recordStep: async () => {},
         failWorkflow: async (params) => {
           failures.push(params);

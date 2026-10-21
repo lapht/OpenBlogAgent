@@ -15,6 +15,14 @@ export interface TaxonomyPort {
   listTags(): Promise<string[]>;
 }
 
+/** One stored execution of a workflow step. */
+export interface StoredWorkflowStep {
+  step: string;
+  status: "succeeded" | "failed";
+  attempt: number;
+  output?: unknown;
+}
+
 /** Workflow bookkeeping. Implemented by `MemoryService` in the storage package. */
 export interface MemoryPort {
   beginWorkflow(params: {
@@ -31,6 +39,12 @@ export interface MemoryPort {
     promptType: "planner" | "writer";
     content: string;
   }): Promise<void>;
+  /** The stored run with its step history (oldest first), or null if the id is unknown. */
+  loadWorkflow(workflowId: string): Promise<{
+    topic: string;
+    status: string;
+    steps: StoredWorkflowStep[];
+  } | null>;
   markRunning(workflowId: string): Promise<void>;
   /** Stores the final status together with the generated content, also when publishing failed. */
   finishWorkflow(params: {
