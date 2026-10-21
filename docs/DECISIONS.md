@@ -16,7 +16,7 @@ ADR-style log. Add new entries at the bottom; do not rewrite accepted ones, supe
 
 ## ADR-003: Ghost is documented as not implemented
 
-- Status: accepted
+- Status: superseded by ADR-029
 - Context: `GhostPublisher` built a payload and returned success without any HTTP call.
 - Decision: Ghost is removed from the factory, env schema, `.env.example` and README until it is implemented (Post-MVP). The class stays only as a placeholder whose `publish` fails with `not_implemented`, so no publisher can claim success without doing the work.
 
@@ -176,3 +176,10 @@ ADR-style log. Add new entries at the bottom; do not rewrite accepted ones, supe
 - Context: the server only had `/health` and `/version`, with CORS reflecting any origin and no authentication, which is unsafe for endpoints that spend money and publish.
 - Decision: `apps/server` builds the application with `createApplication` (the CLI's wiring) and, given an application, registers `POST /runs`, `GET /runs`, `GET /runs/{id}`, `POST /runs/{id}/resume` and `POST /runs/{id}/approve` in an encapsulated plugin whose `onRequest` hook checks `OPENBLOG_API_KEY` (bearer token or `X-API-Key`, compared as SHA-256 digests with `timingSafeEqual`). Without a configured key the routes answer 503 rather than running open. Starting a run calls the new `workflow.begin()`, which stores the run as `started` and returns its id; `execute()` then runs in a `RunQueue` (`OPENBLOG_API_CONCURRENCY` running, `OPENBLOG_API_QUEUE_SIZE` waiting, else 429), and clients poll. `run()` is `begin()` plus `execute()`, so CLI and HTTP share one code path. `approve` is synchronous. CORS allows only `OPENBLOG_CORS_ORIGINS` (none by default). Routes carry JSON schemas, which Fastify uses to validate (unknown body fields are rejected) and `@fastify/swagger` turns into `/openapi.json`. Closing the server drains the queue before the store is disposed.
 - Consequence: the queue is in memory, so queued runs are lost on a restart (they stay `started` in the store and can be resumed) and several server processes would not share a limit. One API key means every approval is recorded as `api` unless the client sends `approvedBy`. There is no per-client rate limiting and no dashboard.
+
+## ADR-029: Ghost publisher on the Admin API
+
+- Status: supersedes ADR-003
+- Context: Ghost was removed in the MVP because the placeholder class made no request. A real target needs Admin API authentication, HTML content, tag handling and idempotency.
+- Decision: `GhostPublisher` talks to `<site>/ghost/api/admin` with a hand-signed HS256 JWT (`node:crypto`, no dependency; `kid` is the key id, `aud` is `/admin/`, five minutes) created for every request, because a run can outlast one token. Content is sanitized HTML (`source=html`, the renderer WordPress already uses). Ghost has no categories, so the category is the primary tag. Before writing it looks the slug up (`/posts/slug/<slug>/`, any status) and updates with the post's `updated_at` (Ghost's collision check), never lowering a live post to draft, so repeating a publish updates instead of duplicating. The publisher is registered when `OPENBLOG_GHOST_ENDPOINT` is set and takes its key from `OPENBLOG_GHOST_ADMIN_API_KEY`, which is redacted like the other secrets. Errors use the same codes as WordPress.
+- Consequence: only a fake server verifies it (offline contract tests that also check the JWT signature). Ghost's v5 payload shape is assumed (`Accept-Version: v5.0`); other major versions may differ. A concurrent edit in Ghost between lookup and update fails with `invalid_request` (409) instead of overwriting.

@@ -38,14 +38,13 @@ Included:
 - OpenRouter provider with Ollama fallback
 - Editor, SEO and classification agents; deterministic quality gate
 - SQLite workflow memory (duplicate policy, resume, approval)
-- Markdown and WordPress publishers; drafts first, explicit approval
+- Markdown, WordPress and Ghost publishers; drafts first, explicit approval
 - Structured logs correlated by run, with secret redaction
 - Docker image and Compose file
 
 Not included:
 
 - dashboard (removed from the repository; see ADR-009)
-- Ghost publishing (not configurable; `GhostPublisher` always fails with `not_implemented`; planned)
 - plugin system, scheduler, research engine
 - multi-agent orchestration
 

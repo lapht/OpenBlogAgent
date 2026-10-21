@@ -47,6 +47,19 @@ OPENBLOG_WORDPRESS_USERNAME=bot
 OPENBLOG_WORDPRESS_APPLICATION_PASSWORD=xxxx xxxx xxxx xxxx xxxx xxxx
 ```
 
+### Ghost
+
+1. In Ghost Admin: Settings → Integrations → Add custom integration. Copy its **Admin API key** (`<id>:<secret>`).
+2. Configure:
+
+```bash
+OPENBLOG_DEFAULT_PUBLISHER=ghost
+OPENBLOG_GHOST_ENDPOINT=https://your-site
+OPENBLOG_GHOST_ADMIN_API_KEY=<id>:<secret>
+```
+
+The same advice applies: try `generate "topic" --dry-run --publisher ghost` and the default `draft` policy first. The tests use a fake Ghost server only; no automated test has run against a real Ghost site.
+
 **Try it on a test site first.** With the default `draft` policy nothing becomes visible, and `npm start -- generate "topic" --dry-run --publisher wordpress` exercises everything but the post itself. Published posts are keyed by slug: publishing again updates the existing post (or fails with `conflict` when `OPENBLOG_WORDPRESS_ON_EXISTING=conflict`).
 
 ## Core concepts
@@ -55,7 +68,7 @@ OPENBLOG_WORDPRESS_APPLICATION_PASSWORD=xxxx xxxx xxxx xxxx xxxx xxxx
 - DefaultPublisherManager: central component that routes the publish request.
 - MarkdownPublisher: writes `{OPENBLOG_OUTPUT_DIR}/{slug}.md` with YAML front matter (title, slug, description, category, tags as a list, createdAt, updatedAt, author, language) produced by a YAML serializer. The slug is slugified (`^[a-z0-9]+(-[a-z0-9]+)*$`) and the path is checked to stay inside the output directory (`invalid_slug` otherwise). An existing file is never replaced unless `OPENBLOG_MARKDOWN_OVERWRITE=true`; otherwise the publish fails with `already_exists`.
 - WordPressPublisher: creates a post (draft by default) through the WordPress REST API. Markdown is rendered to HTML with `marked` and sanitized with `sanitize-html`; the payload includes the slug; the response (`id`, `link`, `status`, `slug`) is returned in `PublishResult.metadata`. Publishing is idempotent: before writing, the publisher queries `GET /posts?slug=<slug>&status=any`; an existing post is updated in place with `PUT /posts/<id>` (its status is kept unless `OPENBLOG_WORDPRESS_STATUS=publish`), or the publish fails with `conflict` when `OPENBLOG_WORDPRESS_ON_EXISTING=conflict`. The result metadata has `action` (`created`|`updated`); id, link and status are stored on the article row (`publish_remote_*`). Only Application Passwords are supported, and HTTP errors map to distinct codes: `auth_failed` (401), `forbidden` (403), `invalid_request` (other 4xx), `server_error` (5xx), `network_error`, `timeout` and `unexpected_response`.
-- GhostPublisher: placeholder for a future Ghost Admin API integration. It is not registered by the factory, has no configuration, and always fails with `not_implemented`.
+- GhostPublisher: creates a post through the Ghost Admin API (`<site>/ghost/api/admin/posts/?source=html`), registered when `OPENBLOG_GHOST_ENDPOINT` is set. Each request carries a fresh HS256 JWT signed with the secret of `OPENBLOG_GHOST_ADMIN_API_KEY` (`Authorization: Ghost <jwt>`, valid five minutes). Markdown is rendered to sanitized HTML. Ghost has no categories, so the category becomes the first (primary) tag followed by the tags, which Ghost creates by name. The post is a draft unless the workflow asks for `publish` (Ghost status `published`). Publishing is idempotent: the publisher looks the slug up first (`GET /posts/slug/<slug>/`, any status; a 404 means none) and updates an existing post in place with `PUT /posts/<id>` using its `updated_at`; an update never takes a live post back to draft. The result metadata has `id`, `link`, `status`, `slug` and `action` (`created`|`updated`), stored on the article row like WordPress. HTTP errors map to `auth_failed` (401), `forbidden` (403), `invalid_request` (other 4xx), `server_error` (5xx), `network_error`, `timeout` and `unexpected_response`; a missing or malformed setting fails with `validation_failed` before any request. Members and newsletters are not touched.
 
 ## Configuration
 
@@ -68,6 +81,8 @@ Every variable is described in [Configuration](configuration.md). The ones that 
 - OPENBLOG_WORDPRESS_ENDPOINT
 - OPENBLOG_WORDPRESS_USERNAME
 - OPENBLOG_WORDPRESS_APPLICATION_PASSWORD
+- OPENBLOG_GHOST_ENDPOINT
+- OPENBLOG_GHOST_ADMIN_API_KEY
 - OPENBLOG_WORDPRESS_STATUS
 - OPENBLOG_WORDPRESS_ON_EXISTING (`update`|`conflict`, default `update`)
 - OPENBLOG_TAXONOMY_ALLOW_CREATE (`true`|`false`, default `false`)

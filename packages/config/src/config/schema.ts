@@ -60,6 +60,12 @@ export const envSchema = z.object({
     .default("draft"),
   /** Default WordPress status for direct publisher use; the workflow sets it from the policy. */
   OPENBLOG_WORDPRESS_STATUS: z.enum(["draft", "publish"]).optional(),
+  /** Ghost site URL, e.g. https://blog.example.com (the Admin API path is added). */
+  OPENBLOG_GHOST_ENDPOINT: optionalString(),
+  /** Ghost Admin API key `<id>:<secret>` of a custom integration. */
+  OPENBLOG_GHOST_ADMIN_API_KEY: optionalString(), // secret
+  /** Default Ghost status for direct publisher use; the workflow sets it from the policy. */
+  OPENBLOG_GHOST_STATUS: z.enum(["draft", "publish"]).optional(),
   /** When a WordPress post with the same slug exists: update it or fail with `conflict`. */
   OPENBLOG_WORDPRESS_ON_EXISTING: z.enum(["update", "conflict"]).default("update"),
   OPENBLOG_TAXONOMY_PROVIDER: z.enum(["static", "wordpress"]).default("static"),
@@ -109,5 +115,6 @@ export type EnvSchema = z.infer<typeof envSchema>;
 export const SECRET_ENV_KEYS = [
   "OPENROUTER_API_KEY",
   "OPENBLOG_API_KEY",
+  "OPENBLOG_GHOST_ADMIN_API_KEY",
   "OPENBLOG_WORDPRESS_APPLICATION_PASSWORD"
 ] as const satisfies readonly (keyof EnvSchema)[];

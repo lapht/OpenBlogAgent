@@ -1,5 +1,6 @@
 import type { ILogger } from "@openblog/logger";
 
+import { GhostPublisher, type GhostPublisherConfig } from "./ghost";
 import { MarkdownPublisher, type MarkdownPublisherConfig } from "./markdown";
 import { WordPressPublisher, type WordPressPublisherConfig } from "./wordpress";
 import type { IPublisher } from "./types";
@@ -13,6 +14,7 @@ import type { ICategoryProvider, ITagProvider, TaxonomyProviderConfig } from "./
 export interface PublisherFactoryConfig {
   markdown?: MarkdownPublisherConfig;
   wordpress?: WordPressPublisherConfig;
+  ghost?: GhostPublisherConfig;
   defaultPublisherId?: string;
   taxonomy?: TaxonomyProviderConfig;
   /** Providers the WordPress publisher uses to resolve names to ids. Built from `wordpress` when omitted. */
@@ -36,6 +38,10 @@ export function createPublishersFromConfig(
     publishers.push(
       new WordPressPublisher(config.wordpress, logger, categoryProvider, tagProvider)
     );
+  }
+
+  if (config.ghost) {
+    publishers.push(new GhostPublisher(config.ghost, logger));
   }
 
   return publishers;
