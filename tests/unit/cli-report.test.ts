@@ -20,24 +20,29 @@ const base = {
   article: "a",
   category: "General",
   editedText: "a",
-  seoOutput: { title: "T", slug: "t" },
+  seoOutput: {
+    title: "T",
+    metaDescription: "d",
+    slug: "t",
+    h1: "T",
+    headings: []
+  },
   tags: [],
   topic: "topic"
-} as unknown as ArticleWorkflowResult;
+};
 
 describe("CLI run outcome", () => {
   it("exits non-zero, shows the reason and never logs 'Article saved' when publishing failed", () => {
     const { logs, logger } = capture();
 
-    const code = reportRunOutcome(
-      {
-        ...base,
-        status: "failed",
-        failure: { step: "publisher", code: "validation_failed", message: "bad slug" },
-        publishResult: { success: false, publisherId: "markdown", publisherName: "Markdown" }
-      },
-      logger
-    );
+    const result: ArticleWorkflowResult = {
+      ...base,
+      status: "failed",
+      failure: { step: "publisher", code: "validation_failed", message: "bad slug" },
+      publishResult: { success: false, publisherId: "markdown", publisherName: "Markdown" }
+    };
+
+    const code = reportRunOutcome(result, logger);
 
     expect(code).toBe(1);
     expect(logs.map((entry) => entry.message)).not.toContain("Article saved");
@@ -50,19 +55,18 @@ describe("CLI run outcome", () => {
   it("exits zero and logs 'Article saved' once published", () => {
     const { logs, logger } = capture();
 
-    const code = reportRunOutcome(
-      {
-        ...base,
-        status: "published",
-        publishResult: {
-          success: true,
-          publisherId: "markdown",
-          publisherName: "Markdown",
-          outputPath: "output/articles/t.md"
-        }
-      },
-      logger
-    );
+    const result: ArticleWorkflowResult = {
+      ...base,
+      status: "published",
+      publishResult: {
+        success: true,
+        publisherId: "markdown",
+        publisherName: "Markdown",
+        outputPath: "output/articles/t.md"
+      }
+    };
+
+    const code = reportRunOutcome(result, logger);
 
     expect(code).toBe(0);
     expect(logs.map((entry) => entry.message)).toContain("Article saved");

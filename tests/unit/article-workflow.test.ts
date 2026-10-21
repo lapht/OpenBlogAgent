@@ -2,24 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { PublishArticle } from "../../packages/publishers/src/types";
 import {
-  articleWorkflowStateSchema,
   createArticleGenerationWorkflow,
   WorkflowStepError
 } from "../../packages/graph/src/workflows/article-generation-workflow";
 import { scriptedProvider } from "../mocks/scripted-provider";
-
-describe("article workflow state validation", () => {
-  it("accepts the initial empty seoOutput state used by the graph defaults", () => {
-    expect(() =>
-      articleWorkflowStateSchema.parse({
-        article: "",
-        outline: [],
-        topic: "Test article",
-        seoOutput: {}
-      })
-    ).not.toThrow();
-  });
-});
 
 describe("article workflow with fake ports", () => {
   const replies = [
@@ -80,13 +66,7 @@ describe("article workflow with fake ports", () => {
       maxTags: 5
     });
 
-    const result = await workflow.run({
-      article: "",
-      category: "",
-      outline: [],
-      tags: [],
-      topic: "Fake topic"
-    });
+    const result = await workflow.run({ topic: "Fake topic" });
 
     expect(result.editedText).toBe("Edited body");
     expect(result.category).toBe("News");
@@ -150,13 +130,7 @@ describe("article workflow with fake ports", () => {
       defaultCategory: "General"
     });
 
-    const result = await workflow.run({
-      article: "",
-      category: "",
-      outline: [],
-      tags: [],
-      topic: "Fake topic"
-    });
+    const result = await workflow.run({ topic: "Fake topic" });
 
     expect(result.status).toBe("failed");
     expect(result.failure).toEqual({
@@ -196,9 +170,7 @@ describe("article workflow with fake ports", () => {
       }
     });
 
-    await expect(
-      workflow.run({ article: "", category: "", outline: [], tags: [], topic: "Fake topic" })
-    ).rejects.toBeInstanceOf(WorkflowStepError);
+    await expect(workflow.run({ topic: "Fake topic" })).rejects.toBeInstanceOf(WorkflowStepError);
     expect(failures).toHaveLength(1);
     expect(failures[0]).toMatchObject({ failedStep: expect.any(String) });
   });

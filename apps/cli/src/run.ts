@@ -52,13 +52,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<number> {
     const app = await createApplication(loadEnv(options.env), options.overrides);
 
     try {
-      const result = await app.workflow.run({
-        article: "",
-        category: "",
-        outline: [],
-        tags: [],
-        topic
-      });
+      const result = await app.workflow.run({ topic });
 
       return reportRunOutcome(result, logger);
     } finally {
