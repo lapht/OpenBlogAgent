@@ -1,7 +1,8 @@
 import type { Identifier } from "@openblog/types";
 
-/** `started -> running -> published | needs_review | failed`. */
-export type WorkflowStatus = "started" | "running" | "published" | "needs_review" | "failed";
+/** `started -> running -> published | needs_review | failed`, or `duplicate` when stopped by the duplicate policy. */
+export type WorkflowStatus =
+  "started" | "running" | "published" | "needs_review" | "failed" | "duplicate";
 
 export type FinalWorkflowStatus = Extract<WorkflowStatus, "published" | "needs_review" | "failed">;
 

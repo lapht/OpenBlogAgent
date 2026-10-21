@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { ILogger } from "@openblog/logger";
 import type { ICategoryProvider, ITagProvider } from "../taxonomy/types";
 import type {
+  ExistingPost,
   IPublisher,
   PublishArticle,
   PublishResult,
@@ -127,7 +128,7 @@ export class WordPressPublisher implements IPublisher {
       };
 
       // Look the slug up before every write, so a retry after a timeout finds the earlier post.
-      const existing = await this.findExisting(postEndpoint, article.slug, headers);
+      const existing = await this.findBySlug(postEndpoint, article.slug, headers);
 
       if (existing && (this.config.onExisting ?? "update") === "conflict") {
         this.logger.warn("WordPress post with this slug already exists", {
@@ -206,8 +207,24 @@ export class WordPressPublisher implements IPublisher {
     }
   }
 
+  /** Read-only lookup used by the duplicate policy; failures are thrown to the caller. */
+  async findExisting(article: Pick<PublishArticle, "slug">): Promise<ExistingPost | null> {
+    const found = await this.findBySlug(
+      `${normalizeWordPressEndpoint(this.config.endpoint)}/posts`,
+      article.slug,
+      {
+        "Content-Type": "application/json",
+        Authorization: basicAuthHeader(
+          this.config.username ?? "",
+          this.config.applicationPassword ?? ""
+        )
+      }
+    );
+    return found ? { id: String(found.id), url: found.link } : null;
+  }
+
   /** The post with exactly this slug in any status, or undefined. Lookup failures abort the publish. */
-  private async findExisting(
+  private async findBySlug(
     postEndpoint: string,
     slug: string,
     headers: Record<string, string>

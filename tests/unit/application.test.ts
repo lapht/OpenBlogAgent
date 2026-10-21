@@ -131,6 +131,8 @@ describe("createApplication", () => {
           memoryCalls.push(`finish:${status}`);
         },
         loadWorkflow: async () => null,
+        markDuplicate: async () => {},
+        findDuplicateArticle: async () => null,
         recordStep: async () => {},
         failWorkflow: async () => {}
       }

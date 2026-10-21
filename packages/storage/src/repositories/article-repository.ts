@@ -138,6 +138,34 @@ export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
     return row ? this.mapRow(row) : null;
   }
 
+  /**
+   * A stored article of another run (published or waiting for review) with the same slug or the
+   * same title, ignoring case. The oldest match wins.
+   */
+  findDuplicate(params: {
+    slug: string;
+    title: string;
+    excludeWorkflowId: Identifier;
+  }): { workflowId: Identifier; matchedOn: "slug" | "title" } | null {
+    const row = this.db
+      .prepare(
+        `SELECT a.workflow_id AS workflow_id, a.slug AS slug
+         FROM articles a
+         JOIN workflows w ON w.id = a.workflow_id
+         WHERE a.workflow_id != ?
+           AND w.status IN ('published', 'needs_review')
+           AND (a.slug = ? OR lower(a.title) = lower(?))
+         ORDER BY a.created_at ASC
+         LIMIT 1`
+      )
+      .get(params.excludeWorkflowId, params.slug, params.title) as
+      { workflow_id: string; slug: string | null } | undefined;
+
+    return row
+      ? { workflowId: row.workflow_id, matchedOn: row.slug === params.slug ? "slug" : "title" }
+      : null;
+  }
+
   private mapRow(row: ArticleRow): ArticleRecord {
     return {
       id: row.id,

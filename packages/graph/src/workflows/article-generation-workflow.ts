@@ -38,7 +38,9 @@ const publishResultSchema = z.object({
 
 /** What a caller provides; every other field of the workflow state is produced by a step. */
 export const articleWorkflowInputSchema = z.object({
-  topic: z.string().trim().min(1)
+  topic: z.string().trim().min(1),
+  /** Generate even if the topic, slug or title was already published. Recorded on the run. */
+  force: z.boolean().optional()
 });
 
 export type ArticleWorkflowInput = z.infer<typeof articleWorkflowInputSchema>;
@@ -52,6 +54,17 @@ const violationSchema = z.object({
 
 export type QualityViolation = z.infer<typeof violationSchema>;
 
+/** What a new article collides with. */
+const duplicateSchema = z.object({
+  matchedOn: z.enum(["topic", "slug", "title", "remote"]),
+  /** The stored run it duplicates; absent for a remote post. */
+  workflowId: z.string().optional(),
+  /** Id or URL of the remote post (or file) it collides with. */
+  remote: z.string().optional()
+});
+
+export type DuplicateInfo = z.infer<typeof duplicateSchema>;
+
 const nonEmptyTextSchema = z.string().trim().min(1);
 const classificationSchema = z.object({
   category: nonEmptyTextSchema,
@@ -59,7 +72,7 @@ const classificationSchema = z.object({
 });
 
 /** `needs_review`: the quality gate rejected the article; it is stored and nothing was published. */
-export type WorkflowRunStatus = "published" | "needs_review" | "failed";
+export type WorkflowRunStatus = "published" | "needs_review" | "failed" | "duplicate";
 
 export interface WorkflowFailure {
   step: string;
@@ -120,14 +133,26 @@ export interface NeedsReviewWorkflowResult extends ArticleWorkflowOutput {
   publishResult?: undefined;
 }
 
+/** The duplicate policy stopped the run before anything was published. */
+export interface DuplicateWorkflowResult {
+  status: "duplicate";
+  topic: string;
+  failure: WorkflowFailure;
+  duplicateOf: DuplicateInfo;
+  publishResult?: undefined;
+}
+
 export type ArticleWorkflowResult =
-  PublishedWorkflowResult | NeedsReviewWorkflowResult | FailedWorkflowResult;
+  | PublishedWorkflowResult
+  | NeedsReviewWorkflowResult
+  | DuplicateWorkflowResult
+  | FailedWorkflowResult;
 
 export interface ArticleGenerationWorkflow {
   readonly name: typeof ARTICLE_GENERATION_WORKFLOW_NAME;
   run(input: ArticleWorkflowInput): Promise<ArticleWorkflowResult>;
   /** Continues a run that did not publish, reusing the stored output of its completed steps. */
-  resume(workflowId: string): Promise<ArticleWorkflowResult>;
+  resume(workflowId: string, options?: { force?: boolean }): Promise<ArticleWorkflowResult>;
 }
 
 export type WorkflowResumeErrorCode = "memory_unavailable" | "not_found" | "already_published";
@@ -153,6 +178,8 @@ export interface CreateArticleGenerationWorkflowOptions {
   defaultCategory?: string;
   /** Maximum number of tags the classifier may return. Defaults to 5. */
   maxTags?: number;
+  /** Generate duplicates without `force` on every run (OPENBLOG_ALLOW_DUPLICATES). */
+  allowDuplicates?: boolean;
   quality?: {
     /** Overrides of the default validation thresholds. */
     rules?: Partial<ArticleValidationRules>;
@@ -184,6 +211,8 @@ const graphState = Annotation.Root({
   qualityPassed: optional<boolean>(),
   qualityViolations: optional<QualityViolation[]>(),
   qualityFeedback: optional<string>(),
+  force: Annotation<boolean>({ default: () => false, reducer: (_, update) => update }),
+  duplicate: optional<DuplicateInfo>(),
   llmUsage: optional<LlmUsage>(),
   /** Steps restored from a previous run; their nodes are skipped. */
   completedSteps: optional<string[]>()
@@ -198,6 +227,7 @@ const stepOutputSchemas: Record<string, z.ZodType<ArticleWorkflowUpdate, z.ZodTy
   writer: z.object({ article: nonEmptyTextSchema }),
   editor: z.object({ editedText: nonEmptyTextSchema }),
   seo: z.object({ seoOutput: seoOutputSchema }),
+  duplicate_check: z.object({ duplicate: duplicateSchema.optional() }),
   quality: z.object({
     qualityPassed: z.boolean(),
     qualityViolations: z.array(violationSchema),
@@ -226,6 +256,10 @@ function restoreState(steps: StoredWorkflowStep[]): ArticleWorkflowUpdate {
     const output = schema.parse(stored.output);
     // A publish the publisher rejected is stored as an output but is not a completed step.
     if (output.publishResult && !output.publishResult.success) {
+      continue;
+    }
+    // A collision is checked again on resume (the other article may be gone, or the run forced).
+    if (output.duplicate) {
       continue;
     }
     // A rejected article is checked again on resume (the rules may have changed).
@@ -321,6 +355,7 @@ export function createArticleGenerationWorkflow(
   const llm = trackUsage(options.llm);
   const defaultCategory = options.defaultCategory ?? "General";
   const qualityRules = options.quality?.rules ?? {};
+  const allowDuplicates = options.allowDuplicates ?? false;
   const maxRegenerations = Math.max(0, options.quality?.maxAttempts ?? 2);
 
   const plannerAgent = createPlannerAgent(llm);
@@ -408,6 +443,44 @@ export function createArticleGenerationWorkflow(
       })
     )
     .addNode(
+      "duplicate_check",
+      step("duplicate_check", stepContext, async (state) => {
+        const seoOutput = required(state.seoOutput, "seoOutput");
+        let duplicate: DuplicateInfo | undefined;
+
+        const stored =
+          memory && state.workflowId
+            ? await memory.findDuplicateArticle({
+                workflowId: state.workflowId,
+                slug: seoOutput.slug,
+                title: seoOutput.title
+              })
+            : null;
+        if (stored) {
+          duplicate = { matchedOn: stored.matchedOn, workflowId: stored.workflowId };
+        } else {
+          const remote = await publisher.findExisting?.({ slug: seoOutput.slug });
+          if (remote) {
+            duplicate = {
+              matchedOn: "remote",
+              remote: remote.url ?? remote.id ?? seoOutput.slug
+            };
+          }
+        }
+
+        if (duplicate) {
+          logger[state.force ? "warn" : "error"](
+            state.force
+              ? "Duplicate slug or title allowed by force"
+              : "Duplicate slug or title detected",
+            { ...duplicate, slug: seoOutput.slug, title: seoOutput.title, topic: state.topic }
+          );
+        }
+
+        return { duplicate };
+      })
+    )
+    .addNode(
       "quality",
       step("quality", stepContext, async (state) => {
         const { passed, violations } = validateArticle(
@@ -443,7 +516,7 @@ export function createArticleGenerationWorkflow(
       "regenerate",
       step("regenerate", stepContext, async (state) => {
         // The writer, editor, seo and quality nodes must run again, also on a resumed run.
-        const redo = ["writer", "editor", "seo", "quality"];
+        const redo = ["writer", "editor", "seo", "duplicate_check", "quality"];
         return {
           regenerations: state.regenerations + 1,
           qualityFeedback: formatViolations(state.qualityViolations ?? []),
@@ -501,7 +574,10 @@ export function createArticleGenerationWorkflow(
     .addEdge("planner", "writer")
     .addEdge("writer", "editor")
     .addEdge("editor", "seo")
-    .addEdge("seo", "quality")
+    .addEdge("seo", "duplicate_check")
+    .addConditionalEdges("duplicate_check", (state) =>
+      state.duplicate && !state.force ? END : "quality"
+    )
     .addConditionalEdges("quality", (state) =>
       !state.qualityPassed && state.regenerations < maxRegenerations
         ? "regenerate"
@@ -513,9 +589,46 @@ export function createArticleGenerationWorkflow(
     .addEdge("publisher", END)
     .compile();
 
+  /** Ends a run the duplicate policy refused: no further provider calls, nothing published. */
+  async function stopAsDuplicate(
+    topic: string,
+    workflowMemory: { workflowId: string } | null,
+    duplicate: DuplicateInfo,
+    step: string
+  ): Promise<DuplicateWorkflowResult> {
+    const where = duplicate.workflowId ? `run ${duplicate.workflowId}` : duplicate.remote;
+    const failure: WorkflowFailure = {
+      step,
+      code: `duplicate_${duplicate.matchedOn}`,
+      message:
+        duplicate.matchedOn === "topic"
+          ? `This topic was already published (${where}); use --force to generate it again`
+          : `An article with the same ${duplicate.matchedOn === "remote" ? "slug" : duplicate.matchedOn} already exists (${where}); use --force to publish anyway`
+    };
+
+    if (memory && workflowMemory) {
+      await memory.markDuplicate({
+        workflowId: workflowMemory.workflowId,
+        duplicateOfWorkflowId: duplicate.workflowId ?? null,
+        failedStep: failure.step,
+        errorCode: failure.code,
+        errorMessage: failure.message
+      });
+    }
+    logger.warn("Article workflow stopped by the duplicate policy", {
+      topic,
+      workflow: ARTICLE_GENERATION_WORKFLOW_NAME,
+      ...duplicate,
+      errorCode: failure.code
+    });
+
+    return { status: "duplicate", topic, failure, duplicateOf: duplicate };
+  }
+
   async function execute(
     topic: string,
     workflowMemory: { workflowId: string } | null,
+    force: boolean,
     restored: ArticleWorkflowUpdate = {}
   ): Promise<ArticleWorkflowResult> {
     logger.info("Starting article workflow", {
@@ -532,9 +645,19 @@ export function createArticleGenerationWorkflow(
         workflow.invoke({
           ...restored,
           topic,
+          force,
           workflowId: workflowMemory?.workflowId
         })
       );
+
+      if (finalState.duplicate && !force) {
+        return await stopAsDuplicate(
+          topic,
+          workflowMemory,
+          finalState.duplicate,
+          "duplicate_check"
+        );
+      }
 
       const output: ArticleWorkflowOutput = {
         article: required(finalState.article, "article"),
@@ -634,25 +757,35 @@ export function createArticleGenerationWorkflow(
   return {
     name: ARTICLE_GENERATION_WORKFLOW_NAME,
     async run(input: ArticleWorkflowInput): Promise<ArticleWorkflowResult> {
-      const { topic } = articleWorkflowInputSchema.parse(input);
+      const parsed = articleWorkflowInputSchema.parse(input);
+      const { topic } = parsed;
+      const force = Boolean(parsed.force) || allowDuplicates;
       const workflowMemory = memory
         ? await memory.beginWorkflow({
             workflowName: ARTICLE_GENERATION_WORKFLOW_NAME,
-            topic
+            topic,
+            metadata: force ? { force: true } : undefined
           })
         : null;
 
       if (workflowMemory?.isDuplicate) {
-        logger.warn("Duplicate topic detected", {
-          topic,
-          duplicateOfWorkflowId: workflowMemory.duplicateOfWorkflowId
-        });
+        const duplicate: DuplicateInfo = {
+          matchedOn: "topic",
+          workflowId: workflowMemory.duplicateOfWorkflowId ?? undefined
+        };
+        if (!force) {
+          return stopAsDuplicate(topic, workflowMemory, duplicate, "duplicate_topic_check");
+        }
+        logger.warn("Duplicate topic allowed by force", { topic, ...duplicate });
       }
 
-      return execute(topic, workflowMemory);
+      return execute(topic, workflowMemory, force);
     },
 
-    async resume(workflowId: string): Promise<ArticleWorkflowResult> {
+    async resume(
+      workflowId: string,
+      resumeOptions: { force?: boolean } = {}
+    ): Promise<ArticleWorkflowResult> {
       if (!memory) {
         throw new WorkflowResumeError(
           "memory_unavailable",
@@ -677,7 +810,12 @@ export function createArticleGenerationWorkflow(
         completedSteps: restored.completedSteps
       });
 
-      return execute(stored.topic, { workflowId }, restored);
+      return execute(
+        stored.topic,
+        { workflowId },
+        Boolean(resumeOptions.force) || allowDuplicates,
+        restored
+      );
     }
   };
 }

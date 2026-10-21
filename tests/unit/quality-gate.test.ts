@@ -74,6 +74,8 @@ function setup(
         finished.push(params);
       },
       loadWorkflow: async () => null,
+      markDuplicate: async () => {},
+      findDuplicateArticle: async () => null,
       recordStep: async () => {},
       failWorkflow: async (params) => {
         throw new Error(`unexpected failWorkflow: ${JSON.stringify(params)}`);

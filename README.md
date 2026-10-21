@@ -232,6 +232,8 @@ npm start "Content strategy for developer tools"
 npm start "How local LLMs change technical writing workflows"
 ```
 
+A topic that was already published, or an article whose slug or title already exists (stored or on the publishing target), is refused with outcome `duplicate` and exit code 1, before any LLM call in the topic case. Pass `--force` (`npm start -- "topic" --force`) or set `OPENBLOG_ALLOW_DUPLICATES=true` to generate it anyway; the override is recorded on the run.
+
 ## Output
 
 The workflow produces:

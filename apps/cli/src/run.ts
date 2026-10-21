@@ -4,11 +4,21 @@ import { logger } from "@openblog/logger";
 
 import { reportRunOutcome } from "./report";
 
+export const FORCE_FLAG = "--force";
+
+/** True when `--force` is among the arguments (generate even if the topic is a duplicate). */
+export function hasForceFlag(argv: string[] = process.argv.slice(2)): boolean {
+  return argv.includes(FORCE_FLAG);
+}
+
 export function resolveTopic(
   argv: string[] = process.argv.slice(2),
   npmArgv: string | undefined = process.env.npm_config_argv
 ): string {
-  const directTopic = argv.join(" ").trim();
+  const directTopic = argv
+    .filter((arg) => arg !== FORCE_FLAG)
+    .join(" ")
+    .trim();
   if (directTopic.length > 0) {
     return directTopic;
   }
@@ -20,7 +30,7 @@ export function resolveTopic(
       const startIndex = originalArgs.findIndex((arg) => arg === "start");
       const topicFromNpm = originalArgs
         .slice(startIndex >= 0 ? startIndex + 1 : 0)
-        .filter((arg) => arg !== "--")
+        .filter((arg) => arg !== "--" && arg !== FORCE_FLAG)
         .join(" ")
         .trim();
 
@@ -52,7 +62,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<number> {
     const app = await createApplication(loadEnv(options.env), options.overrides);
 
     try {
-      const result = await app.workflow.run({ topic });
+      const result = await app.workflow.run({ topic, force: hasForceFlag(options.argv) });
 
       return reportRunOutcome(result, logger);
     } finally {

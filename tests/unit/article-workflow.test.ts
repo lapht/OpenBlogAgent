@@ -62,6 +62,10 @@ describe("article workflow with fake ports", () => {
           calls.push(`finish:${status}`);
         },
         loadWorkflow: async () => null,
+        markDuplicate: async () => {},
+        findDuplicateArticle: async () => null,
+        markDuplicate: async () => {},
+        findDuplicateArticle: async () => null,
         recordStep: async ({ step, status }) => {
           steps.push(`${step}:${status}`);
         },
@@ -101,6 +105,7 @@ describe("article workflow with fake ports", () => {
       "writer:succeeded",
       "editor:succeeded",
       "seo:succeeded",
+      "duplicate_check:succeeded",
       "quality:succeeded",
       "classification:succeeded",
       "publisher:succeeded"
@@ -141,6 +146,10 @@ describe("article workflow with fake ports", () => {
           finished.push(params);
         },
         loadWorkflow: async () => null,
+        markDuplicate: async () => {},
+        findDuplicateArticle: async () => null,
+        markDuplicate: async () => {},
+        findDuplicateArticle: async () => null,
         recordStep: async () => {},
         failWorkflow: async (params) => {
           throw new Error(`unexpected failWorkflow: ${JSON.stringify(params)}`);
@@ -185,6 +194,10 @@ describe("article workflow with fake ports", () => {
         markRunning: async () => {},
         finishWorkflow: async () => {},
         loadWorkflow: async () => null,
+        markDuplicate: async () => {},
+        findDuplicateArticle: async () => null,
+        markDuplicate: async () => {},
+        findDuplicateArticle: async () => null,
         recordStep: async () => {},
         failWorkflow: async (params) => {
           failures.push(params);
