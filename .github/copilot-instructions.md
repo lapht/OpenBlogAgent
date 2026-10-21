@@ -1,16 +1,16 @@
 ## OpenBlogAgent Agent Instructions
 
-### Graphify First
+### Graphify (optional)
 
 For any question about repo architecture, structure, component relationships, or where to change code:
 
-1. Run `graphify query "<question>"` first when `graphify-out/graph.json` exists.
+1. Run `graphify query "<question>"` first when `graphify-out/graph.json` exists locally (it is generated and not tracked in git).
 2. Use `graphify path "<A>" "<B>"` for dependency/relationship tracing.
 3. Use `graphify explain "<concept>"` for focused concept summaries.
 
 Use `graphify-out/wiki/index.md` for broad navigation if present. Read `graphify-out/GRAPH_REPORT.md` only when query/path/explain is not enough.
 
-Do not answer architecture or code-location questions without using Graphify first.
+If no local graph exists, read the code and `docs/` directly.
 
 ### Canonical Commands
 

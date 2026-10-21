@@ -23,9 +23,12 @@ INPUT (topic)
 -> WRITER (markdown article)
 -> EDITOR (improved text)
 -> SEO AGENT (metadata)
--> MARKDOWN ASSEMBLER (final file)
--> OUTPUT (output/{slug}.md)
+-> CLASSIFICATION (category, tags)
+-> PUBLISHER (DefaultPublisherManager -> Markdown by default)
+-> OUTPUT (output/articles/{slug}.md)
 ```
+
+See [Current State](docs/CURRENT_STATE.md) for what is verified and what is not, and [Decisions](docs/DECISIONS.md) for the reasoning behind the current shape.
 
 Included in this phase:
 
@@ -37,13 +40,15 @@ Included in this phase:
 - Pino logging
 - Editor Agent for text improvement
 - SEO Agent for metadata generation
-- Markdown Assembler for final output
-- Publishing engine with Markdown, WordPress, and Ghost publishers
+- Classification agent for category and tags
+- SQLite workflow memory (duplicate-topic detection)
+- Publishing engine with Markdown and WordPress publishers (Ghost is a stub, see "Not included")
 
 Not included in this phase:
 
 - dashboard
-- publisher integrations beyond the current modular scaffold
+- Ghost publishing (`GhostPublisher` only prepares a payload and makes no HTTP call; planned)
+- a Markdown assembler step (`createMarkdownAssembler` in `packages/tools` exists but is not used by the workflow)
 - plugin system
 - multi-agent orchestration
 
@@ -54,6 +59,8 @@ Not included in this phase:
 - [Packages](docs/packages.md)
 - [Publishing](docs/publishing.md)
 - [Memory and Persistence](docs/memory.md)
+- [Current State](docs/CURRENT_STATE.md)
+- [Decisions](docs/DECISIONS.md)
 
 ## Monorepo Layout
 
@@ -98,6 +105,12 @@ State shape:
   topic: string;
   outline: string[];
   article: string;
+  editedText: string;
+  seoOutput: SeoOutput;
+  category: string;
+  tags: string[];
+  publishResult: PublishResult;
+  workflowId?: string;
 }
 ```
 
@@ -106,7 +119,9 @@ Execution steps:
 1. The CLI receives a topic string.
 2. The planner asks the LLM for a valid JSON array of section titles.
 3. The writer asks the LLM for a full Markdown article based on that outline.
-4. The generated article is written to `output/article.md`.
+4. The editor improves the text and the SEO agent produces metadata.
+5. The classification agent picks a category and tags.
+6. The publisher manager sends the article to the default publisher (Markdown writes `output/articles/{slug}.md`).
 
 ## Quick Start
 
@@ -179,7 +194,7 @@ npm start "AI agents in software development"
 5. Read the generated file:
 
 ```bash
-output/article.md
+output/articles/{slug}.md
 ```
 
 ## Runtime Configuration
@@ -269,7 +284,7 @@ npm run generate -- "AI agents in software development"
 This command:
 
 1. Builds all required packages
-2. Runs the full workflow (Planner → Writer → Editor → SEO → Assembler)
+2. Runs the full workflow (Planner → Writer → Editor → SEO → Classification → Publisher)
 3. Prints the output file path
 
 ## Logging
@@ -304,7 +319,7 @@ Expected behavior:
 1. The required workflow packages are built.
 2. The planner generates a JSON outline.
 3. The writer generates a complete Markdown article.
-4. The article is saved to `output/article.md`.
+4. The article is saved to `output/articles/{slug}.md`.
 
 ## Troubleshooting
 
