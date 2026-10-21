@@ -25,6 +25,8 @@ export interface CliSummary {
   remoteUrl: string | null;
   failure: { step: string; code: string; message: string } | null;
   violations: Array<{ code: string; severity: string; message: string }>;
+  /** Editorial review (scores and rationale); null when the review is off or did not run. */
+  review: { overall: number; scores: Record<string, number>; rationale: string } | null;
 }
 
 export interface ListSummary {
@@ -76,7 +78,8 @@ export function summarizeRun(
     outputPath: full?.publishResult?.outputPath ?? null,
     remoteUrl: text(full?.publishResult?.metadata?.link),
     failure: result.failure ?? null,
-    violations: result.status === "needs_review" ? result.violations : []
+    violations: result.status === "needs_review" ? result.violations : [],
+    review: full?.review ?? null
   };
 }
 
@@ -94,7 +97,8 @@ export function summarizeApproval(result: ApprovalResult, dryRun: boolean): CliS
     outputPath: result.publishResult.outputPath ?? null,
     remoteUrl: text(result.publishResult.metadata?.link),
     failure: result.failure ?? null,
-    violations: []
+    violations: [],
+    review: null
   };
 }
 
@@ -109,6 +113,7 @@ export function formatSummary(summary: CliSummary): string {
     summary.remoteUrl && `url: ${summary.remoteUrl}`,
     summary.failure &&
       `failure: ${summary.failure.step}/${summary.failure.code}: ${summary.failure.message}`,
+    summary.review && `review: ${summary.review.overall}/10 - ${summary.review.rationale}`,
     ...summary.violations.map((violation) => `violation: ${violation.code}: ${violation.message}`)
   ];
   return lines.filter(Boolean).join("\n");
@@ -127,6 +132,7 @@ export function formatRunList(runs: StoredWorkflowSummary[]): string {
           run.createdAt,
           `${run.totalTokens} tok`.padStart(12),
           `$${run.costUsd.toFixed(4)}`.padStart(9),
+          (run.review ? `review ${run.review.overall}` : "").padEnd(11),
           run.topic
         ].join("  ") +
         (run.failedStep ? `  [${run.failedStep}${run.errorCode ? `/${run.errorCode}` : ""}]` : "")

@@ -12,6 +12,7 @@ import {
 import type {
   FinalWorkflowStatus,
   StepUsageRecord,
+  StoredReview,
   WorkflowStepRecord
 } from "../repositories/models";
 
@@ -299,6 +300,10 @@ export class MemoryService {
   async listWorkflows(limit = 20) {
     const workflows = this.workflowRepository.listRecent(limit);
     const totals = this.stepRepository.totalsByWorkflow(workflows.map((workflow) => workflow.id));
+    const reviews = this.stepRepository.latestOutputs(
+      workflows.map((workflow) => workflow.id),
+      "editorial_review"
+    );
     return workflows.map((workflow) => ({
       workflowId: workflow.id,
       topic: workflow.topic,
@@ -307,7 +312,8 @@ export class MemoryService {
       errorCode: workflow.errorCode,
       createdAt: workflow.createdAt,
       totalTokens: totals.get(workflow.id)?.totalTokens ?? 0,
-      costUsd: totals.get(workflow.id)?.costUsd ?? 0
+      costUsd: totals.get(workflow.id)?.costUsd ?? 0,
+      review: (reviews.get(workflow.id) as { review?: StoredReview } | undefined)?.review ?? null
     }));
   }
 

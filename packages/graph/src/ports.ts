@@ -50,6 +50,13 @@ export interface StoredArticle {
   gatePassed: boolean | null;
 }
 
+/** The editorial review of a run, when one was made. */
+export interface StoredReview {
+  overall: number;
+  scores: Record<string, number>;
+  rationale: string;
+}
+
 /** One stored run as `list` shows it. */
 export interface StoredWorkflowSummary {
   workflowId: string;
@@ -61,6 +68,8 @@ export interface StoredWorkflowSummary {
   /** Provider usage summed over every stored step of the run. */
   totalTokens: number;
   costUsd: number;
+  /** Latest editorial review; null when the review is off or did not run. */
+  review: StoredReview | null;
 }
 
 /** Workflow bookkeeping. Implemented by `MemoryService` in the storage package. */
