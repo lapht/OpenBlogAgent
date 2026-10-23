@@ -1,5 +1,6 @@
 import type { ApprovalResult, ArticleWorkflowResult, StoredWorkflowSummary } from "@openblog/graph";
 import type { ILogger } from "@openblog/logger";
+import type { ResolvedArticleBrief } from "@openblog/types";
 
 /** Documented exit codes (see `--help`). */
 export const EXIT = {
@@ -18,6 +19,8 @@ export interface CliSummary {
   dryRun: boolean;
   workflowId: string | null;
   topic: string | null;
+  /** The brief the run followed, with its effective word range; null for `approve`. */
+  brief: ResolvedArticleBrief | null;
   title: string | null;
   slug: string | null;
   publisherId: string | null;
@@ -72,6 +75,7 @@ export function summarizeRun(
     dryRun,
     workflowId: result.workflowId ?? null,
     topic: result.topic,
+    brief: result.brief,
     title: full?.seoOutput?.title ?? null,
     slug: full?.seoOutput?.slug ?? null,
     publisherId: full?.publishResult?.publisherId ?? null,
@@ -91,6 +95,7 @@ export function summarizeApproval(result: ApprovalResult, dryRun: boolean): CliS
     dryRun,
     workflowId: result.workflowId,
     topic: null,
+    brief: null,
     title: result.title,
     slug: result.slug,
     publisherId: result.publishResult.publisherId,
@@ -102,11 +107,23 @@ export function summarizeApproval(result: ApprovalResult, dryRun: boolean): CliS
   };
 }
 
+/** The brief on one line: its set fields and the word range the run was held to. */
+function formatBrief(brief: ResolvedArticleBrief): string {
+  const { minWords, maxWords, ...rest } = brief;
+  return [
+    ...Object.entries(rest)
+      .filter(([key]) => key !== "topic")
+      .map(([key, value]) => `${key}=${JSON.stringify(value)}`),
+    `words=${minWords}-${maxWords}`
+  ].join(" ");
+}
+
 /** Short human-readable result for stdout when `--json` is not used. */
 export function formatSummary(summary: CliSummary): string {
   const lines = [
     `${summary.dryRun ? "[dry run] " : ""}${summary.command}: ${summary.status}`,
     summary.workflowId && `workflow: ${summary.workflowId}`,
+    summary.brief && `brief: ${formatBrief(summary.brief)}`,
     summary.title && `title: ${summary.title}`,
     summary.slug && `slug: ${summary.slug}`,
     summary.outputPath && `file: ${summary.outputPath}`,

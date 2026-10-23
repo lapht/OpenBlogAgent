@@ -10,6 +10,7 @@ import {
   createSeoAgent,
   createWriterAgent,
   type ArticleValidationRules,
+  DEFAULT_ARTICLE_RULES,
   type EditorialReview,
   formatViolations,
   plannerOutlineSchema,
@@ -19,6 +20,13 @@ import {
 } from "@openblog/agents";
 import { withLogContext, withScope, type ILogger } from "@openblog/logger";
 import type { PublishArticle, PublishResult } from "@openblog/publishers";
+import {
+  articleBriefSchema,
+  articleBriefShape,
+  checkBriefWordRange,
+  type ArticleBrief,
+  type ResolvedArticleBrief
+} from "@openblog/types";
 import { z } from "zod";
 
 import type { LlmPort, MemoryPort, PublishPort, StoredWorkflowStep, TaxonomyPort } from "../ports";
@@ -50,12 +58,18 @@ const publishResultSchema = z.object({
     .optional()
 });
 
-/** What a caller provides; every other field of the workflow state is produced by a step. */
-export const articleWorkflowInputSchema = z.object({
-  topic: z.string().trim().min(1),
-  /** Generate even if the topic, slug or title was already published. Recorded on the run. */
-  force: z.boolean().optional()
-});
+/**
+ * What a caller provides: the article brief plus run options. Every other field of the workflow
+ * state is produced by a step. The entry points (CLI, API) reject unknown brief fields with
+ * `articleBriefSchema`; here they are ignored, as they always were.
+ */
+export const articleWorkflowInputSchema = z
+  .object({
+    ...articleBriefShape,
+    /** Generate even if the topic, slug or title was already published. Recorded on the run. */
+    force: z.boolean().optional()
+  })
+  .superRefine(checkBriefWordRange);
 
 export type ArticleWorkflowInput = z.infer<typeof articleWorkflowInputSchema>;
 
@@ -147,6 +161,8 @@ interface ArticleWorkflowOutput {
   seoOutput: SeoOutput;
   tags: string[];
   topic: string;
+  /** The brief the run followed, with the word range it was held to. */
+  brief: ResolvedArticleBrief;
   /** The editorial review, when it is enabled and the article passed the gate. */
   review?: EditorialReview;
 }
@@ -186,6 +202,7 @@ export interface DuplicateWorkflowResult {
   status: "duplicate";
   workflowId?: string;
   topic: string;
+  brief: ResolvedArticleBrief;
   failure: WorkflowFailure;
   duplicateOf: DuplicateInfo;
   publishResult?: undefined;
@@ -300,6 +317,8 @@ function optional<T>() {
 
 const graphState = Annotation.Root({
   topic: Annotation<string>(),
+  /** The brief with its word range settled; the same for every node and attempt of a run. */
+  brief: optional<ResolvedArticleBrief>(),
   workflowId: optional<string>(),
   outline: optional<string[]>(),
   article: optional<string>(),
@@ -388,6 +407,12 @@ function restoreState(steps: StoredWorkflowStep[]): ArticleWorkflowUpdate {
   }
 
   return { ...restored, completedSteps };
+}
+
+/** The brief a run was started with; runs stored before briefs existed have only their topic. */
+function storedBrief(stored: { topic: string; metadata?: Record<string, unknown> }): ArticleBrief {
+  const parsed = articleBriefSchema.safeParse(stored.metadata?.brief);
+  return parsed.success ? parsed.data : { topic: stored.topic };
 }
 
 /** Reads a field a previous step must have produced; a miss is a wiring bug, not user input. */
@@ -509,6 +534,32 @@ export function createArticleGenerationWorkflow(
   const allowDuplicates = options.allowDuplicates ?? false;
   const policy = options.publicationPolicy ?? "draft";
   const maxRegenerations = Math.max(0, options.quality?.maxAttempts ?? 2);
+  const baseRules: ArticleValidationRules = { ...DEFAULT_ARTICLE_RULES, ...qualityRules };
+
+  /** The word range is the brief's own, else the quality configuration's, so writer and gate agree. */
+  function resolveBrief(brief: ArticleBrief): ResolvedArticleBrief {
+    const resolved = {
+      ...brief,
+      minWords: brief.minWords ?? baseRules.minWords,
+      maxWords: brief.maxWords ?? baseRules.maxWords
+    };
+    // A range that the configuration alone makes empty stays the gate's business, as before.
+    const fromBrief = brief.minWords !== undefined || brief.maxWords !== undefined;
+    if (fromBrief && resolved.minWords > resolved.maxWords) {
+      throw new z.ZodError([
+        {
+          code: z.ZodIssueCode.custom,
+          path: [brief.minWords === undefined ? "maxWords" : "minWords"],
+          message: `The word range ${resolved.minWords}-${resolved.maxWords} is empty once combined with the quality limits (OPENBLOG_QUALITY_MIN_WORDS/MAX_WORDS); give both minWords and maxWords`
+        }
+      ]);
+    }
+    return resolved;
+  }
+
+  function requiredBrief(state: ArticleWorkflowState): ResolvedArticleBrief {
+    return required(state.brief, "brief");
+  }
 
   const plannerAgent = createPlannerAgent(llm);
   const writerAgent = createWriterAgent(llm);
@@ -525,7 +576,7 @@ export function createArticleGenerationWorkflow(
     .addNode(
       "planner",
       step("planner", stepContext, async (state) => {
-        const input = { topic: state.topic };
+        const input = { topic: state.topic, brief: requiredBrief(state) };
 
         if (memory && state.workflowId) {
           await memory.savePrompt({
@@ -548,7 +599,10 @@ export function createArticleGenerationWorkflow(
         const input = {
           topic: state.topic,
           outline: required(state.outline, "outline"),
-          feedback: state.qualityFeedback
+          feedback: state.qualityFeedback,
+          brief: requiredBrief(state),
+          minWords: requiredBrief(state).minWords,
+          maxWords: requiredBrief(state).maxWords
         };
 
         if (memory && state.workflowId) {
@@ -570,7 +624,8 @@ export function createArticleGenerationWorkflow(
       "editor",
       step("editor", stepContext, async (state) => {
         const editorOutput = await editorAgent.run({
-          rawText: required(state.article, "article")
+          rawText: required(state.article, "article"),
+          brief: requiredBrief(state)
         });
         const editedText = nonEmptyTextSchema.parse(editorOutput.editedText);
 
@@ -588,7 +643,8 @@ export function createArticleGenerationWorkflow(
         const seoOutput = seoOutputSchema.parse(
           await seoAgent.run({
             outline: required(state.outline, "outline"),
-            articleText: currentArticle(state)
+            articleText: currentArticle(state),
+            brief: requiredBrief(state)
           })
         );
 
@@ -645,7 +701,11 @@ export function createArticleGenerationWorkflow(
             outline: state.outline,
             seo: state.seoOutput
           },
-          qualityRules
+          {
+            ...qualityRules,
+            minWords: requiredBrief(state).minWords,
+            maxWords: requiredBrief(state).maxWords
+          }
         );
         const llmUsage = currentUsage();
         const decision = passed
@@ -787,7 +847,7 @@ export function createArticleGenerationWorkflow(
 
   /** Ends a run the duplicate policy refused: no further provider calls, nothing published. */
   async function stopAsDuplicate(
-    topic: string,
+    brief: ResolvedArticleBrief,
     workflowMemory: { workflowId: string } | null,
     duplicate: DuplicateInfo,
     step: string
@@ -811,6 +871,7 @@ export function createArticleGenerationWorkflow(
         errorMessage: failure.message
       });
     }
+    const { topic } = brief;
     logger.warn("Article workflow stopped by the duplicate policy", {
       topic,
       workflow: ARTICLE_GENERATION_WORKFLOW_NAME,
@@ -822,18 +883,20 @@ export function createArticleGenerationWorkflow(
       status: "duplicate",
       workflowId: workflowMemory?.workflowId,
       topic,
+      brief,
       failure,
       duplicateOf: duplicate
     };
   }
 
   async function execute(
-    topic: string,
+    brief: ResolvedArticleBrief,
     workflowMemory: { workflowId: string } | null,
     force: boolean,
     restored: ArticleWorkflowUpdate = {},
     priorUsage: LlmUsage = emptyUsage()
   ): Promise<ArticleWorkflowResult> {
+    const { topic } = brief;
     logger.info("Starting article workflow", {
       topic,
       workflow: ARTICLE_GENERATION_WORKFLOW_NAME
@@ -849,6 +912,7 @@ export function createArticleGenerationWorkflow(
           workflow.invoke({
             ...restored,
             topic,
+            brief,
             force,
             workflowId: workflowMemory?.workflowId
           }),
@@ -857,7 +921,7 @@ export function createArticleGenerationWorkflow(
 
       if (finalState.duplicate && !force) {
         return await stopAsDuplicate(
-          topic,
+          brief,
           workflowMemory,
           finalState.duplicate,
           "duplicate_check"
@@ -871,6 +935,7 @@ export function createArticleGenerationWorkflow(
         seoOutput: required(finalState.seoOutput, "seoOutput"),
         tags: required(finalState.tags, "tags"),
         topic: finalState.topic,
+        brief,
         review: finalState.review
       };
       const publishResult = finalState.publishResult;
@@ -988,14 +1053,17 @@ export function createArticleGenerationWorkflow(
     },
 
     async begin(input: ArticleWorkflowInput): Promise<PendingRun> {
-      const parsed = articleWorkflowInputSchema.parse(input);
-      const { topic } = parsed;
-      const force = Boolean(parsed.force) || allowDuplicates;
+      const { force: requestedForce, ...parsedBrief } = articleWorkflowInputSchema.parse(input);
+      // Resolved before anything is stored or sent to a provider: an unusable brief fails here.
+      const brief = resolveBrief(parsedBrief);
+      const { topic } = brief;
+      const force = Boolean(requestedForce) || allowDuplicates;
       const workflowMemory = memory
         ? await memory.beginWorkflow({
             workflowName: ARTICLE_GENERATION_WORKFLOW_NAME,
             topic,
-            metadata: force ? { force: true } : undefined
+            // The brief as given (not resolved), so a resume follows later changes to the limits.
+            metadata: { brief: parsedBrief, ...(force ? { force: true } : {}) }
           })
         : null;
 
@@ -1011,12 +1079,12 @@ export function createArticleGenerationWorkflow(
                 workflowId: workflowMemory.duplicateOfWorkflowId ?? undefined
               };
               if (!force) {
-                return stopAsDuplicate(topic, workflowMemory, duplicate, "duplicate_topic_check");
+                return stopAsDuplicate(brief, workflowMemory, duplicate, "duplicate_topic_check");
               }
               logger.warn("Duplicate topic allowed by force", { topic, ...duplicate });
             }
 
-            return execute(topic, workflowMemory, force);
+            return execute(brief, workflowMemory, force);
           })
       };
     },
@@ -1147,7 +1215,7 @@ export function createArticleGenerationWorkflow(
         });
 
         return execute(
-          stored.topic,
+          resolveBrief(storedBrief(stored)),
           { workflowId },
           Boolean(resumeOptions.force) || allowDuplicates,
           restored,

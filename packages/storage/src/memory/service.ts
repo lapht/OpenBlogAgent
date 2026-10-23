@@ -289,6 +289,7 @@ export class MemoryService {
     return {
       topic: workflow.topic,
       status: workflow.status,
+      metadata: workflow.metadata,
       steps: this.stepRepository.getByWorkflowId(workflowId).map((record) => ({
         ...record,
         usage: record.usage ?? undefined

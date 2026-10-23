@@ -12,7 +12,9 @@
     "@openblog/graph": "*",
     "@openblog/logger": "*",
     "@openblog/shared": "*",
-    "fastify": "^5.0.0"
+    "@openblog/types": "*",
+    "fastify": "^5.0.0",
+    "zod": "^3.23.8"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

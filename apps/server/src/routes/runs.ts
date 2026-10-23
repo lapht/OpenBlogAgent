@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 
 import type { Application } from "@openblog/app";
 import { ApprovalError } from "@openblog/graph";
+import { articleBriefSchema, formatBriefIssues, type ArticleBrief } from "@openblog/types";
+import { ZodError } from "zod";
 
 import { ApiError } from "../errors";
 import { createApiKeyGuard } from "../plugins/auth";
@@ -23,6 +25,37 @@ const idParams = {
   type: "object",
   properties: { id: { type: "string", minLength: 1, maxLength: 100 } },
   required: ["id"]
+} as const;
+
+const startBody = {
+  type: "object",
+  properties: {
+    topic: { type: "string", minLength: 1, maxLength: 500 },
+    force: { type: "boolean" },
+    language: {
+      type: "string",
+      pattern: "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+      description: "Language code of the article, e.g. `en` or `it`."
+    },
+    audience: { type: "string", minLength: 1, maxLength: 300 },
+    tone: { type: "string", minLength: 1, maxLength: 200 },
+    targetKeyword: { type: "string", minLength: 1, maxLength: 100 },
+    secondaryKeywords: {
+      type: "array",
+      items: { type: "string", minLength: 1, maxLength: 100 },
+      maxItems: 20
+    },
+    minWords: { type: "integer", minimum: 1, maximum: 20000 },
+    maxWords: {
+      type: "integer",
+      minimum: 1,
+      maximum: 20000,
+      description: "Must not be smaller than `minWords`."
+    },
+    notes: { type: "string", minLength: 1, maxLength: 2000 }
+  },
+  required: ["topic"],
+  additionalProperties: false
 } as const;
 
 const acceptedResponse = {
@@ -123,32 +156,37 @@ export async function registerRunRoutes(
     return slot;
   };
 
-  app.post<{ Body: { topic: string; force?: boolean } }>(
+  app.post<{ Body: ArticleBrief & { force?: boolean } }>(
     "/runs",
     {
       schema: {
         summary: "Start a run",
         description:
-          "Registers a run and executes it in the background. Poll `GET /runs/{id}` for the outcome.",
+          "Registers a run and executes it in the background. Poll `GET /runs/{id}` for the outcome. Besides `topic`, the body takes the article brief (language, audience, tone, keywords, word range, notes); a run with only a topic uses the configured defaults.",
         tags: ["runs"],
-        body: {
-          type: "object",
-          properties: {
-            topic: { type: "string", minLength: 1, maxLength: 500 },
-            force: { type: "boolean" }
-          },
-          required: ["topic"],
-          additionalProperties: false
-        },
-        response: { 202: acceptedResponse, 429: errorResponse, 503: errorResponse }
+        body: startBody,
+        response: {
+          202: acceptedResponse,
+          400: errorResponse,
+          429: errorResponse,
+          503: errorResponse
+        }
       }
     },
     async (request, reply) => {
+      const { force, ...brief } = request.body;
+      const checked = articleBriefSchema.safeParse(brief);
+      if (!checked.success) {
+        throw new ApiError(400, "invalid_brief", formatBriefIssues(checked.error));
+      }
+
       const slot = reserveSlot();
       try {
-        const pending = await workflow.begin({
-          topic: request.body.topic,
-          force: request.body.force
+        const pending = await workflow.begin({ ...checked.data, force }).catch((error: unknown) => {
+          if (error instanceof ZodError) {
+            throw new ApiError(400, "invalid_brief", formatBriefIssues(error));
+          }
+          throw error;
         });
         const id = pending.workflowId;
         if (!id) {

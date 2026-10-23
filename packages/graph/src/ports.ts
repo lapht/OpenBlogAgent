@@ -111,6 +111,8 @@ export interface MemoryPort {
   loadWorkflow(workflowId: string): Promise<{
     topic: string;
     status: string;
+    /** What `beginWorkflow` stored: the article brief (`brief`) and run options such as `force`. */
+    metadata?: Record<string, unknown>;
     steps: StoredWorkflowStep[];
   } | null>;
   markRunning(workflowId: string): Promise<void>;

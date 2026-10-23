@@ -1,4 +1,5 @@
 import type { TextGenerationProvider } from "@openblog/providers";
+import type { ArticleBrief } from "@openblog/types";
 
 import { buildWriterPrompt } from "../prompts/writer";
 
@@ -7,6 +8,10 @@ export interface WriterAgentInput {
   outline: string[];
   /** Problems found in a previous attempt, to be fixed by this one. */
   feedback?: string;
+  brief?: ArticleBrief;
+  /** Requested word range; defaults to the quality gate's default range. */
+  minWords?: number;
+  maxWords?: number;
 }
 
 export interface WriterAgent {
@@ -18,10 +23,10 @@ export interface WriterAgent {
 
 export function createWriterAgent(provider: TextGenerationProvider): WriterAgent {
   return {
-    buildPrompt: (input) => buildWriterPrompt(input.topic, input.outline, input.feedback),
+    buildPrompt: (input) => buildWriterPrompt(input.topic, input.outline, input),
     async run(input: WriterAgentInput): Promise<string> {
       const { text } = await provider.generate({
-        prompt: buildWriterPrompt(input.topic, input.outline, input.feedback)
+        prompt: buildWriterPrompt(input.topic, input.outline, input)
       });
       const article = text.trim();
 
