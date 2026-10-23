@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { TextGenerationProvider } from "@openblog/providers";
+import type { ArticleBrief } from "@openblog/types";
 
 import { buildEditorPrompt } from "../prompts/editor";
 import { generateStructured, type StructuredOutputOptions } from "../structured-output";
@@ -14,6 +15,7 @@ export type EditorOutput = z.infer<typeof editorOutputSchema>;
 
 export interface EditorAgentInput {
   rawText: string;
+  brief?: ArticleBrief;
 }
 
 export interface EditorAgent {

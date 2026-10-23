@@ -5,7 +5,7 @@
 - `@openblog/config`: environment loading and validation with dotenv + Zod
 - `@openblog/logger`: Pino logger with secret redaction and per-run log context (`workflowId`, `step`, `attempt`); logs go to stderr
 - `@openblog/shared`: constants shared by apps (request-id header, product name)
-- `@openblog/types`: small shared type aliases
+- `@openblog/types`: small shared types and the `ArticleBrief` Zod schema (the validated description of a run, shared by the CLI, the API, the workflow and the agents)
 
 ## Domain Packages
 

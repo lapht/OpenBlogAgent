@@ -120,7 +120,10 @@ describe("duplicate policy", () => {
       "SELECT status, is_duplicate, metadata_json FROM workflows ORDER BY created_at, rowid"
     ) as Array<{ status: string; is_duplicate: number; metadata_json: string }>;
     expect(rows[1]).toMatchObject({ status: "published", is_duplicate: 1 });
-    expect(JSON.parse(rows[1]!.metadata_json)).toEqual({ force: true });
+    expect(JSON.parse(rows[1]!.metadata_json)).toEqual({
+      brief: { topic: "Same topic" },
+      force: true
+    });
     await first.handle.disconnect();
   });
 

@@ -1,12 +1,15 @@
 import type { EditorAgentInput } from "../editor/agent";
 
-export const EDITOR_PROMPT_VERSION = "1";
+import { briefLines } from "./brief";
+
+export const EDITOR_PROMPT_VERSION = "2";
 
 export function buildEditorPrompt(input: EditorAgentInput): string {
   return [
     "You are an experienced editor.",
     "Improve the text for readability, tone consistency, and clarity.",
     "Remove redundancies and break up overly long sentences.",
+    ...briefLines(input.brief, ["language", "audience", "tone", "keywords"]),
     "",
     "Output rules:",
     "- Return valid JSON only.",

@@ -104,7 +104,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<number> {
           const result =
             command.name === "resume"
               ? await app.workflow.resume(command.workflowId, { force: flags.force })
-              : await app.workflow.run({ topic: command.topic, force: flags.force });
+              : await app.workflow.run({ ...command.brief, force: flags.force });
           const code = reportRunOutcome(result, logger);
           const summary: CliSummary = summarizeRun(command.name, result, flags.dryRun);
           emit(summary, formatSummary(summary));

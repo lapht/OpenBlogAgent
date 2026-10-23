@@ -7,9 +7,11 @@ All notable changes to this project are documented in this file.
 ### Added
 
 - Ghost publisher using the Admin API (JWT auth, draft by default, idempotent by slug).
+- Article brief: `generate` accepts `--brief <file>`, `--audience`, `--tone`, `--keyword`, `--min-words`, `--max-words`, `--notes` and `--language`, and `POST /runs` the same fields. The brief is validated (exit code 64 / HTTP 400), stored with the run, reused by `resume`, shown by `--dry-run`/`--json`, and sent to the planner, writer, editor and SEO prompts.
 
 ### Changed
 
+- The writer prompt asks for the quality gate's word range (`OPENBLOG_QUALITY_MIN_WORDS`/`MAX_WORDS`, or the brief's) instead of a hard-coded 1200-1800; planner, writer, editor and SEO prompts are version 2. `workflows.metadata_json` of new runs holds `{ "brief": ..., "force"?: true }`.
 - Realigned `docs/CURRENT_STATE.md`, `plan/ROADMAP.md` and `CLAUDE.md` with the code on `main`.
 
 ## [0.2.0] - 2026-10-21 (MVP)

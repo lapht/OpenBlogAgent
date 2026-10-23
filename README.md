@@ -192,13 +192,13 @@ Provider behavior:
 | `approve <id>`     | Publishes a stored article live (`--override "reason"` if gate failed) |
 | `list`             | Shows the most recent runs                                             |
 
-Options: `--dry-run` (everything except the publish call, on a throwaway copy of the database, so nothing is stored), `--publisher <id>`, `--force`, `--json` (one summary object on stdout; logs always go to stderr), `--help`.
+Options: `--dry-run` (everything except the publish call, on a throwaway copy of the database, so nothing is stored), `--publisher <id>`, `--force`, the brief options below, `--json` (one summary object on stdout; logs always go to stderr), `--help`.
 
 Exit codes: `0` ok (published, or stored and waiting for approval), `1` failed, `2` needs review, `3` duplicate, `64` usage error.
 
 ## Input
 
-Input is a single topic string passed from the command line.
+Input is a topic passed from the command line, optionally with a brief (see below).
 
 Example:
 
@@ -225,6 +225,20 @@ npm start -- approve <workflowId> --override "reason"   # for an article that fa
 ```
 
 `approve` records who approved and when, publishes once, and refuses articles that are already published or did not pass the gate (unless overridden with a recorded reason). `publish_after_approval` sends nothing until `approve`; `publish_if_gate_passes` publishes live as soon as the gate passes and should be used with care.
+
+## Article brief
+
+Only the topic is required. A run can also carry a brief: `language`, `audience`, `tone`, `targetKeyword`, `secondaryKeywords`, `minWords`, `maxWords` and `notes`. Every agent that can use a field receives it, and the brief is stored with the run, so `resume` follows the same brief. Unknown fields and `minWords > maxWords` are rejected before any provider call (CLI exit code 64, API `400`).
+
+```bash
+npm start -- generate "Cache invalidation" --audience "backend engineers" --tone "dry and precise" \
+  --keyword "cache invalidation" --min-words 800 --max-words 1400 --notes "Mention Redis only once."
+npm start -- generate --brief brief.yaml --tone formal   # flags override the file
+```
+
+`brief.yaml` (or `.json`) takes the field names above, for example `topic: ...`, `secondaryKeywords: [ttl, cdn]`. Over HTTP the same fields go in the `POST /runs` body.
+
+The writer is asked for the brief's word range, else for `OPENBLOG_QUALITY_MIN_WORDS`-`OPENBLOG_QUALITY_MAX_WORDS`, and the quality gate checks the same range. If you give only one bound, the other comes from the configuration and the pair must still be valid. `--dry-run` and `--json` show the effective brief, including that range.
 
 ## Output
 

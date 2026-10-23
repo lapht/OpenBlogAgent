@@ -292,4 +292,65 @@ describe("HTTP API", () => {
       expect.arrayContaining(["/runs", "/runs/{id}", "/runs/{id}/resume", "/runs/{id}/approve"])
     );
   });
+  it("accepts the brief fields when starting a run", async () => {
+    const llm = fakeProvider();
+    const app = await server(llm);
+
+    const started = await app.inject({
+      method: "POST",
+      url: "/runs",
+      headers: auth,
+      payload: {
+        topic: "With a brief",
+        audience: "beginners",
+        targetKeyword: "caching",
+        secondaryKeywords: ["ttl"],
+        minWords: 1,
+        maxWords: 5000
+      }
+    });
+    expect(started.statusCode).toBe(202);
+
+    const run = await waitForRun(app, started.json().workflowId);
+    expect(run.status).toBe("awaiting_approval");
+  });
+
+  it.each([
+    ["an unknown field", { topic: "x", colour: "red" }],
+    ["an empty topic", { topic: "" }],
+    ["a non-numeric word count", { topic: "x", minWords: "many" }],
+    ["an inverted word range", { topic: "x", minWords: 2000, maxWords: 1000 }],
+    ["a bad language code", { topic: "x", language: "not a language" }]
+  ])("rejects %s with 400 before calling the provider", async (_name, payload) => {
+    const llm = fakeProvider();
+    const app = await server(llm);
+
+    const response = await app.inject({ method: "POST", url: "/runs", headers: auth, payload });
+
+    expect(response.statusCode).toBe(400);
+    expect(llm.calls).toBe(0);
+    const runs = await app.inject({ method: "GET", url: "/runs", headers: auth });
+    expect(runs.json().runs).toEqual([]);
+  });
+
+  it("documents the brief fields in the OpenAPI document", async () => {
+    const app = await server(fakeProvider());
+
+    const spec = (await app.inject({ method: "GET", url: "/openapi.json" })).json();
+
+    const body = spec.paths["/runs"].post.requestBody.content["application/json"].schema;
+    expect(Object.keys(body.properties)).toEqual(
+      expect.arrayContaining([
+        "topic",
+        "language",
+        "audience",
+        "tone",
+        "targetKeyword",
+        "secondaryKeywords",
+        "minWords",
+        "maxWords",
+        "notes"
+      ])
+    );
+  });
 });

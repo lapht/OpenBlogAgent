@@ -13,7 +13,7 @@ Run after `npm run build` as `npm start -- <command>` (or `openblog <command>` f
 | `approve <id>`     | Publish a stored article live; `--override "reason"` if it failed the quality gate            |
 | `list`             | The 20 most recent runs, newest first, with status, failed step, total tokens and cost        |
 
-Options: `--dry-run`, `--publisher <id>`, `--force`, `--json`, `--help`. `--dry-run` runs everything except the publish call, on a throwaway copy of the database: nothing is stored, written or sent, and earlier runs are still visible to duplicate checks, `resume` and `approve`.
+Options: `--dry-run`, `--publisher <id>`, `--force`, `--json`, `--help`, and for `generate` the brief options `--brief <file>` (YAML or JSON), `--language`, `--audience`, `--tone`, `--keyword`, `--min-words`, `--max-words`, `--notes` (flags override the file; see the README). An invalid brief exits `64` before any provider call; `--dry-run` and `--json` show the effective brief. `--dry-run` runs everything except the publish call, on a throwaway copy of the database: nothing is stored, written or sent, and earlier runs are still visible to duplicate checks, `resume` and `approve`.
 
 ## Run statuses
 
@@ -68,13 +68,13 @@ With `--json`, stdout holds exactly one JSON object and nothing else (logs go to
 
 Send the key as `Authorization: Bearer <key>` or `X-API-Key: <key>`.
 
-| Endpoint                  | Does                                                                                                                                                                      |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /runs`              | `{ "topic": "...", "force": false }` starts a run in the background: `202 { workflowId, status: "started" }`                                                              |
-| `GET /runs?limit=20`      | The most recent runs with tokens, cost and review                                                                                                                         |
-| `GET /runs/{id}`          | Status, failure, totals and every step execution (`404` for an unknown id)                                                                                                |
-| `POST /runs/{id}/resume`  | `202`; continues from the last good step (`409` if published or already running)                                                                                          |
-| `POST /runs/{id}/approve` | `{ "approvedBy": "...", "overrideReason": "..." }` publishes live and waits for the result; the same refusals as the CLI (`422 gate_not_passed`, `409 already_published`) |
+| Endpoint                  | Does                                                                                                                                                                                                                                                                                                 |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /runs`              | `{ "topic": "...", "force": false, ...brief }` starts a run in the background: `202 { workflowId, status: "started" }`; the brief fields (`language`, `audience`, `tone`, `targetKeyword`, `secondaryKeywords`, `minWords`, `maxWords`, `notes`) are optional, an invalid one is `400 invalid_brief` |
+| `GET /runs?limit=20`      | The most recent runs with tokens, cost and review                                                                                                                                                                                                                                                    |
+| `GET /runs/{id}`          | Status, failure, totals and every step execution (`404` for an unknown id)                                                                                                                                                                                                                           |
+| `POST /runs/{id}/resume`  | `202`; continues from the last good step (`409` if published or already running)                                                                                                                                                                                                                     |
+| `POST /runs/{id}/approve` | `{ "approvedBy": "...", "overrideReason": "..." }` publishes live and waits for the result; the same refusals as the CLI (`422 gate_not_passed`, `409 already_published`)                                                                                                                            |
 
 Runs execute in a bounded queue: `OPENBLOG_API_CONCURRENCY` at once, `OPENBLOG_API_QUEUE_SIZE` waiting; beyond that the answer is `429 queue_full` with `Retry-After`. Poll `GET /runs/{id}` until the status is no longer `started` or `running`. A queued run is stored as `started`. If the server stops while a run is executing, that run stays `running` in the store; `resume` it. On shutdown the server waits for running and queued jobs. The OpenAPI document is at `/openapi.json`. Errors have the shape `{ "error": "...", "code": "..." }`.
 

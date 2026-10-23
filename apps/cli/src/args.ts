@@ -1,4 +1,8 @@
+import fs from "node:fs";
 import { parseArgs } from "node:util";
+
+import { articleBriefSchema, formatBriefIssues, type ArticleBrief } from "@openblog/types";
+import { parse as parseYaml } from "yaml";
 
 export const COMMANDS = ["generate", "resume", "approve", "list"] as const;
 export type CommandName = (typeof COMMANDS)[number];
@@ -14,7 +18,7 @@ export interface CliOptions {
 
 export type ParsedCommand =
   | { name: "help"; options: CliOptions }
-  | { name: "generate"; topic: string; options: CliOptions }
+  | { name: "generate"; topic: string; brief: ArticleBrief; options: CliOptions }
   | { name: "resume"; workflowId: string; options: CliOptions }
   | { name: "approve"; workflowId: string; options: CliOptions }
   | { name: "list"; options: CliOptions };
@@ -30,7 +34,7 @@ export class UsageError extends Error {
 export const HELP = `Usage: openblog <command> [options]
 
 Commands:
-  generate <topic>     Generate an article about <topic> and publish it as the policy allows
+  generate [topic]     Generate an article about <topic> and publish it as the policy allows
   resume <id>          Continue a failed run from its last good step
   approve <id>         Publish a stored article live (--override "reason" if it failed the gate)
   list                 Show the most recent runs
@@ -41,6 +45,17 @@ Options:
   --force              Generate even if the topic, slug or title was already published
   --override <reason>  Approve an article that did not pass the quality gate (approve only)
   --json               Print one JSON summary object on stdout; logs always go to stderr
+
+Brief options (generate only; each overrides the same field of --brief):
+  --brief <file>       YAML or JSON file with the brief: topic, language, audience, tone,
+                       targetKeyword, secondaryKeywords, minWords, maxWords, notes
+  --language <code>    Language of the article, e.g. en or it
+  --audience <text>    Who the article is for
+  --tone <text>        Tone of voice
+  --keyword <text>     Target keyword
+  --min-words <n>      Minimum article length in words
+  --max-words <n>      Maximum article length in words
+  --notes <text>       Editorial notes for the writers
   -h, --help           Show this help
 
 Exit codes:
@@ -65,7 +80,15 @@ export function parseCommand(argv: string[]): ParsedCommand {
         json: { type: "boolean" },
         help: { type: "boolean", short: "h" },
         publisher: { type: "string" },
-        override: { type: "string" }
+        override: { type: "string" },
+        brief: { type: "string" },
+        language: { type: "string" },
+        audience: { type: "string" },
+        tone: { type: "string" },
+        keyword: { type: "string" },
+        "min-words": { type: "string" },
+        "max-words": { type: "string" },
+        notes: { type: "string" }
       }
     });
   } catch (error) {
@@ -102,15 +125,15 @@ export function parseCommand(argv: string[]): ParsedCommand {
     throw new UsageError("--force only applies to generate and resume");
   }
 
+  const briefFlags = BRIEF_FLAGS.filter((flag) => values[flag] !== undefined);
+  if (name !== "generate" && briefFlags.length > 0) {
+    throw new UsageError(`--${briefFlags[0]} only applies to generate`);
+  }
+
   switch (name as CommandName) {
     case "generate": {
-      const topic = rest.join(" ").trim();
-      if (!topic) {
-        throw new UsageError(
-          'Missing article topic. Example: openblog generate "Why caching matters"'
-        );
-      }
-      return { name: "generate", topic, options };
+      const brief = buildBrief(rest.join(" ").trim(), values);
+      return { name: "generate", topic: brief.topic, brief, options };
     }
     case "resume":
     case "approve": {
@@ -126,4 +149,78 @@ export function parseCommand(argv: string[]): ParsedCommand {
       return { name: "list", options };
     }
   }
+}
+
+const BRIEF_FLAGS = [
+  "brief",
+  "language",
+  "audience",
+  "tone",
+  "keyword",
+  "min-words",
+  "max-words",
+  "notes"
+] as const;
+
+type BriefFlagValues = Partial<Record<(typeof BRIEF_FLAGS)[number], string>>;
+
+function readBriefFile(file: string): Record<string, unknown> {
+  let content: string;
+  try {
+    content = fs.readFileSync(file, "utf8");
+  } catch (error) {
+    throw new UsageError(
+      `Cannot read the brief file ${file}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+
+  let data: unknown;
+  try {
+    // YAML is a superset of JSON, so one parser reads both.
+    data = parseYaml(content);
+  } catch (error) {
+    throw new UsageError(
+      `The brief file ${file} is not valid YAML or JSON: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+  if (typeof data !== "object" || data === null || Array.isArray(data)) {
+    throw new UsageError(`The brief file ${file} must contain an object with the brief fields`);
+  }
+  return data as Record<string, unknown>;
+}
+
+function wordCount(flag: string, value: string): number {
+  if (!/^\d+$/.test(value.trim())) {
+    throw new UsageError(`--${flag} needs a whole number of words, got "${value}"`);
+  }
+  return Number(value);
+}
+
+/** The brief of `generate`: the file first, then the flags and the topic on top of it. */
+function buildBrief(topicArgument: string, values: BriefFlagValues): ArticleBrief {
+  const fromFlags = {
+    topic: topicArgument || undefined,
+    language: values.language,
+    audience: values.audience,
+    tone: values.tone,
+    targetKeyword: values.keyword,
+    minWords:
+      values["min-words"] === undefined ? undefined : wordCount("min-words", values["min-words"]),
+    maxWords:
+      values["max-words"] === undefined ? undefined : wordCount("max-words", values["max-words"]),
+    notes: values.notes
+  };
+  const override = Object.fromEntries(
+    Object.entries(fromFlags).filter(([, value]) => value !== undefined)
+  );
+  const candidate = { ...(values.brief ? readBriefFile(values.brief) : {}), ...override };
+
+  if (candidate.topic === undefined) {
+    throw new UsageError('Missing article topic. Example: openblog generate "Why caching matters"');
+  }
+  const parsed = articleBriefSchema.safeParse(candidate);
+  if (!parsed.success) {
+    throw new UsageError(`Invalid brief: ${formatBriefIssues(parsed.error)}`);
+  }
+  return parsed.data;
 }

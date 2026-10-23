@@ -290,4 +290,137 @@ describe("workflow end to end (offline)", () => {
       app.workflow.approve(parked.workflowId!, { approvedBy: "tester" })
     ).rejects.toMatchObject({ code: "already_published" });
   });
+  describe("article brief", () => {
+    const brief = {
+      topic: "Caching",
+      audience: "backend engineers",
+      tone: "dry and precise",
+      targetKeyword: "cache invalidation",
+      secondaryKeywords: ["ttl", "cdn"],
+      notes: "Mention Redis only once.",
+      minWords: 1100,
+      maxWords: 2100
+    };
+
+    const promptOf = (llm: ReturnType<typeof routedProvider>, agent: string) =>
+      llm.prompts.find((entry) => entry.agent === agent)!.prompt;
+
+    it("a topic-only run keeps today's behavior and asks the writer for the gate's range", async () => {
+      const llm = routedProvider(healthy());
+      const app = await start(llm);
+
+      const result = await app.workflow.run({ topic: "Caching" });
+
+      expect(result.status).toBe("published");
+      expect(promptOf(llm, "writer")).toContain("between 1000 and 2200 words");
+      for (const agent of ["planner", "writer", "editor", "seo"]) {
+        expect(promptOf(llm, agent)).not.toContain("Brief:");
+      }
+      expect(result.brief).toEqual({ topic: "Caching", minWords: 1000, maxWords: 2200 });
+    });
+
+    it("takes the writer's word range from the quality configuration", async () => {
+      const llm = routedProvider(healthy());
+      const app = await start(llm, {
+        OPENBLOG_QUALITY_MIN_WORDS: "900",
+        OPENBLOG_QUALITY_MAX_WORDS: "2500"
+      });
+
+      await app.workflow.run({ topic: "Caching" });
+
+      expect(promptOf(llm, "writer")).toContain("between 900 and 2500 words");
+    });
+
+    it("puts the brief in the prompts of the agents that use it", async () => {
+      const llm = routedProvider(healthy());
+      const app = await start(llm);
+
+      const result = await app.workflow.run(brief);
+
+      expect(result.status).toBe("published");
+      expect(result.brief).toEqual(brief);
+      expect(promptOf(llm, "writer")).toContain("between 1100 and 2100 words");
+      for (const agent of ["planner", "writer"]) {
+        const prompt = promptOf(llm, agent);
+        expect(prompt).toContain("Audience: backend engineers");
+        expect(prompt).toContain("Tone: dry and precise");
+        expect(prompt).toContain("Target keyword: cache invalidation");
+        expect(prompt).toContain("Secondary keywords: ttl, cdn");
+        expect(prompt).toContain("Editorial notes: Mention Redis only once.");
+      }
+      expect(promptOf(llm, "editor")).toContain("Tone: dry and precise");
+      expect(promptOf(llm, "editor")).not.toContain("Editorial notes");
+      expect(promptOf(llm, "seo")).toContain("Target keyword: cache invalidation");
+      expect(promptOf(llm, "seo")).not.toContain("Tone:");
+      expect(promptOf(llm, "classification")).not.toContain("Brief:");
+    });
+
+    it("holds the article to the brief's word range, not only to the configured one", async () => {
+      const llm = routedProvider(healthy());
+      const app = await start(llm, { OPENBLOG_QUALITY_MAX_ATTEMPTS: "0" });
+
+      const result = await app.workflow.run({ topic: "Caching", minWords: 100, maxWords: 300 });
+
+      expect(result.status).toBe("needs_review");
+      expect(result.status === "needs_review" && result.violations.map((v) => v.code)).toContain(
+        "word_count_too_long"
+      );
+    });
+
+    it("stores the brief with the run and resume follows it", async () => {
+      const llm = routedProvider({
+        ...healthy(),
+        writer: [new Error("provider down"), goodArticle]
+      });
+      const app = await start(llm);
+
+      const pending = await app.workflow.begin(brief);
+      await expect(pending.execute()).rejects.toThrow(/writer step failed/);
+      expect(
+        JSON.parse(String(rows("SELECT metadata_json FROM workflows")[0]!.metadata_json))
+      ).toEqual({ brief: { ...brief, topic: "Caching" } });
+
+      const resumed = await app.workflow.resume(pending.workflowId!);
+
+      expect(resumed.status).toBe("published");
+      expect(resumed.brief).toEqual(brief);
+      const writerPrompts = llm.prompts.filter((entry) => entry.agent === "writer");
+      expect(writerPrompts).toHaveLength(2);
+      expect(writerPrompts[1]!.prompt).toContain("Target keyword: cache invalidation");
+      expect(writerPrompts[1]!.prompt).toContain("between 1100 and 2100 words");
+    });
+
+    it("resumes a run stored before briefs existed with just its topic", async () => {
+      const llm = routedProvider({
+        ...healthy(),
+        writer: [new Error("provider down"), goodArticle]
+      });
+      const app = await start(llm);
+      const pending = await app.workflow.begin({ topic: "Caching" });
+      await expect(pending.execute()).rejects.toThrow();
+      const db = new Database(path.join(dir, "memory.db"));
+      db.prepare("UPDATE workflows SET metadata_json = '{}'").run();
+      db.close();
+
+      const resumed = await app.workflow.resume(pending.workflowId!);
+
+      expect(resumed.status).toBe("published");
+      expect(resumed.brief).toEqual({ topic: "Caching", minWords: 1000, maxWords: 2200 });
+    });
+
+    it("rejects an unusable brief before storing anything or calling a provider", async () => {
+      const llm = routedProvider(healthy());
+      const app = await start(llm);
+
+      await expect(
+        app.workflow.run({ topic: "Caching", minWords: 2000, maxWords: 1000 })
+      ).rejects.toThrow(/minWords must not be greater than maxWords/);
+      await expect(app.workflow.run({ topic: "Caching", minWords: 3000 })).rejects.toThrow(
+        /word range 3000-2200/
+      );
+
+      expect(llm.prompts).toHaveLength(0);
+      expect(rows("SELECT id FROM workflows")).toEqual([]);
+    });
+  });
 });

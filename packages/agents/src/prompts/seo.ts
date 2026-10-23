@@ -1,11 +1,14 @@
 import type { SeoAgentInput } from "../seo/agent";
 
-export const SEO_PROMPT_VERSION = "1";
+import { briefLines } from "./brief";
+
+export const SEO_PROMPT_VERSION = "2";
 
 export function buildSeoPrompt(input: SeoAgentInput): string {
   return [
     "You are an SEO expert.",
     "Analyze the article content and produce SEO-optimized metadata.",
+    ...briefLines(input.brief, ["language", "audience", "keywords"]),
     "",
     "Output rules:",
     "- Return valid JSON only.",

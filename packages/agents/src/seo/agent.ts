@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { TextGenerationProvider } from "@openblog/providers";
+import type { ArticleBrief } from "@openblog/types";
 
 import { buildSeoPrompt } from "../prompts/seo";
 import { generateStructured, type StructuredOutputOptions } from "../structured-output";
@@ -43,6 +44,7 @@ export type SeoOutput = z.infer<typeof seoOutputSchema>;
 export interface SeoAgentInput {
   outline: string[];
   articleText: string;
+  brief?: ArticleBrief;
 }
 
 export interface SeoAgent {
