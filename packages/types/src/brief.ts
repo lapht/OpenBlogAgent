@@ -69,3 +69,15 @@ export function formatBriefIssues(error: z.ZodError): string {
     .map((issue) => `${issue.path.length > 0 ? `${issue.path.join(".")}: ` : ""}${issue.message}`)
     .join("; ");
 }
+
+/**
+ * The brief fields a topic candidate can carry before it becomes a run: everything but the topic,
+ * which is the candidate's own title.
+ */
+export const candidateBriefSchema = z
+  .object(articleBriefShape)
+  .omit({ topic: true })
+  .strict()
+  .superRefine(checkBriefWordRange);
+
+export type CandidateBrief = z.infer<typeof candidateBriefSchema>;

@@ -157,6 +157,37 @@ const migrations: Migration[] = [
   // v7: hash of the prompt each step execution sent first.
   (db) => {
     addMissingColumns(db, "workflow_steps", { prompt_hash: "TEXT" });
+  },
+
+  // v8: the backlog of topic candidates collected from research sources.
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS topic_candidates (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        title_normalized TEXT NOT NULL UNIQUE,
+        url TEXT NOT NULL,
+        url_key TEXT NOT NULL UNIQUE,
+        source TEXT NOT NULL,
+        summary TEXT,
+        published_at TEXT,
+        collected_at TEXT NOT NULL,
+        score INTEGER NOT NULL,
+        score_breakdown_json TEXT NOT NULL,
+        motivation TEXT NOT NULL,
+        status TEXT NOT NULL,
+        brief_json TEXT,
+        decided_by TEXT,
+        decision_note TEXT,
+        decided_at TEXT,
+        workflow_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_topic_candidates_status_score
+      ON topic_candidates(status, score DESC);
+    `);
   }
 ];
 

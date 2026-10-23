@@ -1,21 +1,30 @@
 import os from "node:os";
 
 import { loadEnv } from "@openblog/config";
-import { collectTopics, createApplication, type ApplicationOverrides } from "@openblog/app";
+import {
+  BacklogError,
+  createApplication,
+  ResearchError,
+  type Application,
+  type ApplicationOverrides,
+  type ResearchService
+} from "@openblog/app";
 import { logger } from "@openblog/logger";
-import type { ContentFetcher } from "@openblog/research";
+import { articleBriefSchema, formatBriefIssues } from "@openblog/types";
 
 import { HELP, parseCommand, UsageError, type ParsedCommand } from "./args";
 import { createDryRunPublisher, prepareDryRunWorkspace, type DryRunWorkspace } from "./dry-run";
 import {
   EXIT,
-  formatCollection,
+  formatCandidate,
+  formatCandidates,
+  formatResearch,
   formatRunList,
   formatSummary,
   reportApprovalOutcome,
   reportRunOutcome,
   summarizeApproval,
-  summarizeCollection,
+  summarizeResearch,
   summarizeRejection,
   summarizeRun,
   type CliSummary
@@ -25,8 +34,6 @@ export interface RunCliOptions {
   argv?: string[];
   env?: NodeJS.ProcessEnv;
   overrides?: ApplicationOverrides;
-  /** Replaces the content fetcher `research collect` reads through (tests). */
-  fetcher?: ContentFetcher;
   /** Where results go; defaults to the process streams. */
   stdout?: (text: string) => void;
   stderr?: (text: string) => void;
@@ -39,6 +46,16 @@ function currentUser(): string {
   } catch {
     return process.env.USER ?? "unknown";
   }
+}
+
+function requireResearch(app: Application): ResearchService {
+  if (!app.research) {
+    throw new ResearchError(
+      "backlog_unavailable",
+      "The topic backlog needs the SQLite memory store"
+    );
+  }
+  return app.research;
 }
 
 /** Parses arguments, builds the application and runs one command. Returns the exit code. */
@@ -76,7 +93,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<number> {
       config = loadEnv({ ...source, OPENBLOG_DEFAULT_PUBLISHER: flags.publisher });
     }
 
-    if (flags.dryRun && command.name !== "list" && command.name !== "research") {
+    if (flags.dryRun && command.name !== "list" && command.name !== "topics") {
       const dryId = publisherId ?? "markdown";
       workspace = prepareDryRunWorkspace(config);
       config = loadEnv({
@@ -85,13 +102,6 @@ export async function runCli(options: RunCliOptions = {}): Promise<number> {
         OPENBLOG_MEMORY_DB_PATH: workspace.dbPath
       });
       overrides = { ...overrides, publishers: [createDryRunPublisher(dryId)] };
-    }
-
-    // Reads sources only: no database, no model, so it does not build the application.
-    if (command.name === "research") {
-      const summary = summarizeCollection(await collectTopics(config, options.fetcher));
-      emit(summary, formatCollection(summary));
-      return summary.exitCode;
     }
 
     const app = await createApplication(config, overrides);
@@ -108,6 +118,81 @@ export async function runCli(options: RunCliOptions = {}): Promise<number> {
           const runs = await app.listRuns();
           emit({ command: "list", status: "ok", exitCode: EXIT.ok, runs }, formatRunList(runs));
           return EXIT.ok;
+        }
+        case "research": {
+          const research = requireResearch(app);
+          const summary = summarizeResearch(await research.collect());
+          emit(summary, formatResearch(summary));
+          return summary.exitCode;
+        }
+        case "topics": {
+          const research = requireResearch(app);
+          switch (command.action) {
+            case "list": {
+              const candidates = research.list({ status: command.status });
+              emit(
+                { command: "topics list", status: "ok", exitCode: EXIT.ok, candidates },
+                formatCandidates(candidates)
+              );
+              return EXIT.ok;
+            }
+            case "accept": {
+              const candidate = research.accept(command.id, {
+                by: currentUser(),
+                brief: command.brief
+              });
+              emit(
+                { command: "topics accept", status: "ok", exitCode: EXIT.ok, candidate },
+                formatCandidate(candidate)
+              );
+              return EXIT.ok;
+            }
+            case "drop": {
+              const candidate = research.drop(command.id, {
+                by: currentUser(),
+                reason: command.reason
+              });
+              emit(
+                { command: "topics drop", status: "ok", exitCode: EXIT.ok, candidate },
+                formatCandidate(candidate)
+              );
+              return EXIT.ok;
+            }
+            case "generate": {
+              const candidate = research.get(command.id);
+              if (candidate.status === "used" || candidate.status === "dropped") {
+                throw new BacklogError(
+                  "invalid_state",
+                  candidate.status === "used"
+                    ? `Candidate ${candidate.id} already started run ${candidate.workflowId}`
+                    : "A dropped candidate must be accepted first"
+                );
+              }
+              const brief = articleBriefSchema.safeParse({
+                ...candidate.brief,
+                ...command.brief,
+                topic: candidate.title
+              });
+              if (!brief.success) {
+                throw new BacklogError(
+                  "invalid_input",
+                  `Invalid brief: ${formatBriefIssues(brief.error)}`
+                );
+              }
+              const result = await app.workflow.run({ ...brief.data, force: flags.force });
+              if (result.workflowId) {
+                research.markUsed(candidate.id, result.workflowId);
+              }
+              const code = reportRunOutcome(result, logger);
+              const summary: CliSummary = {
+                ...summarizeRun("generate", result, flags.dryRun),
+                candidateId: candidate.id
+              };
+              emit(summary, formatSummary(summary));
+              return code;
+            }
+          }
+          return EXIT.failed;
         }
         case "approve": {
           const result = await app.workflow.approve(command.workflowId, {

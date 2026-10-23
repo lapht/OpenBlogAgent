@@ -22,3 +22,12 @@ export { parseSourcesFile, SourcesConfigError } from "./topics/config";
 export { FeedTopicSource, parseFeed } from "./topics/feed";
 export { SitemapTopicSource, titleFromUrl } from "./topics/sitemap";
 export { canonicalizeUrl, urlKey } from "./topics/text";
+export {
+  scoreCandidate,
+  titleTokens,
+  tokenOverlap,
+  type CandidateScore,
+  type CoveredTopic,
+  type ScoreBreakdown,
+  type ScoreContext
+} from "./topics/scoring";

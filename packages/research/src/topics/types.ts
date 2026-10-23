@@ -67,3 +67,16 @@ export class SourceFormatError extends Error {
     this.name = "SourceFormatError";
   }
 }
+
+export type ResearchErrorCode = "sources_not_configured" | "backlog_unavailable";
+
+/** The research feature cannot run with the current setup. */
+export class ResearchError extends Error {
+  readonly code: ResearchErrorCode;
+
+  constructor(code: ResearchErrorCode, message: string) {
+    super(message);
+    this.name = "ResearchError";
+    this.code = code;
+  }
+}

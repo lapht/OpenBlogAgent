@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import { TopicBacklogStore } from "../backlog";
 import { runStorageMigrations, SQLiteDatabaseConnection } from "../database";
 import {
   ArticleRepository,
@@ -17,6 +18,8 @@ export interface CreateSQLiteMemoryServiceOptions {
 
 export interface SQLiteMemoryServiceHandle {
   memoryService: MemoryService;
+  /** The topic candidate backlog in the same database. */
+  backlog: TopicBacklogStore;
   disconnect(): Promise<void>;
 }
 
@@ -42,6 +45,7 @@ export async function createSQLiteMemoryService(
 
   return {
     memoryService,
+    backlog: new TopicBacklogStore(db),
     async disconnect(): Promise<void> {
       await connection.disconnect();
     }

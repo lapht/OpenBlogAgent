@@ -1,7 +1,13 @@
 import fs from "node:fs";
 import { parseArgs } from "node:util";
 
-import { articleBriefSchema, formatBriefIssues, type ArticleBrief } from "@openblog/types";
+import {
+  articleBriefSchema,
+  candidateBriefSchema,
+  formatBriefIssues,
+  type ArticleBrief,
+  type CandidateBrief
+} from "@openblog/types";
 import { parse as parseYaml } from "yaml";
 
 export const COMMANDS = [
@@ -11,7 +17,8 @@ export const COMMANDS = [
   "reject",
   "revise",
   "list",
-  "research"
+  "research",
+  "topics"
 ] as const;
 export type CommandName = (typeof COMMANDS)[number];
 
@@ -30,6 +37,9 @@ export interface CliOptions {
   recoverStale: boolean;
 }
 
+export const CANDIDATE_STATUS_FLAGS = ["new", "accepted", "dropped", "used"] as const;
+export type CandidateStatusFlag = (typeof CANDIDATE_STATUS_FLAGS)[number];
+
 export type ParsedCommand =
   | { name: "help"; options: CliOptions }
   | { name: "generate"; topic: string; brief: ArticleBrief; options: CliOptions }
@@ -38,7 +48,18 @@ export type ParsedCommand =
   | { name: "reject"; workflowId: string; reason: string; options: CliOptions }
   | { name: "revise"; workflowId: string; feedback: string; options: CliOptions }
   | { name: "list"; options: CliOptions }
-  | { name: "research"; action: "collect"; options: CliOptions };
+  | { name: "research"; action: "collect"; options: CliOptions }
+  | { name: "topics"; action: "list"; status?: CandidateStatusFlag; options: CliOptions }
+  | { name: "topics"; action: "accept"; id: string; brief?: CandidateBrief; options: CliOptions }
+  | { name: "topics"; action: "drop"; id: string; reason?: string; options: CliOptions }
+  | {
+      name: "topics";
+      action: "generate";
+      id: string;
+      /** Brief fields from `--brief` and the flags; they win over the ones stored on accept. */
+      brief: CandidateBrief;
+      options: CliOptions;
+    };
 
 /** Bad command line: the CLI prints the message with the usage and exits 64. */
 export class UsageError extends Error {
@@ -57,7 +78,11 @@ Commands:
   reject <id>          Close a stored article as rejected (--reason "why"); terminal
   revise <id>          Send a stored article back to the writer (--feedback "what to change")
   list                 Show the most recent runs (--recover-stale marks abandoned runs interrupted)
-  research collect     Read the feeds and sitemaps of OPENBLOG_RESEARCH_SOURCES_FILE and print topic candidates
+  research collect     Read the feeds and sitemaps of OPENBLOG_RESEARCH_SOURCES_FILE, score the candidates and store them
+  topics list          Show the topic backlog, best score first (--status new|accepted|dropped|used)
+  topics accept <id>   Approve a candidate for generation (brief options store a brief with it)
+  topics drop <id>     Drop a candidate (--reason "why")
+  topics generate <id> Generate an article from a candidate (brief options override the stored brief)
 
 Options:
   --dry-run            Run everything except the publish call; nothing is stored or published
@@ -66,10 +91,11 @@ Options:
   --override <reason>  Approve an article that did not pass the quality gate (approve only)
   --reason <text>      Why the article is rejected (reject only, required)
   --feedback <text>    What the writer should change (revise only, required)
+  --status <status>    Only candidates in this status (topics list only)
   --recover-stale      Mark runs idle for OPENBLOG_RUN_STALE_AFTER_MINUTES as interrupted (list only)
   --json               Print one JSON summary object on stdout; logs always go to stderr
 
-Brief options (generate only; each overrides the same field of --brief):
+Brief options (generate, topics accept and topics generate; each overrides the same field of --brief):
   --brief <file>       YAML or JSON file with the brief: topic, language, audience, tone,
                        targetKeyword, secondaryKeywords, minWords, maxWords, notes
   --language <code>    Language of the article, e.g. en or it
@@ -106,6 +132,7 @@ export function parseCommand(argv: string[]): ParsedCommand {
         override: { type: "string" },
         reason: { type: "string" },
         feedback: { type: "string" },
+        status: { type: "string" },
         "recover-stale": { type: "boolean" },
         brief: { type: "string" },
         language: { type: "string" },
@@ -150,8 +177,12 @@ export function parseCommand(argv: string[]): ParsedCommand {
   if (options.override !== undefined && (name !== "approve" || !options.override.trim())) {
     throw new UsageError("--override takes a reason and only applies to approve");
   }
-  if (options.reason !== undefined && name !== "reject") {
-    throw new UsageError("--reason only applies to reject");
+  if (
+    options.reason !== undefined &&
+    name !== "reject" &&
+    !(name === "topics" && rest[0] === "drop")
+  ) {
+    throw new UsageError("--reason only applies to reject and topics drop");
   }
   if (options.feedback !== undefined && name !== "revise") {
     throw new UsageError("--feedback only applies to revise");
@@ -164,8 +195,13 @@ export function parseCommand(argv: string[]): ParsedCommand {
   }
 
   const briefFlags = BRIEF_FLAGS.filter((flag) => values[flag] !== undefined);
-  if (name !== "generate" && briefFlags.length > 0) {
-    throw new UsageError(`--${briefFlags[0]} only applies to generate`);
+  const takesBrief =
+    name === "generate" || (name === "topics" && (rest[0] === "accept" || rest[0] === "generate"));
+  if (!takesBrief && briefFlags.length > 0) {
+    throw new UsageError(`--${briefFlags[0]} only applies to generate and topics accept|generate`);
+  }
+  if (values.status !== undefined && !(name === "topics" && rest[0] === "list")) {
+    throw new UsageError("--status only applies to topics list");
   }
 
   switch (name as CommandName) {
@@ -201,6 +237,55 @@ export function parseCommand(argv: string[]): ParsedCommand {
         throw new UsageError("research takes one subcommand: collect");
       }
       return { name: "research", action: "collect", options };
+    }
+    case "topics": {
+      const [action, ...args] = rest;
+      switch (action) {
+        case "list": {
+          if (args.length > 0) throw new UsageError("topics list takes no arguments");
+          if (
+            values.status !== undefined &&
+            !CANDIDATE_STATUS_FLAGS.includes(values.status as CandidateStatusFlag)
+          ) {
+            throw new UsageError(`--status must be one of ${CANDIDATE_STATUS_FLAGS.join(", ")}`);
+          }
+          return {
+            name: "topics",
+            action: "list",
+            status: values.status as CandidateStatusFlag | undefined,
+            options
+          };
+        }
+        case "accept":
+        case "drop":
+        case "generate": {
+          if (args.length !== 1) {
+            throw new UsageError(`topics ${action} takes exactly one candidate id`);
+          }
+          const id = args[0]!;
+          if (action === "drop") {
+            return {
+              name: "topics",
+              action,
+              id,
+              reason: options.reason?.trim() || undefined,
+              options
+            };
+          }
+          const brief = buildCandidateBrief(values);
+          return action === "accept"
+            ? {
+                name: "topics",
+                action,
+                id,
+                brief: Object.keys(brief).length > 0 ? brief : undefined,
+                options
+              }
+            : { name: "topics", action, id, brief, options };
+        }
+        default:
+          throw new UsageError("topics takes one subcommand: list, accept, drop or generate");
+      }
     }
     case "list": {
       if (rest.length > 0) {
@@ -256,10 +341,9 @@ function wordCount(flag: string, value: string): number {
   return Number(value);
 }
 
-/** The brief of `generate`: the file first, then the flags and the topic on top of it. */
-function buildBrief(topicArgument: string, values: BriefFlagValues): ArticleBrief {
+/** The brief fields from `--brief` and the flags, topic not included. */
+function briefFieldsFromValues(values: BriefFlagValues): Record<string, unknown> {
   const fromFlags = {
-    topic: topicArgument || undefined,
     language: values.language,
     audience: values.audience,
     tone: values.tone,
@@ -273,12 +357,31 @@ function buildBrief(topicArgument: string, values: BriefFlagValues): ArticleBrie
   const override = Object.fromEntries(
     Object.entries(fromFlags).filter(([, value]) => value !== undefined)
   );
-  const candidate = { ...(values.brief ? readBriefFile(values.brief) : {}), ...override };
+  return { ...(values.brief ? readBriefFile(values.brief) : {}), ...override };
+}
+
+/** The brief of `generate`: the file first, then the flags and the topic on top of it. */
+function buildBrief(topicArgument: string, values: BriefFlagValues): ArticleBrief {
+  const candidate = {
+    ...briefFieldsFromValues(values),
+    ...(topicArgument ? { topic: topicArgument } : {})
+  };
 
   if (candidate.topic === undefined) {
     throw new UsageError('Missing article topic. Example: openblog generate "Why caching matters"');
   }
   const parsed = articleBriefSchema.safeParse(candidate);
+  if (!parsed.success) {
+    throw new UsageError(`Invalid brief: ${formatBriefIssues(parsed.error)}`);
+  }
+  return parsed.data;
+}
+
+/** Brief fields for a topic candidate: the topic is the candidate's own title, so a file's is ignored. */
+function buildCandidateBrief(values: BriefFlagValues): CandidateBrief {
+  const fields = briefFieldsFromValues(values);
+  delete fields.topic;
+  const parsed = candidateBriefSchema.safeParse(fields);
   if (!parsed.success) {
     throw new UsageError(`Invalid brief: ${formatBriefIssues(parsed.error)}`);
   }

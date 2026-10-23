@@ -10,7 +10,6 @@
     "@openblog/graph": "*",
     "@openblog/logger": "*",
     "@openblog/publishers": "*",
-    "@openblog/research": "*",
     "@openblog/types": "*",
     "yaml": "^2.9.0"
   },

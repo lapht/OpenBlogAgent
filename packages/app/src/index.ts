@@ -27,13 +27,32 @@ import {
 } from "@openblog/publishers";
 import { createSQLiteMemoryService } from "@openblog/storage";
 
+import type { ContentFetcher } from "@openblog/research";
 import { loadPromptOverrides } from "./prompts";
+import { createResearchService, type ResearchService } from "./research";
 import { loadStaticTaxonomy } from "./taxonomy";
 
 export { loadStaticTaxonomy, type StaticTaxonomy } from "./taxonomy";
 export { createContentFetcherFromConfig } from "./fetcher";
-export { collectTopics, loadResearchSources } from "./research";
-export type { SourceReport, TopicCandidate, TopicCollection } from "@openblog/research";
+export {
+  createResearchService,
+  loadResearchSources,
+  type CollectedCandidate,
+  type CollectOutcome,
+  type ResearchService
+} from "./research";
+export {
+  BacklogError,
+  type BacklogErrorCode,
+  type CandidateRecord,
+  type CandidateStatus
+} from "@openblog/storage";
+export {
+  ResearchError,
+  SourcesConfigError,
+  type ResearchErrorCode,
+  type SourceReport
+} from "@openblog/research";
 
 /** Adapters that replace the ones built from config (tests, embedding). */
 export interface ApplicationOverrides {
@@ -45,6 +64,10 @@ export interface ApplicationOverrides {
   publishers?: IPublisher[];
   categoryProvider?: ICategoryProvider;
   tagProvider?: ITagProvider;
+  /** Replaces the safe content fetcher the research sources are read through (tests). */
+  fetcher?: ContentFetcher;
+  /** The clock research scoring and decisions use (tests). */
+  clock?: () => Date;
 }
 
 export interface Application {
@@ -58,6 +81,11 @@ export interface Application {
    * Returns the ids; empty when the store cannot recover runs.
    */
   recoverStaleRuns(now?: Date): Promise<string[]>;
+  /**
+   * The topic backlog (collect, score, accept, drop). Absent when the store is not the SQLite
+   * one, since candidates need a database.
+   */
+  research?: ResearchService;
   /** What was wired, for diagnostics. */
   info: {
     publisherIds: string[];
@@ -226,6 +254,14 @@ export async function createApplication(
     async recoverStaleRuns(now?: Date): Promise<string[]> {
       return (await memory?.recoverStaleRuns?.(config.OPENBLOG_RUN_STALE_AFTER_MINUTES, now)) ?? [];
     },
+    research: memoryStore
+      ? createResearchService({
+          config,
+          backlog: memoryStore.backlog,
+          fetcher: overrides.fetcher,
+          clock: overrides.clock
+        })
+      : undefined,
     info: { publisherIds: publishers.map((publisher) => publisher.id), taxonomyProvider },
     async dispose(): Promise<void> {
       await memoryStore?.disconnect();
