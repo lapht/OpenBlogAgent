@@ -144,6 +144,14 @@ export async function createApplication(
   const workflow = createArticleGenerationWorkflow({
     logger,
     llm,
+    models: {
+      planner: config.OPENBLOG_MODEL_PLANNER,
+      writer: config.OPENBLOG_MODEL_WRITER,
+      editor: config.OPENBLOG_MODEL_EDITOR,
+      seo: config.OPENBLOG_MODEL_SEO,
+      classification: config.OPENBLOG_MODEL_CLASSIFICATION,
+      review: config.OPENBLOG_MODEL_REVIEW
+    },
     publisher: new DefaultPublisherManager(logger, publishers, {
       defaultPublisherId: config.OPENBLOG_DEFAULT_PUBLISHER
     }),

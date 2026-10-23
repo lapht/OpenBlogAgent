@@ -32,6 +32,21 @@ OpenRouter is used first when `OPENROUTER_API_KEY` is set; Ollama is used when i
 | `OLLAMA_BASE_URL`      | `http://127.0.0.1:11434` | Ollama server (in Docker: the host's address) |
 | `OLLAMA_MODEL`         | `llama3.1`               | Ollama model                                  |
 
+### Model per step
+
+Each step can use its own model, for example a cheap one for classification and a stronger one for the writer. A variable left unset means the provider's default model (`OPENROUTER_MODEL`, or `OLLAMA_MODEL`), so nothing changes without them. The writer's variable also applies to its regenerations. Usage and the run budget stay shared by all steps.
+
+| Variable                        | Default | Purpose                                |
+| ------------------------------- | ------- | -------------------------------------- |
+| `OPENBLOG_MODEL_PLANNER`        | none    | Model of the planner (outline)         |
+| `OPENBLOG_MODEL_WRITER`         | none    | Model of the writer                    |
+| `OPENBLOG_MODEL_EDITOR`         | none    | Model of the editor                    |
+| `OPENBLOG_MODEL_SEO`            | none    | Model of the SEO agent                 |
+| `OPENBLOG_MODEL_CLASSIFICATION` | none    | Model of the classification step       |
+| `OPENBLOG_MODEL_REVIEW`         | none    | Model of the optional editorial review |
+
+The values are OpenRouter model ids (`vendor/model`). When OpenRouter is not configured and Ollama is the provider, they are sent to Ollama as its model names. When Ollama is only the fallback for a failed OpenRouter call, the per-step value is **not** sent: Ollama uses `OLLAMA_MODEL`, because an OpenRouter id means nothing to it. The model the provider reports for each step execution is stored (`workflow_steps.model`) and shown by `list --json` (`models`, the latest model of each step) and `GET /runs/{id}` (`model` per step, plus `models`).
+
 ## Publishing
 
 | Variable                                  | Default           | Purpose                                                                                        |

@@ -121,6 +121,29 @@ describe("storage migrations", () => {
     db.close();
   });
 
+  it("adds the step model column to a v4 database and keeps its steps", () => {
+    const db = new Database(":memory:");
+    runStorageMigrations(db);
+    db.exec("ALTER TABLE workflow_steps DROP COLUMN model");
+    db.pragma("user_version = 4");
+    db.exec(`
+      INSERT INTO workflows (id, name, topic, topic_normalized, status, started_at, created_at, updated_at)
+      VALUES ('w1','n','Topic','topic','completed','t','t','t');
+    `);
+    db.exec(`
+      INSERT INTO workflow_steps (id, workflow_id, step, status, attempt, started_at, completed_at, llm_calls)
+      VALUES ('s1','w1','planner','succeeded',1,'t','t',1);
+    `);
+
+    runStorageMigrations(db);
+
+    expect(db.pragma("user_version", { simple: true })).toBe(LATEST_SCHEMA_VERSION);
+    expect(db.prepare("SELECT step, llm_calls, model FROM workflow_steps").all()).toEqual([
+      { step: "planner", llm_calls: 1, model: null }
+    ]);
+    db.close();
+  });
+
   it("is a no-op on a database that is already current", () => {
     const db = new Database(":memory:");
     runStorageMigrations(db);

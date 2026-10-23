@@ -12,10 +12,11 @@ export function agentOf(prompt: string): Agent {
 
 /**
  * Fake provider that replies per agent. Each queue is consumed in order and its last entry repeats;
- * an `Error` entry is thrown instead of returned. Records every prompt, in call order.
+ * an `Error` entry is thrown instead of returned. Records every prompt, in call order, with the model
+ * the request asked for; the reply reports that model, or `fake` when the request named none.
  */
 export function routedProvider(queues: Record<Agent, Reply[]>) {
-  const prompts: Array<{ agent: Agent; prompt: string }> = [];
+  const prompts: Array<{ agent: Agent; prompt: string; model?: string }> = [];
   const used: Record<Agent, number> = {
     planner: 0,
     writer: 0,
@@ -27,13 +28,16 @@ export function routedProvider(queues: Record<Agent, Reply[]>) {
     prompts,
     id: "fake",
     calls: (agent: Agent) => prompts.filter((entry) => entry.agent === agent).length,
-    async generate(request: { prompt: string }) {
+    /** Models requested by the calls of one agent, in order (undefined: the provider default). */
+    modelsOf: (agent: Agent) =>
+      prompts.filter((entry) => entry.agent === agent).map((entry) => entry.model),
+    async generate(request: { prompt: string; model?: string }) {
       const agent = agentOf(request.prompt);
-      prompts.push({ agent, prompt: request.prompt });
+      prompts.push({ agent, prompt: request.prompt, model: request.model });
       const queue = queues[agent];
       const reply = queue[Math.min(used[agent]++, queue.length - 1)]!;
       if (reply instanceof Error) throw reply;
-      return { text: reply, model: "fake", usage: { totalTokens: 10 } };
+      return { text: reply, model: request.model ?? "fake", usage: { totalTokens: 10 } };
     }
   };
 }

@@ -49,7 +49,7 @@ export class OpenRouterProvider implements TextGenerationProvider {
       });
     }
 
-    const model = this.config.model ?? DEFAULT_OPENROUTER_MODEL;
+    const model = request.model ?? this.config.model ?? DEFAULT_OPENROUTER_MODEL;
     const messages = [
       ...(request.system ? [{ content: request.system, role: "system" }] : []),
       { content: request.prompt, role: "user" }

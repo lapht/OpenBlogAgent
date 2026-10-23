@@ -62,4 +62,25 @@ describe("createDefaultTextGenerationProvider", () => {
 
     await expect(provider.generate({ prompt: "hi" })).resolves.toMatchObject({ model: "llama3.1" });
   });
+
+  it("sends no per-call model to the fallback provider", async () => {
+    const ollama = working();
+    const provider = createDefaultTextGenerationProvider({
+      openRouter: failing("server", true),
+      ollama
+    });
+
+    await provider.generate({ prompt: "hi", model: "vendor/model-x" });
+
+    expect(ollama.generate).toHaveBeenCalledWith({ prompt: "hi", model: undefined });
+  });
+
+  it("passes the per-call model to a primary Ollama", async () => {
+    const ollama = working();
+    const provider = createDefaultTextGenerationProvider({ ollama });
+
+    await provider.generate({ prompt: "hi", model: "qwen2.5" });
+
+    expect(ollama.generate).toHaveBeenCalledWith({ prompt: "hi", model: "qwen2.5" });
+  });
 });

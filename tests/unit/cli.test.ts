@@ -238,7 +238,14 @@ describe("CLI commands", () => {
     expect(await cli(["list", "--json"])).toBe(0);
     expect(lastJson()).toMatchObject({
       command: "list",
-      runs: [{ workflowId, topic: "Review me", status: "awaiting_approval" }]
+      runs: [
+        {
+          workflowId,
+          topic: "Review me",
+          status: "awaiting_approval",
+          models: { planner: expect.any(String), writer: expect.any(String) }
+        }
+      ]
     });
     out.length = 0;
     expect(await cli(["list"])).toBe(0);

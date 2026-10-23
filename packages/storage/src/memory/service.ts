@@ -88,6 +88,7 @@ export interface RecordStepParams {
   startedAt: string;
   completedAt: string;
   usage?: StepUsageRecord;
+  model?: string;
 }
 
 /** Runs `fn` atomically: every write inside commits together or not at all. */
@@ -277,7 +278,8 @@ export class MemoryService {
       errorMessage: params.errorMessage ?? null,
       startedAt: params.startedAt,
       completedAt: params.completedAt,
-      usage: params.usage ?? null
+      usage: params.usage ?? null,
+      model: params.model ?? null
     });
   }
 
@@ -292,7 +294,8 @@ export class MemoryService {
       metadata: workflow.metadata,
       steps: this.stepRepository.getByWorkflowId(workflowId).map((record) => ({
         ...record,
-        usage: record.usage ?? undefined
+        usage: record.usage ?? undefined,
+        model: record.model ?? undefined
       }))
     };
   }
@@ -305,6 +308,7 @@ export class MemoryService {
       workflows.map((workflow) => workflow.id),
       "editorial_review"
     );
+    const models = this.stepRepository.latestModels(workflows.map((workflow) => workflow.id));
     return workflows.map((workflow) => ({
       workflowId: workflow.id,
       topic: workflow.topic,
@@ -314,7 +318,8 @@ export class MemoryService {
       createdAt: workflow.createdAt,
       totalTokens: totals.get(workflow.id)?.totalTokens ?? 0,
       costUsd: totals.get(workflow.id)?.costUsd ?? 0,
-      review: (reviews.get(workflow.id) as { review?: StoredReview } | undefined)?.review ?? null
+      review: (reviews.get(workflow.id) as { review?: StoredReview } | undefined)?.review ?? null,
+      models: models.get(workflow.id) ?? {}
     }));
   }
 
@@ -340,6 +345,7 @@ export class MemoryService {
       totalTokens: steps.reduce((sum, record) => sum + (record.usage?.totalTokens ?? 0), 0),
       costUsd: steps.reduce((sum, record) => sum + (record.usage?.costUsd ?? 0), 0),
       review: (review as { review?: StoredReview } | undefined)?.review ?? null,
+      models: this.stepRepository.latestModels([workflowId]).get(workflowId) ?? {},
       steps: steps.map((record) => ({
         step: record.step,
         status: record.status,
@@ -348,7 +354,8 @@ export class MemoryService {
         errorMessage: record.errorMessage,
         startedAt: record.startedAt,
         completedAt: record.completedAt,
-        usage: record.usage
+        usage: record.usage,
+        model: record.model
       }))
     };
   }

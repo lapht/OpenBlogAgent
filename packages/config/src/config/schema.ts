@@ -95,6 +95,14 @@ export const envSchema = z.object({
     z.coerce.number().positive().optional()
   ),
 
+  /** Model per step (OpenRouter model id); unset: the provider's default model (`OPENROUTER_MODEL`). */
+  OPENBLOG_MODEL_PLANNER: optionalString(),
+  OPENBLOG_MODEL_WRITER: optionalString(),
+  OPENBLOG_MODEL_EDITOR: optionalString(),
+  OPENBLOG_MODEL_SEO: optionalString(),
+  OPENBLOG_MODEL_CLASSIFICATION: optionalString(),
+  OPENBLOG_MODEL_REVIEW: optionalString(),
+
   /** Language of the generated articles (e.g. `en`, `it`); a brief's `language` overrides it. */
   OPENBLOG_CONTENT_LANGUAGE: z.preprocess(
     (value) => (value === "" ? undefined : value),
