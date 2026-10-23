@@ -417,7 +417,8 @@ const graphState = Annotation.Root({
 });
 
 export type ArticleWorkflowState = typeof graphState.State;
-type ArticleWorkflowUpdate = typeof graphState.Update;
+/** What a node returns or a stored step restores: plain values (the graph also accepts overwrite markers, which we never produce). */
+type ArticleWorkflowUpdate = Partial<ArticleWorkflowState>;
 
 /** Older runs stored only calls and tokens, so every other field defaults to 0. */
 const usageSchema = z.object({
