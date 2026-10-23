@@ -115,6 +115,9 @@ export const envSchema = z.object({
   /** `User-Agent` the content fetcher sends. Unset: `OpenBlogAgent/<version> (+repository URL)`. */
   OPENBLOG_FETCH_USER_AGENT: optionalString(),
 
+  /** YAML/JSON file listing the feeds and sitemaps `research collect` reads. */
+  OPENBLOG_RESEARCH_SOURCES_FILE: optionalString(),
+
   /** Language of the generated articles (e.g. `en`, `it`); a brief's `language` overrides it. */
   OPENBLOG_CONTENT_LANGUAGE: z.preprocess(
     (value) => (value === "" ? undefined : value),

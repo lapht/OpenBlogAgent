@@ -4,7 +4,15 @@ import { parseArgs } from "node:util";
 import { articleBriefSchema, formatBriefIssues, type ArticleBrief } from "@openblog/types";
 import { parse as parseYaml } from "yaml";
 
-export const COMMANDS = ["generate", "resume", "approve", "reject", "revise", "list"] as const;
+export const COMMANDS = [
+  "generate",
+  "resume",
+  "approve",
+  "reject",
+  "revise",
+  "list",
+  "research"
+] as const;
 export type CommandName = (typeof COMMANDS)[number];
 
 export interface CliOptions {
@@ -29,7 +37,8 @@ export type ParsedCommand =
   | { name: "approve"; workflowId: string; options: CliOptions }
   | { name: "reject"; workflowId: string; reason: string; options: CliOptions }
   | { name: "revise"; workflowId: string; feedback: string; options: CliOptions }
-  | { name: "list"; options: CliOptions };
+  | { name: "list"; options: CliOptions }
+  | { name: "research"; action: "collect"; options: CliOptions };
 
 /** Bad command line: the CLI prints the message with the usage and exits 64. */
 export class UsageError extends Error {
@@ -48,6 +57,7 @@ Commands:
   reject <id>          Close a stored article as rejected (--reason "why"); terminal
   revise <id>          Send a stored article back to the writer (--feedback "what to change")
   list                 Show the most recent runs (--recover-stale marks abandoned runs interrupted)
+  research collect     Read the feeds and sitemaps of OPENBLOG_RESEARCH_SOURCES_FILE and print topic candidates
 
 Options:
   --dry-run            Run everything except the publish call; nothing is stored or published
@@ -185,6 +195,12 @@ export function parseCommand(argv: string[]): ParsedCommand {
         throw new UsageError('revise needs --feedback "what the writer should change"');
       }
       return { name: "revise", workflowId: rest[0]!, feedback: options.feedback.trim(), options };
+    }
+    case "research": {
+      if (rest.length !== 1 || rest[0] !== "collect") {
+        throw new UsageError("research takes one subcommand: collect");
+      }
+      return { name: "research", action: "collect", options };
     }
     case "list": {
       if (rest.length > 0) {

@@ -25,13 +25,15 @@ import {
   type ITagProvider,
   type TaxonomyProviderConfig
 } from "@openblog/publishers";
-import { createContentFetcher, type ContentFetcher } from "@openblog/research";
 import { createSQLiteMemoryService } from "@openblog/storage";
 
 import { loadPromptOverrides } from "./prompts";
 import { loadStaticTaxonomy } from "./taxonomy";
 
 export { loadStaticTaxonomy, type StaticTaxonomy } from "./taxonomy";
+export { createContentFetcherFromConfig } from "./fetcher";
+export { collectTopics, loadResearchSources } from "./research";
+export type { SourceReport, TopicCandidate, TopicCollection } from "@openblog/research";
 
 /** Adapters that replace the ones built from config (tests, embedding). */
 export interface ApplicationOverrides {
@@ -62,18 +64,6 @@ export interface Application {
     taxonomyProvider: "static" | "wordpress" | "custom";
   };
   dispose(): Promise<void>;
-}
-
-/** The content fetcher that research features share, built from the `OPENBLOG_FETCH_*` settings. */
-export function createContentFetcherFromConfig(config: EnvSchema): ContentFetcher {
-  return createContentFetcher({
-    allowPrivate: config.OPENBLOG_FETCH_ALLOW_PRIVATE,
-    allowedHosts: config.OPENBLOG_FETCH_ALLOWED_HOSTS?.split(","),
-    timeoutMs: config.OPENBLOG_FETCH_TIMEOUT_MS,
-    maxBytes: config.OPENBLOG_FETCH_MAX_BYTES,
-    maxRedirects: config.OPENBLOG_FETCH_MAX_REDIRECTS,
-    userAgent: config.OPENBLOG_FETCH_USER_AGENT
-  });
 }
 
 /** The single place where adapters are built from validated config and wired into the workflow. */

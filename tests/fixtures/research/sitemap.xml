@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://docs.example.net/</loc></url>
+  <url><loc>https://docs.example.net/guides/getting-started-with-queues.html</loc><lastmod>2026-09-15</lastmod></url>
+  <url><loc>https://docs.example.net/guides/error_handling</loc><lastmod>2026-08-01T10:00:00+00:00</lastmod></url>
+  <url><loc>https://docs.example.net/archive/2024</loc></url>
+  <url><loc>ftp://docs.example.net/ignored</loc></url>
+</urlset>

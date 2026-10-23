@@ -103,6 +103,10 @@ A run in `needs_review` did not fail, so `resume` is not the fix: read why with 
 
 Research features read URLs through the content fetcher only (ADR-038). A failure is a `FetchError` with one of these codes: `fetch_blocked` (scheme, credentials in the URL, host not in `OPENBLOG_FETCH_ALLOWED_HOSTS`, or an address that is loopback, private, link-local, CGNAT or metadata, also after a redirect), `fetch_timeout`, `fetch_too_large`, `fetch_http_error` (status or redirect limit), `fetch_unsupported_type` and `fetch_network` (DNS or connection failure). Logs and errors carry the URL without credentials and query string. To read a feed on a local network deliberately, set `OPENBLOG_FETCH_ALLOW_PRIVATE=true`; leave it off on any server that exposes the API.
 
+## Collecting topic candidates
+
+`openblog research collect [--json]` reads every source of `OPENBLOG_RESEARCH_SOURCES_FILE` and prints the candidates (title, canonical URL, source, date, summary when present), newest first. It uses no model, no database and no publisher, and stores nothing yet (the topic backlog comes next). Entries listing the same URL (scheme, `www.`, tracking parameters, fragment and trailing slash ignored) or the same normalized title collapse into one. A source that fails is reported with its code (`fetch_*` from the fetcher, or `invalid_feed` for malformed XML or the wrong kind of document) and does not stop the others; the exit code is 1 only when every source failed. Sitemap titles come from the last path segment of the URL, since sitemaps carry none. `--json` prints `{ command, status, exitCode, sources: [{ name, type, url, status, count, error?, warnings }], candidates: [{ title, url, source, weight, publishedAt?, summary? }] }`.
+
 ## Logs
 
 JSON lines on stderr, one per event. Make them readable in development with `OPENBLOG_LOG_PRETTY=true`.

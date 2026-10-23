@@ -1,18 +1,21 @@
 import os from "node:os";
 
 import { loadEnv } from "@openblog/config";
-import { createApplication, type ApplicationOverrides } from "@openblog/app";
+import { collectTopics, createApplication, type ApplicationOverrides } from "@openblog/app";
 import { logger } from "@openblog/logger";
+import type { ContentFetcher } from "@openblog/research";
 
 import { HELP, parseCommand, UsageError, type ParsedCommand } from "./args";
 import { createDryRunPublisher, prepareDryRunWorkspace, type DryRunWorkspace } from "./dry-run";
 import {
   EXIT,
+  formatCollection,
   formatRunList,
   formatSummary,
   reportApprovalOutcome,
   reportRunOutcome,
   summarizeApproval,
+  summarizeCollection,
   summarizeRejection,
   summarizeRun,
   type CliSummary
@@ -22,6 +25,8 @@ export interface RunCliOptions {
   argv?: string[];
   env?: NodeJS.ProcessEnv;
   overrides?: ApplicationOverrides;
+  /** Replaces the content fetcher `research collect` reads through (tests). */
+  fetcher?: ContentFetcher;
   /** Where results go; defaults to the process streams. */
   stdout?: (text: string) => void;
   stderr?: (text: string) => void;
@@ -71,7 +76,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<number> {
       config = loadEnv({ ...source, OPENBLOG_DEFAULT_PUBLISHER: flags.publisher });
     }
 
-    if (flags.dryRun && command.name !== "list") {
+    if (flags.dryRun && command.name !== "list" && command.name !== "research") {
       const dryId = publisherId ?? "markdown";
       workspace = prepareDryRunWorkspace(config);
       config = loadEnv({
@@ -80,6 +85,13 @@ export async function runCli(options: RunCliOptions = {}): Promise<number> {
         OPENBLOG_MEMORY_DB_PATH: workspace.dbPath
       });
       overrides = { ...overrides, publishers: [createDryRunPublisher(dryId)] };
+    }
+
+    // Reads sources only: no database, no model, so it does not build the application.
+    if (command.name === "research") {
+      const summary = summarizeCollection(await collectTopics(config, options.fetcher));
+      emit(summary, formatCollection(summary));
+      return summary.exitCode;
     }
 
     const app = await createApplication(config, overrides);

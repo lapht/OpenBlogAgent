@@ -16,3 +16,9 @@ export {
   type TransportResponse
 } from "./fetcher";
 export { isPrivateAddress } from "./ip";
+export * from "./topics/types";
+export { collectTopicCandidates, createTopicSource } from "./topics/collect";
+export { parseSourcesFile, SourcesConfigError } from "./topics/config";
+export { FeedTopicSource, parseFeed } from "./topics/feed";
+export { SitemapTopicSource, titleFromUrl } from "./topics/sitemap";
+export { canonicalizeUrl, urlKey } from "./topics/text";
