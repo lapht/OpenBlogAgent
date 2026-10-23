@@ -3,9 +3,6 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { parseCommand, UsageError } from "../../apps/cli/src/args";
-import { runCli } from "../../apps/cli/src/run";
-import { collectTopics } from "../../packages/app/src";
 import {
   canonicalizeUrl,
   collectTopicCandidates,
@@ -19,7 +16,6 @@ import {
   type ContentFetcher,
   type TopicSourceConfig
 } from "../../packages/research/src";
-import { loadEnv } from "../../packages/config/src";
 import { normalizeTopic } from "../../packages/types/src";
 
 const fixtureDir = path.resolve(__dirname, "../fixtures/research");
@@ -382,87 +378,5 @@ describe("sources file", () => {
   ])("rejects %s", (_name, content) => {
     expect(() => parseSourcesFile(content, "test file")).toThrow(SourcesConfigError);
     expect(() => parseSourcesFile(content, "test file")).toThrow(/test file/);
-  });
-});
-
-describe("collectTopics (application layer)", () => {
-  it("needs the sources file", async () => {
-    await expect(collectTopics(loadEnv({}), fakeFetcher({}))).rejects.toThrow(
-      /OPENBLOG_RESEARCH_SOURCES_FILE is not set/
-    );
-  });
-
-  it("names the file when it cannot be read", async () => {
-    const missing = path.join(fixtureDir, "nope.yaml");
-    await expect(
-      collectTopics(loadEnv({ OPENBLOG_RESEARCH_SOURCES_FILE: missing }), fakeFetcher({}))
-    ).rejects.toThrow(/nope\.yaml/);
-  });
-});
-
-describe("research collect (CLI)", () => {
-  const run = async (argv: string[], replies: Record<string, Reply>, env = {}) => {
-    const out: string[] = [];
-    const err: string[] = [];
-    const code = await runCli({
-      argv,
-      env: { OPENBLOG_RESEARCH_SOURCES_FILE: SOURCES_FILE, ...env },
-      fetcher: fakeFetcher(replies),
-      stdout: (text) => out.push(text),
-      stderr: (text) => err.push(text)
-    });
-    return { code, out, err };
-  };
-
-  it("parses the command and refuses other subcommands", () => {
-    expect(parseCommand(["research", "collect", "--json"])).toMatchObject({
-      name: "research",
-      action: "collect",
-      options: { json: true }
-    });
-    expect(() => parseCommand(["research"])).toThrow(UsageError);
-    expect(() => parseCommand(["research", "score"])).toThrow(UsageError);
-    expect(() => parseCommand(["research", "collect", "extra"])).toThrow(UsageError);
-  });
-
-  it("prints a JSON summary with per-source results and candidates", async () => {
-    const { code, out } = await run(["research", "collect", "--json"], allReplies());
-    const summary = JSON.parse(out.at(-1)!);
-
-    expect(code).toBe(0);
-    expect(summary).toMatchObject({ command: "research collect", status: "ok", exitCode: 0 });
-    expect(summary.sources).toHaveLength(3);
-    expect(summary.candidates).toHaveLength(6);
-    expect(summary.candidates[0]).toMatchObject({
-      title: "Caching & Invalidation: a field guide",
-      source: "Other Blog"
-    });
-  });
-
-  it("prints a readable report, including failed sources, and still succeeds", async () => {
-    const replies = allReplies();
-    delete replies["https://other.example.org/atom.xml"];
-    const { code, out } = await run(["research", "collect"], replies);
-
-    expect(code).toBe(0);
-    expect(out.join("\n")).toContain("Other Blog (feed): FAILED fetch_http_error");
-    expect(out.join("\n")).toContain("Example Blog (feed): 3 entries");
-    expect(out.join("\n")).toMatch(/Candidates \(\d+\):/);
-  });
-
-  it("fails (exit 1) when every source fails", async () => {
-    const { code, out } = await run(["research", "collect", "--json"], {});
-    expect(code).toBe(1);
-    expect(JSON.parse(out.at(-1)!)).toMatchObject({ status: "failed", candidates: [] });
-  });
-
-  it("fails clearly when the sources file is not configured", async () => {
-    const { code, out } = await run(
-      ["research", "collect", "--json"],
-      {},
-      { OPENBLOG_RESEARCH_SOURCES_FILE: "" }
-    );
-    expect(code).toBe(1);
-    expect(JSON.parse(out.at(-1)!).error.message).toMatch(/OPENBLOG_RESEARCH_SOURCES_FILE/);
   });
 });

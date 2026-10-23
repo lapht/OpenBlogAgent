@@ -45,7 +45,7 @@ Included:
 Not included:
 
 - dashboard (removed from the repository; see ADR-009)
-- plugin system, scheduler, research engine
+- plugin system, scheduler, grounded generation (the topic backlog from feeds and sitemaps exists)
 - multi-agent orchestration
 
 ## Documentation

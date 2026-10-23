@@ -10,6 +10,7 @@ import { registerCors } from "./plugins/cors";
 import { registerErrorHandler } from "./plugins/error-handler";
 import { registerHealthRoute } from "./routes/health";
 import { registerRunRoutes } from "./routes/runs";
+import { registerTopicRoutes } from "./routes/topics";
 import { registerVersionRoute, type VersionPayload } from "./routes/version";
 import { RunQueue } from "./run-queue";
 
@@ -65,7 +66,7 @@ export const buildServer = async (options?: BuildServerOptions): Promise<Fastify
     openapi: {
       info: {
         title: "OpenBlogAgent API",
-        description: "Start, inspect, resume and approve article runs.",
+        description: "Start, inspect, resume and approve article runs; curate the topic backlog.",
         version: version.version
       },
       components: { securitySchemes: { apiKey: { type: "http", scheme: "bearer" } } },
@@ -80,6 +81,9 @@ export const buildServer = async (options?: BuildServerOptions): Promise<Fastify
     // Encapsulated so the API key guard covers the run routes only, not /health or /version.
     await app.register(async (scope) =>
       registerRunRoutes(scope, { application, queue, apiKey: options?.apiKey })
+    );
+    await app.register(async (scope) =>
+      registerTopicRoutes(scope, { application, apiKey: options?.apiKey })
     );
   }
 

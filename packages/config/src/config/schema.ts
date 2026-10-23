@@ -117,6 +117,11 @@ export const envSchema = z.object({
 
   /** YAML/JSON file listing the feeds and sitemaps `research collect` reads. */
   OPENBLOG_RESEARCH_SOURCES_FILE: optionalString(),
+  /** Candidates scoring at least this (0-100) are accepted without a human when collected. Unset: never. */
+  OPENBLOG_RESEARCH_AUTO_ACCEPT_MIN_SCORE: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().min(0).max(100).optional()
+  ),
 
   /** Language of the generated articles (e.g. `en`, `it`); a brief's `language` overrides it. */
   OPENBLOG_CONTENT_LANGUAGE: z.preprocess(

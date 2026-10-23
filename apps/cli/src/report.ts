@@ -4,8 +4,8 @@ import type {
   RejectResult,
   StoredWorkflowSummary
 } from "@openblog/graph";
+import type { CandidateRecord, CollectOutcome } from "@openblog/app";
 import type { ILogger } from "@openblog/logger";
-import type { TopicCollection } from "@openblog/research";
 import type { ResolvedArticleBrief } from "@openblog/types";
 
 /** Documented exit codes (see `--help`). */
@@ -36,6 +36,8 @@ export interface CliSummary {
   violations: Array<{ code: string; severity: string; message: string }>;
   /** Editorial review (scores and rationale); null when the review is off or did not run. */
   review: { overall: number; scores: Record<string, number>; rationale: string } | null;
+  /** The topic candidate the run was started from (`topics generate`). */
+  candidateId?: string;
 }
 
 export interface ListSummary {
@@ -166,42 +168,75 @@ export interface ResearchSummary {
   command: "research collect";
   status: "ok" | "failed";
   exitCode: number;
-  sources: TopicCollection["sources"];
-  candidates: TopicCollection["candidates"];
+  sources: CollectOutcome["sources"];
+  counts: CollectOutcome["counts"];
+  skipped: CollectOutcome["skipped"];
+  candidates: CollectOutcome["candidates"];
 }
 
 /** `ok` when at least one source answered; one failing source never fails the collection. */
-export function summarizeCollection(collection: TopicCollection): ResearchSummary {
+export function summarizeResearch(outcome: CollectOutcome): ResearchSummary {
   const failed =
-    collection.sources.length > 0 && collection.sources.every((s) => s.status === "failed");
+    outcome.sources.length > 0 && outcome.sources.every((source) => source.status === "failed");
   return {
     command: "research collect",
     status: failed ? "failed" : "ok",
     exitCode: failed ? EXIT.failed : EXIT.ok,
-    sources: collection.sources,
-    candidates: collection.candidates
+    sources: outcome.sources,
+    counts: outcome.counts,
+    skipped: outcome.skipped,
+    candidates: outcome.candidates
   };
 }
 
-export function formatCollection(collection: TopicCollection): string {
-  const sources = collection.sources.map((source) => {
-    const outcome =
+export interface TopicsSummary {
+  command: "topics list" | "topics accept" | "topics drop";
+  status: "ok";
+  exitCode: 0;
+  candidates?: CandidateRecord[];
+  candidate?: CandidateRecord;
+}
+
+const shortId = (id: string): string => id.slice(0, 8);
+
+export function formatCandidate(candidate: CandidateRecord): string {
+  const date = candidate.publishedAt ? `, ${candidate.publishedAt.slice(0, 10)}` : "";
+  const decision =
+    candidate.status === "new"
+      ? ""
+      : `\n          ${candidate.status}${candidate.decidedBy ? ` by ${candidate.decidedBy}` : ""}${candidate.decisionNote ? `: ${candidate.decisionNote}` : ""}${candidate.workflowId ? ` (run ${candidate.workflowId})` : ""}`;
+  return [
+    `${shortId(candidate.id)}  ${String(candidate.score).padStart(3)}  ${candidate.status.padEnd(8)}  ${candidate.title}`,
+    `          ${candidate.url}  [${candidate.source}${date}]`,
+    `          ${candidate.motivation}${decision}`
+  ].join("\n");
+}
+
+export function formatCandidates(candidates: CandidateRecord[]): string {
+  return candidates.length === 0
+    ? "No topic candidates."
+    : candidates.map(formatCandidate).join("\n");
+}
+
+export function formatResearch(outcome: CollectOutcome): string {
+  const sources = outcome.sources.map((source) => {
+    const result =
       source.status === "ok"
         ? `${source.count} entries`
         : `FAILED ${source.error?.code}: ${source.error?.message}`;
     const warnings = source.warnings.map((warning) => `\n    warning: ${warning}`).join("");
-    return `  ${source.name} (${source.type}): ${outcome}${warnings}`;
+    return `  ${source.name} (${source.type}): ${result}${warnings}`;
   });
-  const candidates = collection.candidates.map(
-    (candidate) =>
-      `- ${candidate.title}\n  ${candidate.url}  [${candidate.source}${candidate.publishedAt ? `, ${candidate.publishedAt.slice(0, 10)}` : ""}]`
-  );
+  const { counts } = outcome;
   return [
     "Sources:",
     ...sources,
     "",
-    `Candidates (${collection.candidates.length}):`,
-    ...(candidates.length > 0 ? candidates : ["  none"])
+    `Backlog: ${counts.created} new, ${counts.refreshed} refreshed, ${counts.unchanged} already decided, ` +
+      `${counts.skipped} skipped (already published)` +
+      (counts.autoAccepted > 0 ? `, ${counts.autoAccepted} auto-accepted` : ""),
+    "",
+    formatCandidates(outcome.candidates)
   ].join("\n");
 }
 

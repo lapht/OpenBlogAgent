@@ -13,6 +13,7 @@
     "@openblog/publishers": "*",
     "@openblog/research": "*",
     "@openblog/storage": "*",
+    "@openblog/types": "*",
     "zod": "^3.23.8"
   },
   "scripts": {

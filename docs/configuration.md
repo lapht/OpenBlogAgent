@@ -102,9 +102,10 @@ Only `http` and `https` are fetched, never with credentials in the URL. Content 
 
 ## Research sources
 
-| Variable                         | Default | Purpose                                                                        |
-| -------------------------------- | ------- | ------------------------------------------------------------------------------ |
-| `OPENBLOG_RESEARCH_SOURCES_FILE` | none    | YAML or JSON file listing the feeds and sitemaps that `research collect` reads |
+| Variable                                  | Default | Purpose                                                                                                            |
+| ----------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------ |
+| `OPENBLOG_RESEARCH_SOURCES_FILE`          | none    | YAML or JSON file listing the feeds and sitemaps that `research collect` reads                                     |
+| `OPENBLOG_RESEARCH_AUTO_ACCEPT_MIN_SCORE` | none    | Candidates scoring at least this (0-100) are accepted without a human when collected; unset: only a person accepts |
 
 ```yaml
 sources:
@@ -120,6 +121,8 @@ sources:
 ```
 
 Unknown fields, duplicate names and non-http(s) URLs are rejected with the file name and every problem. All requests go through the content fetcher above, so its limits and address rules apply.
+
+Collected candidates are scored from 0 to 100 and stored in the topic backlog (ADR-040): up to 40 points for recency (linear over 30 days, 10 when undated), up to 30 for the source weight (weight 2 or more is the maximum, the default 1 earns half), 10 per matched `include` keyword up to 20 and minus 20 per matched `exclude` keyword up to 40, and minus up to 60 for token overlap (Jaccard of the significant words) of 0.4 or more with an already published or parked article. A title identical to one of those is not stored at all. The breakdown and a one-line motivation are stored with the score.
 
 ## Prompt overrides
 
