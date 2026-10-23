@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Ghost publisher using the Admin API (JWT auth, draft by default, idempotent by slug).
+
+### Changed
+
+- Realigned `docs/CURRENT_STATE.md`, `plan/ROADMAP.md` and `CLAUDE.md` with the code on `main`.
+
 ## [0.2.0] - 2026-10-21 (MVP)
 
 ### Added
@@ -30,7 +40,7 @@ All notable changes to this project are documented in this file.
 
 ### Known limitations
 
-See `docs/CURRENT_STATE.md`: no live-service tests; Ghost not implemented.
+See `docs/CURRENT_STATE.md`: no live-service tests.
 
 ## [0.1.0] - 2026-07-03
 
