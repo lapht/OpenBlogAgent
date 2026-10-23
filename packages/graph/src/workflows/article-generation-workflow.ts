@@ -287,6 +287,8 @@ export interface CreateArticleGenerationWorkflowOptions {
   defaultCategory?: string;
   /** Maximum number of tags the classifier may return. Defaults to 5. */
   maxTags?: number;
+  /** Language of the articles when the brief names none (OPENBLOG_CONTENT_LANGUAGE). Defaults to `en`. */
+  contentLanguage?: string;
   /** Generate duplicates without `force` on every run (OPENBLOG_ALLOW_DUPLICATES). */
   allowDuplicates?: boolean;
   /** When articles go live. Defaults to `draft`: never live without `approve`. */
@@ -535,11 +537,13 @@ export function createArticleGenerationWorkflow(
   const policy = options.publicationPolicy ?? "draft";
   const maxRegenerations = Math.max(0, options.quality?.maxAttempts ?? 2);
   const baseRules: ArticleValidationRules = { ...DEFAULT_ARTICLE_RULES, ...qualityRules };
+  const contentLanguage = options.contentLanguage ?? "en";
 
   /** The word range is the brief's own, else the quality configuration's, so writer and gate agree. */
   function resolveBrief(brief: ArticleBrief): ResolvedArticleBrief {
     const resolved = {
       ...brief,
+      language: brief.language ?? contentLanguage,
       minWords: brief.minWords ?? baseRules.minWords,
       maxWords: brief.maxWords ?? baseRules.maxWords
     };
@@ -555,6 +559,12 @@ export function createArticleGenerationWorkflow(
       ]);
     }
     return resolved;
+  }
+
+  /** The language a stored run was started with, so approving it publishes it as it was written. */
+  async function approvalLanguage(workflowId: string): Promise<string | undefined> {
+    const stored = await memory?.loadWorkflow(workflowId);
+    return stored ? storedBrief(stored).language : undefined;
   }
 
   function requiredBrief(state: ArticleWorkflowState): ResolvedArticleBrief {
@@ -699,7 +709,8 @@ export function createArticleGenerationWorkflow(
             article: currentArticle(state),
             draft: state.article,
             outline: state.outline,
-            seo: state.seoOutput
+            seo: state.seoOutput,
+            language: requiredBrief(state).language
           },
           {
             ...qualityRules,
@@ -809,7 +820,7 @@ export function createArticleGenerationWorkflow(
           tags: required(state.tags, "tags"),
           category: required(state.category, "category"),
           author: "OpenBlogAgent",
-          language: "en",
+          language: requiredBrief(state).language,
           // Only this policy ever sends a live post straight from a run.
           status: policy === "publish_if_gate_passes" ? "publish" : "draft"
         };
@@ -1062,8 +1073,12 @@ export function createArticleGenerationWorkflow(
         ? await memory.beginWorkflow({
             workflowName: ARTICLE_GENERATION_WORKFLOW_NAME,
             topic,
-            // The brief as given (not resolved), so a resume follows later changes to the limits.
-            metadata: { brief: parsedBrief, ...(force ? { force: true } : {}) }
+            // The brief as given, plus the language it resolved to so that resume and approve keep
+            // it; the word range stays unresolved so a resume follows later changes to the limits.
+            metadata: {
+              brief: { ...parsedBrief, language: brief.language },
+              ...(force ? { force: true } : {})
+            }
           })
         : null;
 
@@ -1152,7 +1167,7 @@ export function createArticleGenerationWorkflow(
             tags: article.tags,
             category: article.category ?? defaultCategory,
             author: "OpenBlogAgent",
-            language: "en",
+            language: (await approvalLanguage(workflowId)) ?? contentLanguage,
             status: "publish"
           })
         );

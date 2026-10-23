@@ -1,6 +1,6 @@
 import type { ArticleBrief } from "@openblog/types";
 
-type BriefField = "language" | "audience" | "tone" | "keywords" | "notes";
+type BriefField = "audience" | "tone" | "keywords" | "notes";
 
 /** The brief fields an agent should see, as prompt lines; empty when the brief says nothing relevant. */
 export function briefLines(
@@ -12,9 +12,6 @@ export function briefLines(
   }
 
   const lines: string[] = [];
-  if (fields.includes("language") && brief.language) {
-    lines.push(`- Language: ${brief.language}`);
-  }
   if (fields.includes("audience") && brief.audience) {
     lines.push(`- Audience: ${brief.audience}`);
   }
@@ -32,4 +29,26 @@ export function briefLines(
   }
 
   return lines.length > 0 ? ["", "Brief:", ...lines, ""] : [];
+}
+
+/** English name of a language code (`it` -> "Italian"); the code itself when it has no name. */
+export function languageName(code: string): string {
+  try {
+    return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
+/** `Italian (it)`: how the prompts name the output language. */
+function describeLanguage(code: string): string {
+  const name = languageName(code);
+  return name === code ? code : `${name} (${code})`;
+}
+
+/** The output-language instruction; nothing when the caller did not pick a language. */
+export function languageLines(brief: ArticleBrief | undefined, instruction: string): string[] {
+  return brief?.language
+    ? [instruction.replaceAll("{language}", describeLanguage(brief.language))]
+    : [];
 }

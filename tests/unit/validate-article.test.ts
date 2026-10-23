@@ -98,4 +98,66 @@ describe("validateArticle", () => {
     const { violations } = validateArticle({ article: tooShortArticle });
     expect(formatViolations(violations)).toMatch(/^- \[word_count_too_short\] /);
   });
+  describe("language-specific phrase rules", () => {
+    const withPhrase = (phrase: string) => `${goodArticle}\n\n${phrase}`;
+    const english = "As a large language model, I cannot browse the web.";
+    const italian = "Come modello linguistico, non posso navigare sul web.";
+
+    it("flags English phrases in English articles, by default and by language code", () => {
+      expect(codes({ article: withPhrase(english) })).toContain("placeholder_text");
+      expect(codes({ article: withPhrase(english), language: "en" })).toContain("placeholder_text");
+      expect(codes({ article: withPhrase(english), language: "en-GB" })).toContain(
+        "placeholder_text"
+      );
+    });
+
+    it("flags Italian phrases in Italian articles", () => {
+      expect(codes({ article: withPhrase(italian), language: "it" })).toContain("placeholder_text");
+      expect(
+        codes({ article: withPhrase("[inserisci il titolo qui]"), language: "it-IT" })
+      ).toContain("placeholder_text");
+    });
+
+    it("does not apply English phrase rules to an Italian article", () => {
+      expect(codes({ article: withPhrase(english), language: "it" })).not.toContain(
+        "placeholder_text"
+      );
+    });
+
+    it("does not apply Italian phrase rules to an English article", () => {
+      expect(codes({ article: withPhrase(italian), language: "en" })).not.toContain(
+        "placeholder_text"
+      );
+    });
+
+    it("keeps the language-neutral rules for every language", () => {
+      for (const language of ["en", "it", "ja"]) {
+        expect(codes({ article: withPhrase("TODO scrivere"), language })).toContain(
+          "placeholder_text"
+        );
+        expect(codes({ article: withPhrase("Lorem ipsum dolor"), language })).toContain(
+          "placeholder_text"
+        );
+      }
+    });
+
+    it("keeps the other rules for non-English articles", () => {
+      expect(codes({ article: tooShortArticle, language: "it" })).toContain("word_count_too_short");
+      expect(codes({ article: `# Titolo\n\n${goodArticle}`, language: "it" })).toContain(
+        "h1_present"
+      );
+    });
+
+    it("matches outline items to headings with accents and non-Latin scripts", () => {
+      const outline = ["Perché la cache è importante", "Стратегии кэширования", "キャッシュの戦略"];
+      const article = `${goodArticle}\n\n## Perché la cache è importante\n\nTesto.\n\n## Стратегии кэширования\n\nТекст.\n\n## キャッシュの戦略\n\nテキスト。`;
+      const result = validateArticle(
+        { article, outline },
+        { minWords: 1, maxWords: 100000, minOutlineCoverage: 1 }
+      );
+      expect(result.violations.map((violation) => violation.code)).not.toContain(
+        "outline_coverage_low"
+      );
+    });
+  });
 });

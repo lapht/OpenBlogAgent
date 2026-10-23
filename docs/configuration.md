@@ -62,6 +62,14 @@ OpenRouter is used first when `OPENROUTER_API_KEY` is set; Ollama is used when i
 | `OPENBLOG_TAXONOMY_MAX_TAGS`          | `5`             | Maximum tags per article                                                       |
 | `OPENBLOG_TAXONOMY_CACHE_TTL_SECONDS` | `300`           | How long WordPress taxonomy lookups are cached                                 |
 
+## Content language
+
+| Variable                    | Default | Purpose                                                                                                     |
+| --------------------------- | ------- | ----------------------------------------------------------------------------------------------------------- |
+| `OPENBLOG_CONTENT_LANGUAGE` | `en`    | Language of the generated articles, a code such as `en`, `it` or `pt-BR`; a brief's `language` overrides it |
+
+The planner, writer, editor and SEO prompts name the language explicitly, the article is published with it (`language` in the Markdown front matter), and the quality gate applies its language-specific phrase rules (AI disclaimers, leftover placeholders) only to the languages it knows (`en`, `it`); length, structure, outline and edit-ratio rules apply to every language. Slugs are always lowercase ASCII (accents are dropped). WordPress and Ghost receive no language field: their posts take the site's language. Other languages work, but without the phrase rules.
+
 ## Duplicates
 
 | Variable                    | Default | Purpose                                                                                          |

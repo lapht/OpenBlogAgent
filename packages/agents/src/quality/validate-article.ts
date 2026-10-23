@@ -1,3 +1,5 @@
+import { primaryLanguage } from "@openblog/types";
+
 export type ViolationSeverity = "error" | "warning";
 
 export type ViolationCode =
@@ -48,15 +50,32 @@ export interface ArticleValidationRules {
   forbiddenPatterns: string[];
 }
 
+/** Leftovers that look the same in every language. */
 export const DEFAULT_PLACEHOLDER_PATTERNS: readonly string[] = [
   String.raw`\[\s*(?:\.{3}|…)\s*\]`,
-  String.raw`\[(?:insert|your|todo|tbd|placeholder)[^\]]*\]`,
   String.raw`\b(?:TODO|TBD|FIXME)\b`,
-  String.raw`lorem ipsum`,
-  String.raw`\bas an ai\b`,
-  String.raw`\bas a (?:large )?language model\b`,
-  String.raw`\bi (?:cannot|can't|am unable to) (?:browse|access|provide)\b`
+  String.raw`lorem ipsum`
 ];
+
+/**
+ * Placeholder and AI-disclaimer phrases that only make sense in one language, keyed by primary
+ * language code. They apply to articles in that language only: an English phrase must not flag
+ * an Italian article, and the other way round.
+ */
+export const LANGUAGE_PLACEHOLDER_PATTERNS: Readonly<Record<string, readonly string[]>> = {
+  en: [
+    String.raw`\[(?:insert|your|todo|tbd|placeholder)[^\]]*\]`,
+    String.raw`\bas an ai\b`,
+    String.raw`\bas a (?:large )?language model\b`,
+    String.raw`\bi (?:cannot|can't|am unable to) (?:browse|access|provide)\b`
+  ],
+  it: [
+    String.raw`\[(?:inserisci|inserire|il tuo|la tua|da completare|segnaposto)[^\]]*\]`,
+    String.raw`\bcome (?:un'|una )?(?:ia|intelligenza artificiale)\b`,
+    String.raw`\bcome (?:un )?modello (?:linguistico|di linguaggio)\b`,
+    String.raw`\bnon (?:posso|sono in grado di) (?:navigare|accedere|fornire)\b`
+  ]
+};
 
 export const DEFAULT_ARTICLE_RULES: ArticleValidationRules = {
   minWords: 1000,
@@ -80,6 +99,8 @@ export interface ArticleValidationInput {
   outline?: string[];
   /** SEO metadata; enables the title/meta/slug rules. */
   seo?: { title: string; metaDescription: string; slug: string };
+  /** Language of the article (`en`, `it`, `pt-BR`...); language-specific phrase rules follow it. Defaults to `en`. */
+  language?: string;
 }
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -142,7 +163,10 @@ export function validateArticle(
     add("unbalanced_code_fence", "A Markdown code fence is opened but never closed.");
   }
 
-  const placeholder = findForbidden(prose, config.forbiddenPatterns);
+  const placeholder = findForbidden(prose, [
+    ...config.forbiddenPatterns,
+    ...(LANGUAGE_PLACEHOLDER_PATTERNS[primaryLanguage(input.language ?? "en")] ?? [])
+  ]);
   if (placeholder) {
     add(
       "placeholder_text",
@@ -251,7 +275,7 @@ function tokens(text: string): string[] {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
-    .split(/[^a-z0-9]+/)
+    .split(/[^\p{L}\p{N}]+/u)
     .filter((token) => token.length > 2);
 }
 

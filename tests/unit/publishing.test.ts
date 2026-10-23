@@ -132,6 +132,20 @@ describe("Publishing Engine", () => {
     expect(body).toContain("# Test Article");
   });
 
+  it("writes the article language in the front matter", async () => {
+    const publisher = new MarkdownPublisher({ outputDir: tempDir }, logger);
+
+    const result = await publisher.publish({
+      ...baseArticle,
+      slug: "perche-la-cache",
+      title: "Perché la cache",
+      language: "it"
+    });
+    const [, frontMatter] = readFileSync(result.outputPath as string, "utf8").split(/^---$/m);
+
+    expect((parse(frontMatter) as Record<string, unknown>).language).toBe("it");
+  });
+
   it("refuses to overwrite an existing article unless overwrite is enabled", async () => {
     const first = await new MarkdownPublisher({ outputDir: tempDir }, logger).publish(baseArticle);
     expect(first.success).toBe(true);

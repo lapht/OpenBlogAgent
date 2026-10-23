@@ -316,7 +316,12 @@ describe("workflow end to end (offline)", () => {
       for (const agent of ["planner", "writer", "editor", "seo"]) {
         expect(promptOf(llm, agent)).not.toContain("Brief:");
       }
-      expect(result.brief).toEqual({ topic: "Caching", minWords: 1000, maxWords: 2200 });
+      expect(result.brief).toEqual({
+        topic: "Caching",
+        language: "en",
+        minWords: 1000,
+        maxWords: 2200
+      });
     });
 
     it("takes the writer's word range from the quality configuration", async () => {
@@ -338,7 +343,7 @@ describe("workflow end to end (offline)", () => {
       const result = await app.workflow.run(brief);
 
       expect(result.status).toBe("published");
-      expect(result.brief).toEqual(brief);
+      expect(result.brief).toEqual({ ...brief, language: "en" });
       expect(promptOf(llm, "writer")).toContain("between 1100 and 2100 words");
       for (const agent of ["planner", "writer"]) {
         const prompt = promptOf(llm, agent);
@@ -378,12 +383,12 @@ describe("workflow end to end (offline)", () => {
       await expect(pending.execute()).rejects.toThrow(/writer step failed/);
       expect(
         JSON.parse(String(rows("SELECT metadata_json FROM workflows")[0]!.metadata_json))
-      ).toEqual({ brief: { ...brief, topic: "Caching" } });
+      ).toEqual({ brief: { ...brief, topic: "Caching", language: "en" } });
 
       const resumed = await app.workflow.resume(pending.workflowId!);
 
       expect(resumed.status).toBe("published");
-      expect(resumed.brief).toEqual(brief);
+      expect(resumed.brief).toEqual({ ...brief, language: "en" });
       const writerPrompts = llm.prompts.filter((entry) => entry.agent === "writer");
       expect(writerPrompts).toHaveLength(2);
       expect(writerPrompts[1]!.prompt).toContain("Target keyword: cache invalidation");
@@ -405,7 +410,12 @@ describe("workflow end to end (offline)", () => {
       const resumed = await app.workflow.resume(pending.workflowId!);
 
       expect(resumed.status).toBe("published");
-      expect(resumed.brief).toEqual({ topic: "Caching", minWords: 1000, maxWords: 2200 });
+      expect(resumed.brief).toEqual({
+        topic: "Caching",
+        language: "en",
+        minWords: 1000,
+        maxWords: 2200
+      });
     });
 
     it("rejects an unusable brief before storing anything or calling a provider", async () => {
@@ -421,6 +431,97 @@ describe("workflow end to end (offline)", () => {
 
       expect(llm.prompts).toHaveLength(0);
       expect(rows("SELECT id FROM workflows")).toEqual([]);
+    });
+  });
+  describe("content language", () => {
+    const italianSeo = JSON.stringify({
+      title: "Perché la cache conta",
+      metaDescription: "Come usare bene la cache.",
+      slug: "Perché la cache è così utile!",
+      h1: "La cache",
+      headings: [{ level: "H2", text: "Perché la cache conta" }]
+    });
+
+    const promptOf = (llm: ReturnType<typeof routedProvider>, agent: string) =>
+      llm.prompts.find((entry) => entry.agent === agent)!.prompt;
+
+    it("defaults to English and publishes language: en", async () => {
+      const llm = routedProvider(healthy());
+      const app = await start(llm);
+
+      await app.workflow.run({ topic: "Caching" });
+
+      expect(fs.readFileSync(outputFile(), "utf8")).toMatch(/^language: en$/m);
+      for (const agent of ["planner", "writer", "editor", "seo"]) {
+        expect(promptOf(llm, agent)).toContain("English (en)");
+      }
+    });
+
+    it("OPENBLOG_CONTENT_LANGUAGE sets the prompts, the slug and the published language", async () => {
+      const llm = routedProvider({ ...healthy(), seo: [italianSeo] });
+      const app = await start(llm, { OPENBLOG_CONTENT_LANGUAGE: "it" });
+
+      const result = await app.workflow.run({ topic: "Caching" });
+
+      expect(result.status).toBe("published");
+      expect(result.brief?.language).toBe("it");
+      for (const agent of ["planner", "writer", "editor", "seo"]) {
+        expect(promptOf(llm, agent)).toContain("Italian (it)");
+        expect(promptOf(llm, agent)).not.toContain("English (en)");
+      }
+      expect(result.seoOutput.slug).toBe("perche-la-cache-e-cosi-utile");
+      expect(fs.readFileSync(outputFile("perche-la-cache-e-cosi-utile"), "utf8")).toMatch(
+        /^language: it$/m
+      );
+    });
+
+    it("the brief's language overrides the configured one", async () => {
+      const llm = routedProvider({ ...healthy(), seo: [italianSeo] });
+      const app = await start(llm, { OPENBLOG_CONTENT_LANGUAGE: "de" });
+
+      const result = await app.workflow.run({ topic: "Caching", language: "it" });
+
+      expect(result.brief?.language).toBe("it");
+      expect(promptOf(llm, "writer")).toContain("Italian (it)");
+      expect(fs.readFileSync(outputFile("perche-la-cache-e-cosi-utile"), "utf8")).toMatch(
+        /^language: it$/m
+      );
+    });
+
+    it("English-only quality rules do not fire on an Italian article", async () => {
+      const disclaimer = "\n\nAs a large language model, I cannot browse the web.";
+      const llm = routedProvider({
+        ...healthy(),
+        writer: [goodArticle + disclaimer],
+        editor: [edited(goodArticle + disclaimer)]
+      });
+      const english = await start(llm, { OPENBLOG_QUALITY_MAX_ATTEMPTS: "0" });
+      expect((await english.workflow.run({ topic: "Caching" })).status).toBe("needs_review");
+
+      const llmIt = routedProvider({
+        ...healthy(),
+        writer: [goodArticle + disclaimer],
+        editor: [edited(goodArticle + disclaimer)]
+      });
+      const italian = await start(llmIt, {
+        OPENBLOG_QUALITY_MAX_ATTEMPTS: "0",
+        OPENBLOG_CONTENT_LANGUAGE: "it",
+        OPENBLOG_MEMORY_DB_PATH: path.join(dir, "memory-it.db")
+      });
+      expect((await italian.workflow.run({ topic: "Caching" })).status).toBe("published");
+    });
+
+    it("approve and resume keep the language the run was started with", async () => {
+      const llm = routedProvider({ ...healthy(), seo: [italianSeo] });
+      const app = await start(llm, { OPENBLOG_PUBLICATION_POLICY: "publish_after_approval" });
+      const parked = await app.workflow.run({ topic: "Caching", language: "it" });
+      expect(parked.status).toBe("awaiting_approval");
+
+      await app.workflow.approve(parked.workflowId!, { approvedBy: "tester" });
+
+      expect(fs.readFileSync(outputFile("perche-la-cache-e-cosi-utile"), "utf8")).toMatch(
+        /^language: it$/m
+      );
     });
   });
 });

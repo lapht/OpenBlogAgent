@@ -2,9 +2,9 @@ import type { ArticleBrief } from "@openblog/types";
 
 import { DEFAULT_ARTICLE_RULES } from "../quality";
 
-import { briefLines } from "./brief";
+import { briefLines, languageLines } from "./brief";
 
-export const WRITER_PROMPT_VERSION = "2";
+export const WRITER_PROMPT_VERSION = "3";
 
 export interface WriterPromptOptions {
   /** Problems found in a previous attempt, to be fixed by this one. */
@@ -37,7 +37,11 @@ export function buildWriterPrompt(
     "- Avoid unnecessary depth, filler, repetition, and academic style.",
     "- If the topic is technical, explain only what is useful to the reader.",
     "- End with a short practical conclusion.",
-    ...briefLines(brief, ["language", "audience", "tone", "keywords", "notes"]),
+    ...languageLines(
+      brief,
+      "- Write the whole article in {language}, including headings. Keep code, commands and proper names as they are."
+    ),
+    ...briefLines(brief, ["audience", "tone", "keywords", "notes"]),
     "Outline:",
     ...outline.map((section, index) => `${index + 1}. ${section}`),
     ...(feedback

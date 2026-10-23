@@ -2,15 +2,22 @@ import { z } from "zod";
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 
+/** A language code such as `en`, `it` or `pt-BR` (BCP-47-ish: no registry lookup). */
+export const languageCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/, "language must be a code such as en or pt-BR");
+
+/** The language without region or script, lowercased: `pt-BR` -> `pt`. */
+export function primaryLanguage(code: string): string {
+  return code.split("-")[0]!.toLowerCase();
+}
+
 /** Fields of a brief; the workflow input extends this shape with its own run options. */
 export const articleBriefShape = {
   topic: text(500),
   /** Language code of the article (BCP-47-ish, e.g. `en`, `it`). */
-  language: z
-    .string()
-    .trim()
-    .regex(/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/, "language must be a code such as en or pt-BR")
-    .optional(),
+  language: languageCodeSchema.optional(),
   audience: text(300).optional(),
   tone: text(200).optional(),
   targetKeyword: text(100).optional(),
@@ -46,8 +53,15 @@ export const articleBriefSchema = z
 
 export type ArticleBrief = z.infer<typeof articleBriefSchema>;
 
-/** A brief whose word range is settled: the brief's own, else the quality configuration's. */
-export type ResolvedArticleBrief = ArticleBrief & { minWords: number; maxWords: number };
+/**
+ * A brief whose defaults are settled: the word range is the brief's own, else the quality
+ * configuration's, and the language is the brief's own, else the configured content language.
+ */
+export type ResolvedArticleBrief = ArticleBrief & {
+  language: string;
+  minWords: number;
+  maxWords: number;
+};
 
 /** One line per problem, for messages shown to a person. */
 export function formatBriefIssues(error: z.ZodError): string {

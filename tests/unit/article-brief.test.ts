@@ -254,7 +254,7 @@ describe("brief through the CLI", () => {
   it("prints the effective brief in the human summary", async () => {
     await cli(["generate", "Caching", "--dry-run", "--tone", "calm"]);
 
-    expect(out.join("\n")).toContain('brief: tone="calm" words=1-');
+    expect(out.join("\n")).toMatch(/brief: tone="calm" language="en" words=1-\d+/);
   });
 
   it("exits 64 for an invalid brief without calling the provider or storing a run", async () => {

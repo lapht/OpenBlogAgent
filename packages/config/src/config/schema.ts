@@ -1,3 +1,4 @@
+import { languageCodeSchema } from "@openblog/types";
 import { z } from "zod";
 
 /**
@@ -92,6 +93,12 @@ export const envSchema = z.object({
   OPENBLOG_MAX_COST_PER_RUN: z.preprocess(
     (value) => (value === "" ? undefined : value),
     z.coerce.number().positive().optional()
+  ),
+
+  /** Language of the generated articles (e.g. `en`, `it`); a brief's `language` overrides it. */
+  OPENBLOG_CONTENT_LANGUAGE: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    languageCodeSchema.default("en")
   ),
 
   /** Ask the model for a second, editorial opinion on articles that passed the gate. One extra call per run. */
