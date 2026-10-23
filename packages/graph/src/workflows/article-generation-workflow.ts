@@ -796,6 +796,7 @@ export function createArticleGenerationWorkflow(
             draft: state.article,
             outline: state.outline,
             seo: state.seoOutput,
+            keyword: requiredBrief(state).targetKeyword,
             language: requiredBrief(state).language
           },
           {

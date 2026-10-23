@@ -94,6 +94,96 @@ describe("validateArticle", () => {
     expect(DEFAULT_ARTICLE_RULES.minWords).toBeLessThan(DEFAULT_ARTICLE_RULES.maxWords);
   });
 
+  describe("target keyword", () => {
+    const keywordCodes = (input: ArticleValidationInput, rules = {}, keyword = "caching") =>
+      codes({ ...input, keyword }, { minWords: 1, ...rules }).filter((code) =>
+        code.startsWith("keyword_")
+      );
+    // The fixture repeats its section names in every sentence: "caching" is about 1.4% of it.
+    const optimized = goodArticle;
+    const seo = { ...goodSeo, metaDescription: "Caching explained: how to cache well." };
+
+    it("adds no violations without a keyword", () => {
+      expect(codes({ article: goodArticle, seo: goodSeo }, { minWords: 1 })).toEqual([]);
+      expect(codes({ article: goodArticle, seo: goodSeo, keyword: "  " }, { minWords: 1 })).toEqual(
+        []
+      );
+    });
+
+    it("passes an article that targets the keyword everywhere", () => {
+      expect(keywordCodes({ article: optimized, seo })).toEqual([]);
+    });
+
+    it("flags a keyword missing from the title, the meta description, the H2 headings and the introduction", () => {
+      const article = optimized
+        .replace("Caching is one of", "A cache is one of")
+        .replace("## Why caching matters", "## Why speed matters");
+      expect(
+        keywordCodes({
+          article,
+          seo: { ...seo, title: "Fast services", metaDescription: "How to cache well." }
+        })
+      ).toEqual(
+        expect.arrayContaining([
+          "keyword_missing_in_title",
+          "keyword_missing_in_meta",
+          "keyword_missing_in_h2",
+          "keyword_missing_in_intro"
+        ])
+      );
+    });
+
+    it("flags a keyword that is barely used and one that is stuffed", () => {
+      expect(keywordCodes({ article: goodArticle, seo }, {}, "conclusion")).toContain(
+        "keyword_density_low"
+      );
+      expect(keywordCodes({ article: `${optimized}\n\n${"caching ".repeat(60)}`, seo })).toEqual([
+        "keyword_density_high"
+      ]);
+    });
+
+    it("honors the configured density range", () => {
+      expect(
+        keywordCodes({ article: goodArticle, seo }, { minKeywordDensity: 0 }, "conclusion")
+      ).not.toContain("keyword_density_low");
+      expect(keywordCodes({ article: optimized, seo }, { maxKeywordDensity: 0.005 })).toEqual([
+        "keyword_density_high"
+      ]);
+    });
+
+    it("matches whole words, ignoring case and diacritics", () => {
+      const article = "Il caffè è importante.\n\n## Perché il CAFFE conta\n\nIl caffe è buono.";
+      const accented = {
+        title: "Guida al Caffè",
+        metaDescription: "Tutto sul caffe.",
+        slug: "caffe"
+      };
+      const loose = { minKeywordDensity: 0, maxKeywordDensity: 1 };
+      expect(
+        codes({ article, seo: accented, keyword: "caffe" }, { minWords: 1, minH2: 0, ...loose })
+      ).toEqual([]);
+      expect(
+        codes(
+          { article: "Il caffeina.\n\n## Caffeinato", keyword: "caffe" },
+          { minWords: 1, minH2: 0, ...loose }
+        )
+      ).toEqual(expect.arrayContaining(["keyword_missing_in_h2", "keyword_missing_in_intro"]));
+    });
+
+    it("counts a multi-word keyword once per phrase", () => {
+      const article = "Web caching basics.\n\n## Why web caching matters\n\nWeb caching helps.";
+      const input = {
+        article,
+        keyword: "Web Caching",
+        seo: { title: "Web caching", metaDescription: "Web caching", slug: "a" }
+      };
+      expect(codes(input, { minWords: 1, minH2: 0, maxKeywordDensity: 1 })).toEqual([]);
+      expect(codes(input, { minWords: 1, minH2: 0, maxKeywordDensity: 0.5 })).toEqual([
+        "keyword_density_high"
+      ]);
+    });
+  });
+
   it("formats violations for a regeneration prompt", () => {
     const { violations } = validateArticle({ article: tooShortArticle });
     expect(formatViolations(violations)).toMatch(/^- \[word_count_too_short\] /);

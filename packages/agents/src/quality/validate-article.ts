@@ -17,7 +17,13 @@ export type ViolationCode =
   | "seo_meta_missing"
   | "seo_meta_too_long"
   | "seo_slug_invalid"
-  | "repeated_paragraph";
+  | "repeated_paragraph"
+  | "keyword_missing_in_title"
+  | "keyword_missing_in_meta"
+  | "keyword_missing_in_h2"
+  | "keyword_missing_in_intro"
+  | "keyword_density_low"
+  | "keyword_density_high";
 
 export interface ArticleViolation {
   code: ViolationCode;
@@ -48,6 +54,10 @@ export interface ArticleValidationRules {
   minRepeatedParagraphWords: number;
   /** Case-insensitive patterns (regular expression sources) that flag leftover text. */
   forbiddenPatterns: string[];
+  /** Target keyword words as a fraction (0..1) of the article's words; below it the keyword is barely used. */
+  minKeywordDensity: number;
+  /** Above this fraction the keyword looks stuffed. */
+  maxKeywordDensity: number;
 }
 
 /** Leftovers that look the same in every language. */
@@ -87,7 +97,9 @@ export const DEFAULT_ARTICLE_RULES: ArticleValidationRules = {
   maxTitleLength: 60,
   maxMetaDescriptionLength: 155,
   minRepeatedParagraphWords: 8,
-  forbiddenPatterns: [...DEFAULT_PLACEHOLDER_PATTERNS]
+  forbiddenPatterns: [...DEFAULT_PLACEHOLDER_PATTERNS],
+  minKeywordDensity: 0.005,
+  maxKeywordDensity: 0.03
 };
 
 export interface ArticleValidationInput {
@@ -99,6 +111,8 @@ export interface ArticleValidationInput {
   outline?: string[];
   /** SEO metadata; enables the title/meta/slug rules. */
   seo?: { title: string; metaDescription: string; slug: string };
+  /** Target keyword (or phrase); enables the keyword rules. Matching ignores case and diacritics. */
+  keyword?: string;
   /** Language of the article (`en`, `it`, `pt-BR`...); language-specific phrase rules follow it. Defaults to `en`. */
   language?: string;
 }
@@ -216,6 +230,41 @@ export function validateArticle(
     }
   }
 
+  const keyword = input.keyword ? normalizedTokens(input.keyword) : [];
+  if (keyword.length > 0) {
+    const label = `"${input.keyword!.trim()}"`;
+    if (input.seo) {
+      if (countPhrase(input.seo.title, keyword) === 0) {
+        add("keyword_missing_in_title", `The SEO title does not contain the keyword ${label}.`);
+      }
+      if (countPhrase(input.seo.metaDescription, keyword) === 0) {
+        add(
+          "keyword_missing_in_meta",
+          `The meta description does not contain the keyword ${label}.`
+        );
+      }
+    }
+    if (!h2.some((heading) => countPhrase(heading.text, keyword) > 0)) {
+      add("keyword_missing_in_h2", `No H2 heading contains the keyword ${label}.`);
+    }
+    if (countPhrase(introduction(prose), keyword) === 0) {
+      add("keyword_missing_in_intro", `The introduction does not contain the keyword ${label}.`);
+    }
+
+    const density = (countPhrase(prose, keyword) * keyword.length) / Math.max(words, 1);
+    if (density < config.minKeywordDensity) {
+      add(
+        "keyword_density_low",
+        `The keyword ${label} makes up ${formatPercent(density)} of the article; use it naturally to reach at least ${formatPercent(config.minKeywordDensity)}.`
+      );
+    } else if (density > config.maxKeywordDensity) {
+      add(
+        "keyword_density_high",
+        `The keyword ${label} makes up ${formatPercent(density)} of the article; it looks stuffed, keep it under ${formatPercent(config.maxKeywordDensity)}.`
+      );
+    }
+  }
+
   const repeated = findRepeatedParagraph(prose, config.minRepeatedParagraphWords);
   if (repeated) {
     add("repeated_paragraph", `A paragraph is repeated: "${repeated}".`);
@@ -270,13 +319,44 @@ function countWords(text: string): number {
   return text.split(/\s+/).filter(Boolean).length;
 }
 
-function tokens(text: string): string[] {
+function normalizedTokens(text: string): string[] {
   return text
     .toLowerCase()
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .split(/[^\p{L}\p{N}]+/u)
-    .filter((token) => token.length > 2);
+    .filter(Boolean);
+}
+
+function tokens(text: string): string[] {
+  return normalizedTokens(text).filter((token) => token.length > 2);
+}
+
+/** How many times the word sequence `phrase` occurs in `text`, whole words only. */
+function countPhrase(text: string, phrase: readonly string[]): number {
+  const words = normalizedTokens(text);
+  let count = 0;
+  for (let start = 0; start + phrase.length <= words.length; start += 1) {
+    if (phrase.every((word, offset) => words[start + offset] === word)) {
+      count += 1;
+      start += phrase.length - 1;
+    }
+  }
+  return count;
+}
+
+/** The prose before the first H2 heading (all of it when there is none), headings left out. */
+function introduction(prose: string): string {
+  const lines: string[] = [];
+  for (const line of prose.split(/\r?\n/)) {
+    if (/^#{2}\s/.test(line)) break;
+    if (!/^#{1,6}\s/.test(line)) lines.push(line);
+  }
+  return lines.join("\n");
+}
+
+function formatPercent(fraction: number): string {
+  return `${Number((fraction * 100).toFixed(2))}%`;
 }
 
 /** A heading covers an outline item when it shares at least half of the item's significant words. */

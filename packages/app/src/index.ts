@@ -186,7 +186,9 @@ export async function createApplication(
         minH2: config.OPENBLOG_QUALITY_MIN_H2,
         minOutlineCoverage: config.OPENBLOG_QUALITY_MIN_OUTLINE_COVERAGE,
         minEditRatio: config.OPENBLOG_QUALITY_MIN_EDIT_RATIO,
-        maxEditRatio: config.OPENBLOG_QUALITY_MAX_EDIT_RATIO
+        maxEditRatio: config.OPENBLOG_QUALITY_MAX_EDIT_RATIO,
+        minKeywordDensity: config.OPENBLOG_QUALITY_KEYWORD_MIN_DENSITY,
+        maxKeywordDensity: config.OPENBLOG_QUALITY_KEYWORD_MAX_DENSITY
       }
     }
   });

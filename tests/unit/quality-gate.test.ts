@@ -20,11 +20,13 @@ const edited = (text: string) => JSON.stringify({ editedText: text, changesSumma
 const classification = JSON.stringify({ category: "News", tags: ["ai"] });
 
 /** Replies by agent, recognized from the prompt; each queue is consumed in order (the last repeats). */
-function routedProvider(queues: { writer: string[]; editor: string[] }) {
+function routedProvider(queues: { writer: string[]; editor: string[]; seo?: string[] }) {
   const prompts: string[] = [];
-  const used = { writer: 0, editor: 0 };
-  const next = (kind: "writer" | "editor") =>
-    queues[kind][Math.min(used[kind]++, queues[kind].length - 1)]!;
+  const used = { writer: 0, editor: 0, seo: 0 };
+  const next = (kind: "writer" | "editor" | "seo") => {
+    const queue = kind === "seo" ? (queues.seo ?? [seo]) : queues[kind];
+    return queue[Math.min(used[kind]++, queue.length - 1)]!;
+  };
   return {
     prompts,
     id: "fake",
@@ -38,7 +40,7 @@ function routedProvider(queues: { writer: string[]; editor: string[] }) {
           : p.includes("outline")
             ? JSON.stringify(outline)
             : p.includes("SEO")
-              ? seo
+              ? next("seo")
               : classification;
       return { text, model: "fake", usage: { totalTokens: 10 } };
     }
@@ -104,6 +106,36 @@ describe("quality gate", () => {
     expect(writerPrompts[1]).toContain("rejected by automatic checks");
     expect(writerPrompts[1]).toContain("word_count_too_short");
     expect(finished[0]).toMatchObject({ status: "published", editedText: goodArticle });
+  });
+
+  it("regenerates with keyword feedback when the target keyword is missing, then publishes", async () => {
+    const keywordSeo = JSON.stringify({
+      ...JSON.parse(seo),
+      metaDescription: "Caching explained: how to cache well."
+    });
+    const llm = routedProvider({
+      writer: [goodArticle],
+      editor: [edited(goodArticle)],
+      seo: [seo, keywordSeo]
+    });
+    const { workflow, published } = setup(llm, { maxAttempts: 2 });
+
+    const result = await workflow.run({ topic: "Caching", targetKeyword: "caching" });
+
+    expect(result.status).toBe("published");
+    expect(published).toEqual(["caching-made-simple"]);
+    const writerPrompts = llm.prompts.filter((p) => p.includes("blog writer"));
+    expect(writerPrompts).toHaveLength(2);
+    expect(writerPrompts[1]).toContain("keyword_missing_in_meta");
+  });
+
+  it("is unaffected by the keyword rules when the brief has no keyword", async () => {
+    const llm = routedProvider({ writer: [goodArticle], editor: [edited(goodArticle)] });
+    const { workflow } = setup(llm, { maxAttempts: 0 });
+
+    const result = await workflow.run({ topic: "Caching" });
+
+    expect(result.status).toBe("published");
   });
 
   it("parks persistently invalid output as needs_review and never publishes", async () => {
