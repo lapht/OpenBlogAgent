@@ -3,7 +3,8 @@ import type { Identifier } from "@openblog/types";
 /**
  * `started -> running -> published | awaiting_approval | needs_review | failed`, or `duplicate`
  * when stopped by the duplicate policy. `awaiting_approval`: the article passed the quality gate
- * and waits for `approve`; `needs_review`: it failed the gate.
+ * and waits for `approve`; `needs_review`: it failed the gate. A reviewer can close a stored article
+ * as `rejected` (terminal) or send it back to the writer (`revise`, which runs the workflow again).
  */
 export type WorkflowStatus =
   | "started"
@@ -12,7 +13,8 @@ export type WorkflowStatus =
   | "awaiting_approval"
   | "needs_review"
   | "failed"
-  | "duplicate";
+  | "duplicate"
+  | "rejected";
 
 export type FinalWorkflowStatus = Extract<
   WorkflowStatus,
@@ -20,7 +22,7 @@ export type FinalWorkflowStatus = Extract<
 >;
 
 /** Where a stored article stands in the review flow. */
-export type ArticleReviewState = "needs_review" | "approved" | "published";
+export type ArticleReviewState = "needs_review" | "approved" | "published" | "rejected";
 
 export interface WorkflowRecord {
   id: Identifier;
@@ -84,6 +86,17 @@ export interface ArticleRecord {
   approvalOverrideReason: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A human decision on a stored article, with who made it and why. */
+export interface WorkflowDecisionRecord {
+  id: Identifier;
+  workflowId: Identifier;
+  action: "reject" | "revise";
+  actor: string;
+  /** The rejection reason, or the feedback sent to the writer. */
+  note: string;
+  createdAt: string;
 }
 
 export type WorkflowStepStatus = "succeeded" | "failed";

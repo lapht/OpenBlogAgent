@@ -192,6 +192,15 @@ export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
       );
   }
 
+  /** Marks the article as rejected by a reviewer. */
+  markRejected(workflowId: Identifier): void {
+    this.db
+      .prepare(
+        "UPDATE articles SET review_state = 'rejected', updated_at = ? WHERE workflow_id = ?"
+      )
+      .run(new Date().toISOString(), workflowId);
+  }
+
   /** Stores the outcome of the publish that followed an approval; `published` only on success. */
   recordApprovalPublish(
     workflowId: Identifier,

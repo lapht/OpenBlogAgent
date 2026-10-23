@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 
 import type { Application } from "@openblog/app";
-import { ApprovalError } from "@openblog/graph";
+import { ApprovalError, ReviewError } from "@openblog/graph";
 import { articleBriefSchema, formatBriefIssues, type ArticleBrief } from "@openblog/types";
 import { ZodError } from "zod";
 
@@ -129,6 +129,19 @@ const runDetails = {
           model: { type: ["string", "null"] }
         }
       }
+    },
+    decisions: {
+      type: "array",
+      description: "Rejections and revisions by reviewers, oldest first.",
+      items: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["reject", "revise"] },
+          actor: { type: "string" },
+          note: { type: "string", description: "The reason, or the feedback for the writer." },
+          createdAt: { type: "string" }
+        }
+      }
     }
   }
 } as const;
@@ -136,8 +149,18 @@ const runDetails = {
 const APPROVAL_STATUS: Record<string, number> = {
   not_found: 404,
   already_published: 409,
+  already_rejected: 409,
   gate_not_passed: 422,
   not_publishable: 422,
+  memory_unavailable: 503
+};
+
+const REVIEW_STATUS: Record<string, number> = {
+  not_found: 404,
+  already_published: 409,
+  already_rejected: 409,
+  invalid_state: 409,
+  invalid_input: 400,
   memory_unavailable: 503
 };
 
@@ -279,6 +302,9 @@ export async function registerRunRoutes(
       if (run.status === "published") {
         throw new ApiError(409, "already_published", `Run ${id} is already published`);
       }
+      if (run.status === "rejected") {
+        throw new ApiError(409, "already_rejected", `Run ${id} was rejected and cannot be resumed`);
+      }
       if (inFlight.has(id)) {
         throw new ApiError(409, "already_running", `Run ${id} is already queued or running`);
       }
@@ -353,6 +379,113 @@ export async function registerRunRoutes(
         }
         throw error;
       }
+    }
+  );
+
+  app.post<{ Params: { id: string }; Body: { reason: string; rejectedBy?: string } }>(
+    "/runs/:id/reject",
+    {
+      schema: {
+        summary: "Reject a stored article",
+        description:
+          "Closes a `needs_review` or `awaiting_approval` run as `rejected` (terminal); it can no longer be approved, revised or resumed. A draft already sent to a target stays there.",
+        tags: ["runs"],
+        params: idParams,
+        body: {
+          type: "object",
+          properties: {
+            reason: { type: "string", minLength: 1, maxLength: 1000 },
+            rejectedBy: { type: "string", minLength: 1, maxLength: 100 }
+          },
+          required: ["reason"],
+          additionalProperties: false
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              workflowId: { type: "string" },
+              status: { type: "string", enum: ["rejected"] }
+            }
+          },
+          400: errorResponse,
+          404: errorResponse,
+          409: errorResponse,
+          503: errorResponse
+        }
+      }
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      if (inFlight.has(id)) {
+        throw new ApiError(409, "already_running", `Run ${id} is already queued or running`);
+      }
+      try {
+        const result = await workflow.reject(id, {
+          rejectedBy: request.body.rejectedBy ?? "api",
+          reason: request.body.reason
+        });
+        return reply.send(result);
+      } catch (error) {
+        if (error instanceof ReviewError) {
+          throw new ApiError(REVIEW_STATUS[error.code] ?? 400, error.code, error.message);
+        }
+        throw error;
+      }
+    }
+  );
+
+  app.post<{ Params: { id: string }; Body: { feedback: string; revisedBy?: string } }>(
+    "/runs/:id/revise",
+    {
+      schema: {
+        summary: "Send a stored article back to the writer",
+        description:
+          "For a `needs_review` or `awaiting_approval` run. Runs the writer again with the feedback, then editor, SEO, quality gate, review, classification and publisher under the usual policy, in the background. Poll `GET /runs/{id}`.",
+        tags: ["runs"],
+        params: idParams,
+        body: {
+          type: "object",
+          properties: {
+            feedback: { type: "string", minLength: 1, maxLength: 4000 },
+            revisedBy: { type: "string", minLength: 1, maxLength: 100 }
+          },
+          required: ["feedback"],
+          additionalProperties: false
+        },
+        response: {
+          202: acceptedResponse,
+          400: errorResponse,
+          404: errorResponse,
+          409: errorResponse,
+          429: errorResponse,
+          503: errorResponse
+        }
+      }
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      if (inFlight.has(id)) {
+        throw new ApiError(409, "already_running", `Run ${id} is already queued or running`);
+      }
+
+      let pending;
+      try {
+        pending = await workflow.revise(id, {
+          revisedBy: request.body.revisedBy ?? "api",
+          feedback: request.body.feedback
+        });
+      } catch (error) {
+        if (error instanceof ReviewError) {
+          throw new ApiError(REVIEW_STATUS[error.code] ?? 400, error.code, error.message);
+        }
+        throw error;
+      }
+
+      const slot = reserveSlot();
+      inFlight.add(id);
+      slot.run(() => pending.execute().finally(() => inFlight.delete(id)));
+      return reply.status(202).send({ workflowId: id, status: "started" });
     }
   );
 }

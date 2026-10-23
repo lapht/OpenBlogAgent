@@ -3,6 +3,7 @@ import path from "node:path";
 import { runStorageMigrations, SQLiteDatabaseConnection } from "../database";
 import {
   ArticleRepository,
+  DecisionRepository,
   PromptRepository,
   StepRepository,
   TopicRepository,
@@ -35,7 +36,8 @@ export async function createSQLiteMemoryService(
     new PromptRepository(db),
     new ArticleRepository(db),
     new StepRepository(db),
-    (fn) => db.transaction(fn)()
+    (fn) => db.transaction(fn)(),
+    new DecisionRepository(db)
   );
 
   return {

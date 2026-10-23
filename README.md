@@ -33,7 +33,7 @@ See [Current State](docs/CURRENT_STATE.md) for what is verified and what is not,
 
 Included:
 
-- CLI (`generate`, `resume`, `approve`, `list`) with `--dry-run`, `--json` and stable exit codes
+- CLI (`generate`, `resume`, `approve`, `reject`, `revise`, `list`) with `--dry-run`, `--json` and stable exit codes
 - LangGraph workflow with every step's output stored, so failed runs resume
 - OpenRouter provider with Ollama fallback
 - Editor, SEO and classification agents; deterministic quality gate
@@ -100,7 +100,7 @@ To use the server instead: `docker run --rm -p 3000:3000 --entrypoint node openb
 - `GET /health`
 - `GET /version`
 - `GET /openapi.json`
-- `POST /runs`, `GET /runs`, `GET /runs/{id}`, `POST /runs/{id}/resume`, `POST /runs/{id}/approve` (need `OPENBLOG_API_KEY`; see [Operations](docs/operations.md#http-api))
+- `POST /runs`, `GET /runs`, `GET /runs/{id}`, `POST /runs/{id}/resume`, `POST /runs/{id}/approve`, `POST /runs/{id}/reject`, `POST /runs/{id}/revise` (need `OPENBLOG_API_KEY`; see [Operations](docs/operations.md#http-api))
 
 ## Workflow Overview
 
@@ -190,6 +190,8 @@ Provider behavior:
 | `generate <topic>` | Runs the workflow for a topic                                          |
 | `resume <id>`      | Continues a failed run from its last good step                         |
 | `approve <id>`     | Publishes a stored article live (`--override "reason"` if gate failed) |
+| `reject <id>`      | Closes a stored article for good (`--reason "why"`)                    |
+| `revise <id>`      | Sends it back to the writer (`--feedback "what to change"`)            |
 | `list`             | Shows the most recent runs                                             |
 
 Options: `--dry-run` (everything except the publish call, on a throwaway copy of the database, so nothing is stored), `--publisher <id>`, `--force`, the brief options below, `--json` (one summary object on stdout; logs always go to stderr), `--help`.

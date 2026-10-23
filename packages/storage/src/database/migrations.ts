@@ -134,6 +134,24 @@ const migrations: Migration[] = [
   // v5: model reported by the provider per step execution.
   (db) => {
     addMissingColumns(db, "workflow_steps", { model: "TEXT" });
+  },
+
+  // v6: human decisions on stored articles (reject, revise).
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS workflow_decisions (
+        id TEXT PRIMARY KEY,
+        workflow_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        note TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_workflow_decisions_workflow_id
+      ON workflow_decisions(workflow_id);
+    `);
   }
 ];
 

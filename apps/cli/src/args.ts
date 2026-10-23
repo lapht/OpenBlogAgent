@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 import { articleBriefSchema, formatBriefIssues, type ArticleBrief } from "@openblog/types";
 import { parse as parseYaml } from "yaml";
 
-export const COMMANDS = ["generate", "resume", "approve", "list"] as const;
+export const COMMANDS = ["generate", "resume", "approve", "reject", "revise", "list"] as const;
 export type CommandName = (typeof COMMANDS)[number];
 
 export interface CliOptions {
@@ -14,6 +14,10 @@ export interface CliOptions {
   publisher?: string;
   /** Reason for approving an article that failed the quality gate. */
   override?: string;
+  /** Why an article is rejected (reject only). */
+  reason?: string;
+  /** What the writer should change (revise only). */
+  feedback?: string;
 }
 
 export type ParsedCommand =
@@ -21,6 +25,8 @@ export type ParsedCommand =
   | { name: "generate"; topic: string; brief: ArticleBrief; options: CliOptions }
   | { name: "resume"; workflowId: string; options: CliOptions }
   | { name: "approve"; workflowId: string; options: CliOptions }
+  | { name: "reject"; workflowId: string; reason: string; options: CliOptions }
+  | { name: "revise"; workflowId: string; feedback: string; options: CliOptions }
   | { name: "list"; options: CliOptions };
 
 /** Bad command line: the CLI prints the message with the usage and exits 64. */
@@ -37,6 +43,8 @@ Commands:
   generate [topic]     Generate an article about <topic> and publish it as the policy allows
   resume <id>          Continue a failed run from its last good step
   approve <id>         Publish a stored article live (--override "reason" if it failed the gate)
+  reject <id>          Close a stored article as rejected (--reason "why"); terminal
+  revise <id>          Send a stored article back to the writer (--feedback "what to change")
   list                 Show the most recent runs
 
 Options:
@@ -44,6 +52,8 @@ Options:
   --publisher <id>     Publisher to use instead of OPENBLOG_DEFAULT_PUBLISHER (markdown, wordpress)
   --force              Generate even if the topic, slug or title was already published
   --override <reason>  Approve an article that did not pass the quality gate (approve only)
+  --reason <text>      Why the article is rejected (reject only, required)
+  --feedback <text>    What the writer should change (revise only, required)
   --json               Print one JSON summary object on stdout; logs always go to stderr
 
 Brief options (generate only; each overrides the same field of --brief):
@@ -81,6 +91,8 @@ export function parseCommand(argv: string[]): ParsedCommand {
         help: { type: "boolean", short: "h" },
         publisher: { type: "string" },
         override: { type: "string" },
+        reason: { type: "string" },
+        feedback: { type: "string" },
         brief: { type: "string" },
         language: { type: "string" },
         audience: { type: "string" },
@@ -101,7 +113,9 @@ export function parseCommand(argv: string[]): ParsedCommand {
     force: values.force ?? false,
     json: values.json ?? false,
     publisher: values.publisher,
-    override: values.override
+    override: values.override,
+    reason: values.reason,
+    feedback: values.feedback
   };
 
   if (values.help) {
@@ -120,6 +134,12 @@ export function parseCommand(argv: string[]): ParsedCommand {
   }
   if (options.override !== undefined && (name !== "approve" || !options.override.trim())) {
     throw new UsageError("--override takes a reason and only applies to approve");
+  }
+  if (options.reason !== undefined && name !== "reject") {
+    throw new UsageError("--reason only applies to reject");
+  }
+  if (options.feedback !== undefined && name !== "revise") {
+    throw new UsageError("--feedback only applies to revise");
   }
   if (options.force && name !== "generate" && name !== "resume") {
     throw new UsageError("--force only applies to generate and resume");
@@ -141,6 +161,22 @@ export function parseCommand(argv: string[]): ParsedCommand {
         throw new UsageError(`${name} takes exactly one workflow id`);
       }
       return { name: name as "resume" | "approve", workflowId: rest[0]!, options };
+    }
+    case "reject":
+    case "revise": {
+      if (rest.length !== 1) {
+        throw new UsageError(`${name} takes exactly one workflow id`);
+      }
+      if (name === "reject") {
+        if (!options.reason?.trim()) {
+          throw new UsageError('reject needs --reason "why the article is rejected"');
+        }
+        return { name: "reject", workflowId: rest[0]!, reason: options.reason.trim(), options };
+      }
+      if (!options.feedback?.trim()) {
+        throw new UsageError('revise needs --feedback "what the writer should change"');
+      }
+      return { name: "revise", workflowId: rest[0]!, feedback: options.feedback.trim(), options };
     }
     case "list": {
       if (rest.length > 0) {

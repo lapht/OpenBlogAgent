@@ -172,6 +172,28 @@ describe("Publishing Engine", () => {
     expect(readFileSync(first.outputPath as string, "utf8")).toContain("# Replaced");
   });
 
+  it("replaces its own draft only for a revision of that draft", async () => {
+    const publisher = new MarkdownPublisher({ outputDir: tempDir }, logger);
+    const draft = { ...baseArticle, status: "draft" as const };
+    expect((await publisher.publish(draft)).success).toBe(true);
+
+    const plain = await publisher.publish({ ...draft, content: "# Other run" });
+    expect(plain.error?.code).toBe("already_exists");
+
+    const revision = await publisher.publish({
+      ...draft,
+      content: "# Revised",
+      revisesDraft: true
+    });
+    expect(revision.success).toBe(true);
+    expect(readFileSync(revision.outputPath as string, "utf8")).toContain("# Revised");
+
+    // A live file is never replaced by a draft revision.
+    await publisher.publish({ ...baseArticle, status: "publish" });
+    const live = await publisher.publish({ ...draft, content: "# Nope", revisesDraft: true });
+    expect(live.error?.code).toBe("already_exists");
+  });
+
   it("uses the default publisher when no explicit target is supplied", async () => {
     const mockPublisher = {
       id: "default-mock",

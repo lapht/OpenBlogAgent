@@ -9,6 +9,10 @@ export interface WriterAgentInput {
   /** Problems found in a previous attempt, to be fixed by this one. */
   feedback?: string;
   brief?: ArticleBrief;
+  /** What a human reviewer asks to change in `previousArticle` (a revision). */
+  reviewerFeedback?: string;
+  /** The version the reviewer read. */
+  previousArticle?: string;
   /** Requested word range; defaults to the quality gate's default range. */
   minWords?: number;
   maxWords?: number;

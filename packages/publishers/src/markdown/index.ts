@@ -128,8 +128,11 @@ export class MarkdownPublisher implements IPublisher {
 
     try {
       await mkdir(outputDir, { recursive: true });
-      // Going live replaces the draft this publisher wrote earlier; any other file is protected.
-      const replacesDraft = article.status === "publish" && (await isDraftFile(outputPath));
+      // Going live, or a revision of the draft, replaces the draft this publisher wrote earlier;
+      // any other file is protected.
+      const replacesDraft =
+        (article.status === "publish" || article.revisesDraft === true) &&
+        (await isDraftFile(outputPath));
       await writeFile(outputPath, contents, {
         encoding: "utf8",
         flag: this.config.overwrite || replacesDraft ? "w" : "wx"
