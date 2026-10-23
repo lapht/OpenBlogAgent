@@ -85,6 +85,21 @@ The values are OpenRouter model ids (`vendor/model`). When OpenRouter is not con
 
 The planner, writer, editor and SEO prompts name the language explicitly, the article is published with it (`language` in the Markdown front matter), and the quality gate applies its language-specific phrase rules (AI disclaimers, leftover placeholders) only to the languages it knows (`en`, `it`); length, structure, outline and edit-ratio rules apply to every language. Slugs are always lowercase ASCII (accents are dropped). WordPress and Ghost receive no language field: their posts take the site's language. Other languages work, but without the phrase rules.
 
+## Content fetcher
+
+Research features (feeds, sitemaps, source pages) read external URLs only through one fetcher that cannot be turned into a proxy to internal networks (ADR-038).
+
+| Variable                       | Default                                 | Purpose                                                                                                      |
+| ------------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `OPENBLOG_FETCH_ALLOW_PRIVATE` | `false`                                 | Allow loopback, private, link-local, CGNAT and metadata addresses; only for local development                |
+| `OPENBLOG_FETCH_ALLOWED_HOSTS` | none                                    | Comma-separated hostnames (exact match, case-insensitive, also checked on redirects); unset: any public host |
+| `OPENBLOG_FETCH_TIMEOUT_MS`    | `15000`                                 | Deadline for one fetch, redirects and body included                                                          |
+| `OPENBLOG_FETCH_MAX_BYTES`     | `2000000`                               | A larger response is refused (`fetch_too_large`)                                                             |
+| `OPENBLOG_FETCH_MAX_REDIRECTS` | `5`                                     | Redirects followed; each one is validated again                                                              |
+| `OPENBLOG_FETCH_USER_AGENT`    | `OpenBlogAgent/<version> (+repository)` | `User-Agent` header                                                                                          |
+
+Only `http` and `https` are fetched, never with credentials in the URL. Content types: HTML, XHTML, XML, RSS, Atom and plain text.
+
 ## Prompt overrides
 
 | Variable               | Default | Purpose                                                                                                       |

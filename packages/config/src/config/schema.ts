@@ -105,6 +105,16 @@ export const envSchema = z.object({
   OPENBLOG_MODEL_CLASSIFICATION: optionalString(),
   OPENBLOG_MODEL_REVIEW: optionalString(),
 
+  /** Allow the content fetcher to reach loopback, private, link-local and metadata addresses. Off: SSRF protection. */
+  OPENBLOG_FETCH_ALLOW_PRIVATE: envBoolean(false),
+  /** Comma-separated hostnames the content fetcher may contact. Unset: any public host. */
+  OPENBLOG_FETCH_ALLOWED_HOSTS: optionalString(),
+  OPENBLOG_FETCH_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
+  OPENBLOG_FETCH_MAX_BYTES: z.coerce.number().int().positive().default(2000000),
+  OPENBLOG_FETCH_MAX_REDIRECTS: z.coerce.number().int().min(0).default(5),
+  /** `User-Agent` the content fetcher sends. Unset: `OpenBlogAgent/<version> (+repository URL)`. */
+  OPENBLOG_FETCH_USER_AGENT: optionalString(),
+
   /** Language of the generated articles (e.g. `en`, `it`); a brief's `language` overrides it. */
   OPENBLOG_CONTENT_LANGUAGE: z.preprocess(
     (value) => (value === "" ? undefined : value),

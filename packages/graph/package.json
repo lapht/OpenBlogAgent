@@ -10,6 +10,7 @@
     "@openblog/logger": "*",
     "@openblog/providers": "*",
     "@openblog/publishers": "*",
+    "@openblog/research": "*",
     "@openblog/types": "*",
     "zod": "^3.23.8"
   },
