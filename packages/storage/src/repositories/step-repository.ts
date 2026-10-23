@@ -19,6 +19,7 @@ interface StepRow {
   completion_tokens: number | null;
   total_tokens: number | null;
   cost_usd: number | null;
+  model: string | null;
 }
 
 export class StepRepository {
@@ -38,8 +39,8 @@ export class StepRepository {
         `INSERT INTO workflow_steps (
           id, workflow_id, step, status, attempt, output_json,
           error_code, error_message, started_at, completed_at,
-          llm_calls, prompt_tokens, completion_tokens, total_tokens, cost_usd
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          llm_calls, prompt_tokens, completion_tokens, total_tokens, cost_usd, model
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         record.id,
@@ -56,7 +57,8 @@ export class StepRepository {
         record.usage?.promptTokens ?? null,
         record.usage?.completionTokens ?? null,
         record.usage?.totalTokens ?? null,
-        record.usage?.costUsd ?? null
+        record.usage?.costUsd ?? null,
+        record.model
       );
 
     return record;
@@ -86,6 +88,27 @@ export class StepRepository {
       totals.set(row.workflow_id, { totalTokens: row.tokens ?? 0, costUsd: row.cost ?? 0 });
     }
     return totals;
+  }
+
+  /** The model of the latest execution of each step that recorded one, per run. */
+  latestModels(workflowIds: Identifier[]): Map<Identifier, Record<string, string>> {
+    const models = new Map<Identifier, Record<string, string>>();
+    if (workflowIds.length === 0) {
+      return models;
+    }
+    const rows = this.db
+      .prepare(
+        `SELECT workflow_id, step, model FROM workflow_steps
+         WHERE model IS NOT NULL AND workflow_id IN (${workflowIds.map(() => "?").join(", ")})
+         ORDER BY completed_at ASC, attempt ASC, rowid ASC`
+      )
+      .all(...workflowIds) as Array<{ workflow_id: string; step: string; model: string }>;
+    for (const row of rows) {
+      const forRun = models.get(row.workflow_id) ?? {};
+      forRun[row.step] = row.model;
+      models.set(row.workflow_id, forRun);
+    }
+    return models;
   }
 
   /** Output of the latest succeeded execution of `step` for each run that has one. */
@@ -135,7 +158,8 @@ export class StepRepository {
               completionTokens: row.completion_tokens ?? 0,
               totalTokens: row.total_tokens ?? 0,
               costUsd: row.cost_usd ?? 0
-            }
+            },
+      model: row.model
     }));
   }
 }

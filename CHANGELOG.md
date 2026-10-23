@@ -6,6 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Per-step model routing: `OPENBLOG_MODEL_PLANNER`, `_WRITER`, `_EDITOR`, `_SEO`, `_CLASSIFICATION` and `_REVIEW` (unset: the provider's model). The model the provider reports is stored per step execution (`workflow_steps.model`, migration v5) and shown by `list --json` (`models`) and `GET /runs/{id}` (`model` per step). Ollama as a fallback keeps using `OLLAMA_MODEL`.
 - `npm run test:live`: opt-in smoke tests against real OpenRouter, Ollama, WordPress and Ghost (drafts only, cleaned up), skipped without `OPENBLOG_LIVE_*` variables, plus a manual-only "Live smoke tests" workflow.
 - Ghost publisher using the Admin API (JWT auth, draft by default, idempotent by slug).
 - Article brief: `generate` accepts `--brief <file>`, `--audience`, `--tone`, `--keyword`, `--min-words`, `--max-words`, `--notes` and `--language`, and `POST /runs` the same fields. The brief is validated (exit code 64 / HTTP 400), stored with the run, reused by `resume`, shown by `--dry-run`/`--json`, and sent to the planner, writer, editor and SEO prompts.

@@ -27,7 +27,7 @@ export class OllamaProvider implements TextGenerationProvider {
   constructor(public readonly config: OllamaProviderConfig) {}
 
   async generate(request: GenerateRequest): Promise<GenerateResult> {
-    const model = this.config.model ?? DEFAULT_OLLAMA_MODEL;
+    const model = request.model ?? this.config.model ?? DEFAULT_OLLAMA_MODEL;
     const options = {
       ...(request.maxTokens !== undefined ? { num_predict: request.maxTokens } : {}),
       ...(request.temperature !== undefined ? { temperature: request.temperature } : {})

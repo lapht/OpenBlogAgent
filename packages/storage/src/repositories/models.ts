@@ -102,6 +102,8 @@ export interface WorkflowStepRecord {
   completedAt: string;
   /** Provider usage of this execution; null for steps stored before usage was tracked. */
   usage: StepUsageRecord | null;
+  /** Model the provider reported for this execution; null when none was recorded. */
+  model: string | null;
 }
 
 /** The editorial review a run stored with its `editorial_review` step. */

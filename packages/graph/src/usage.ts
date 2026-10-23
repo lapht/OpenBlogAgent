@@ -67,13 +67,19 @@ export function usageSince(before: LlmUsage, after: LlmUsage): LlmUsage {
 }
 
 const storage = new AsyncLocalStorage<LlmUsage>();
+const modelStorage = new AsyncLocalStorage<string[]>();
 
 /**
  * Runs `fn` with a usage counter; every call through a tracked LLM inside it is counted.
  * `initial` carries what earlier attempts of the same run already consumed (a resumed run).
  */
 export function withUsageTracking<T>(fn: () => Promise<T>, initial?: LlmUsage): Promise<T> {
-  return storage.run({ ...(initial ?? emptyUsage()) }, fn);
+  return modelStorage.run([], () => storage.run({ ...(initial ?? emptyUsage()) }, fn));
+}
+
+/** The model each provider call of the run in progress reported, in call order. */
+export function currentModels(): string[] {
+  return [...(modelStorage.getStore() ?? [])];
 }
 
 /** Usage of the run in progress (a copy), or zeros outside one. */
@@ -116,6 +122,8 @@ export function trackUsage(llm: LlmPort, logger?: ILogger, budget: UsageBudget =
         totalTokens: result.usage?.totalTokens,
         costUsd: result.usage?.cost
       });
+      const models = modelStorage.getStore();
+      if (models && result.model) models.push(result.model);
       const usage = storage.getStore();
       if (usage) {
         usage.calls += 1;

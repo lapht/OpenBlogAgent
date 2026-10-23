@@ -152,9 +152,29 @@ describe("HTTP API", () => {
       "publisher"
     ]);
     expect(existsSync(path.join(dir, "out", "a-title.md"))).toBe(true);
+    // The model each step used, as reported by the provider (null where no call was made).
+    expect(run.steps.map((step: { model: string | null }) => step.model)).toEqual([
+      "fake",
+      "fake",
+      "fake",
+      "fake",
+      null,
+      null,
+      "fake",
+      null
+    ]);
+    expect(run.models).toEqual({
+      planner: "fake",
+      writer: "fake",
+      editor: "fake",
+      seo: "fake",
+      classification: "fake"
+    });
 
     const list = await app.inject({ method: "GET", url: "/runs", headers: auth });
-    expect(list.json().runs).toEqual([expect.objectContaining({ workflowId, topic: "Over HTTP" })]);
+    expect(list.json().runs).toEqual([
+      expect.objectContaining({ workflowId, topic: "Over HTTP", models: run.models })
+    ]);
   });
 
   it("approves a stored article once", async () => {

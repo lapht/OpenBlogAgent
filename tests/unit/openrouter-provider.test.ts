@@ -66,6 +66,16 @@ describe("OpenRouterProvider", () => {
     ]);
   });
 
+  it("sends the model of the request instead of the configured one", async () => {
+    const fetchMock = setup(jsonResponse({ ...okBody, model: "vendor/other" }));
+    const provider = new OpenRouterProvider({ apiKey: "k", model: "configured/model" });
+
+    const outcome = await run(provider, { prompt: "hello", model: "vendor/other" } as never);
+
+    expect(outcome).toMatchObject({ value: { model: "vendor/other" } });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).model).toBe("vendor/other");
+  });
+
   it("fails with invalid_response on empty content", async () => {
     const fetchMock = setup(jsonResponse({ choices: [{ message: { content: "  " } }] }));
     const outcome = (await run(new OpenRouterProvider({ apiKey: "k" }))) as {

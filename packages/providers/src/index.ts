@@ -46,7 +46,8 @@ export function createDefaultTextGenerationProvider(
         });
 
         try {
-          const result = await fallback.generate(request);
+          // A per-step model names an OpenRouter model; Ollama would not know it, so it uses its own.
+          const result = await fallback.generate({ ...request, model: undefined });
           logger.info("Text generation provider answered", { provider: fallback.id });
           return result;
         } catch (fallbackError) {

@@ -1,6 +1,8 @@
 export interface GenerateRequest {
   prompt: string;
   system?: string;
+  /** Model for this call; overrides the provider's configured model. */
+  model?: string;
   maxTokens?: number;
   temperature?: number;
   signal?: AbortSignal;

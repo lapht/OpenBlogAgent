@@ -31,6 +31,14 @@ describe("loadEnv", () => {
     );
   });
 
+  it("reads the per-step models and treats blanks as unset", () => {
+    const env = loadEnv({ OPENBLOG_MODEL_WRITER: "vendor/writer", OPENBLOG_MODEL_SEO: "" });
+
+    expect(env.OPENBLOG_MODEL_WRITER).toBe("vendor/writer");
+    expect(env.OPENBLOG_MODEL_SEO).toBeUndefined();
+    expect(env.OPENBLOG_MODEL_PLANNER).toBeUndefined();
+  });
+
   it("reads OpenRouter, Ollama and memory DB settings", () => {
     const env = loadEnv({
       OPENROUTER_API_KEY: "k",

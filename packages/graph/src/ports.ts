@@ -25,6 +25,8 @@ export interface StoredWorkflowStep {
   output?: unknown;
   /** Provider usage of this execution; absent for steps stored before usage was tracked. */
   usage?: StepUsage;
+  /** Model the provider reported for this execution; absent for steps stored before it was recorded or without a call. */
+  model?: string;
 }
 
 /** What the provider calls of one step execution consumed. */
@@ -70,6 +72,8 @@ export interface StoredWorkflowSummary {
   costUsd: number;
   /** Latest editorial review; null when the review is off or did not run. */
   review: StoredReview | null;
+  /** The model each step last used (steps that made no call are absent). */
+  models: Record<string, string>;
 }
 
 /** One stored execution of a step as the HTTP API shows it (without the step output). */
@@ -82,6 +86,8 @@ export interface StoredStepSummary {
   startedAt: string;
   completedAt: string;
   usage: StepUsage | null;
+  /** Model the provider reported for this execution; null when none was recorded. */
+  model: string | null;
 }
 
 /** One stored run with its steps. */
@@ -148,6 +154,7 @@ export interface MemoryPort {
     startedAt: string;
     completedAt: string;
     usage?: StepUsage;
+    model?: string;
   }): Promise<void>;
   /** Ends a run stopped by the duplicate policy; `duplicateOfWorkflowId` is null for a remote post. */
   markDuplicate(params: {

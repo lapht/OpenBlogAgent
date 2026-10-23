@@ -129,6 +129,11 @@ const migrations: Migration[] = [
       total_tokens: "INTEGER",
       cost_usd: "REAL"
     });
+  },
+
+  // v5: model reported by the provider per step execution.
+  (db) => {
+    addMissingColumns(db, "workflow_steps", { model: "TEXT" });
   }
 ];
 

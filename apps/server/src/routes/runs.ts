@@ -87,7 +87,12 @@ const runSummary = {
     createdAt: { type: "string" },
     totalTokens: { type: "number" },
     costUsd: { type: "number" },
-    review
+    review,
+    models: {
+      type: "object",
+      additionalProperties: { type: "string" },
+      description: "The model each step last used."
+    }
   }
 } as const;
 
@@ -120,7 +125,8 @@ const runDetails = {
           errorMessage: { type: ["string", "null"] },
           startedAt: { type: "string" },
           completedAt: { type: "string" },
-          usage: stepUsage
+          usage: stepUsage,
+          model: { type: ["string", "null"] }
         }
       }
     }

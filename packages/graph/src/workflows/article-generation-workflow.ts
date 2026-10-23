@@ -35,6 +35,7 @@ import {
   currentUsage,
   emptyUsage,
   type LlmUsage,
+  currentModels,
   trackUsage,
   type UsageBudget,
   usageSince,
@@ -277,9 +278,16 @@ export class WorkflowResumeError extends Error {
   }
 }
 
+export type AgentModelKey = "planner" | "writer" | "editor" | "seo" | "classification" | "review";
+
 export interface CreateArticleGenerationWorkflowOptions {
   logger: ILogger;
   llm: LlmPort;
+  /**
+   * Model per agent, sent as `GenerateRequest.model`. An agent without an entry uses the provider's
+   * own model. Usage and the budget stay shared by the whole run.
+   */
+  models?: Partial<Record<AgentModelKey, string>>;
   publisher: PublishPort;
   taxonomy?: TaxonomyPort;
   memory?: MemoryPort;
@@ -458,6 +466,7 @@ function step(
     startedAt: string,
     result: ({ output: ArticleWorkflowUpdate } | { error: WorkflowStepError }) & {
       usage: LlmUsage;
+      model?: string;
     }
   ): Promise<void> => {
     if (!memory || !state.workflowId) {
@@ -470,6 +479,7 @@ function step(
         startedAt,
         completedAt: new Date().toISOString(),
         usage: result.usage,
+        ...(result.model ? { model: result.model } : {}),
         ...("output" in result
           ? { status: "succeeded", output: result.output }
           : {
@@ -501,9 +511,17 @@ function step(
       const startedAt = new Date().toISOString();
       const started = Date.now();
       const usageBefore = currentUsage();
+      const modelsBefore = currentModels().length;
+      /** The model(s) the providers reported for the calls of this execution. */
+      const modelUsed = () =>
+        [...new Set(currentModels().slice(modelsBefore))].join(", ") || undefined;
       try {
         const output = await fn(state);
-        await record(state, startedAt, { output, usage: usageSince(usageBefore, currentUsage()) });
+        await record(state, startedAt, {
+          output,
+          usage: usageSince(usageBefore, currentUsage()),
+          model: modelUsed()
+        });
         logger.info("Step finished", { outcome: "succeeded", durationMs: Date.now() - started });
         return output;
       } catch (error) {
@@ -511,7 +529,8 @@ function step(
           error instanceof WorkflowStepError ? error : new WorkflowStepError(name, error);
         await record(state, startedAt, {
           error: stepError,
-          usage: usageSince(usageBefore, currentUsage())
+          usage: usageSince(usageBefore, currentUsage()),
+          model: modelUsed()
         });
         logger.error("Step finished", {
           outcome: "failed",
@@ -571,12 +590,17 @@ export function createArticleGenerationWorkflow(
     return required(state.brief, "brief");
   }
 
-  const plannerAgent = createPlannerAgent(llm);
-  const writerAgent = createWriterAgent(llm);
-  const editorAgent = createEditorAgent(llm);
-  const seoAgent = createSeoAgent(llm);
-  const classificationAgent = createClassificationAgent(llm);
-  const reviewAgent = createEditorialReviewAgent(llm);
+  /** The tracked LLM, asking for the model configured for `agent` (if any) on every call. */
+  const llmFor = (agent: AgentModelKey): LlmPort => {
+    const model = options.models?.[agent];
+    return model ? { id: llm.id, generate: (request) => llm.generate({ ...request, model }) } : llm;
+  };
+  const plannerAgent = createPlannerAgent(llmFor("planner"));
+  const writerAgent = createWriterAgent(llmFor("writer"));
+  const editorAgent = createEditorAgent(llmFor("editor"));
+  const seoAgent = createSeoAgent(llmFor("seo"));
+  const classificationAgent = createClassificationAgent(llmFor("classification"));
+  const reviewAgent = createEditorialReviewAgent(llmFor("review"));
   const reviewEnabled = options.review?.enabled ?? false;
   const reviewMinScore = options.review?.minScore ?? 7;
 
