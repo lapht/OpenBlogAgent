@@ -27,7 +27,7 @@ The agents only produce content. The publisher layer is responsible for:
 | `publish_after_approval` | Nothing is sent                                                              | `awaiting_approval` |
 | `publish_if_gate_passes` | Published live immediately (use with care)                                   | `published`         |
 
-An article that fails the gate is never sent, under any policy (`needs_review`). `npm start -- approve <workflowId>` publishes the stored article live, once; see [Operations](operations.md).
+An article that fails the gate is never sent, under any policy (`needs_review`). `npm start -- approve <workflowId>` publishes the stored article live, once; `reject` closes it and `revise` sends it back to the writer with feedback; see [Operations](operations.md).
 
 ## Markdown output
 

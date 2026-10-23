@@ -16,6 +16,11 @@ export interface PublishArticle {
    * publisher's default (a draft for WordPress).
    */
   status?: "draft" | "publish";
+  /**
+   * The article is a revision of the draft this workflow already sent under this slug, so a target
+   * that protects existing files may replace that draft.
+   */
+  revisesDraft?: boolean;
   target?: string;
   publisherId?: string;
   metadata?: Record<string, unknown>;

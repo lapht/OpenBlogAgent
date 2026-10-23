@@ -117,6 +117,9 @@ const reviewSchema = z.object({
 export type WorkflowRunStatus =
   "published" | "awaiting_approval" | "needs_review" | "failed" | "duplicate";
 
+/** The run states a reviewer can act on with `reject` or `revise`. */
+const REVIEWABLE_STATUSES = ["needs_review", "awaiting_approval"];
+
 /**
  * When an article goes live:
  * - `draft` (default): sent to the target as a draft once the gate passes; live only after `approve`.
@@ -217,7 +220,12 @@ export type ArticleWorkflowResult =
   | FailedWorkflowResult;
 
 export type ApprovalErrorCode =
-  "memory_unavailable" | "not_found" | "already_published" | "gate_not_passed" | "not_publishable";
+  | "memory_unavailable"
+  | "not_found"
+  | "already_published"
+  | "already_rejected"
+  | "gate_not_passed"
+  | "not_publishable";
 
 /** Thrown when an article cannot be approved; nothing is published or changed. */
 export class ApprovalError extends Error {
@@ -246,6 +254,43 @@ export interface ApprovalResult {
   failure?: WorkflowFailure;
 }
 
+export type ReviewErrorCode =
+  | "memory_unavailable"
+  | "not_found"
+  | "already_published"
+  | "already_rejected"
+  | "invalid_state"
+  | "invalid_input";
+
+/** Thrown when an article cannot be rejected or revised; nothing is executed or changed. */
+export class ReviewError extends Error {
+  readonly code: ReviewErrorCode;
+
+  constructor(code: ReviewErrorCode, message: string) {
+    super(message);
+    this.name = "ReviewError";
+    this.code = code;
+  }
+}
+
+export interface RejectInput {
+  /** Who rejects (the CLI user); recorded with the time. */
+  rejectedBy: string;
+  reason: string;
+}
+
+export interface RejectResult {
+  status: "rejected";
+  workflowId: string;
+}
+
+export interface ReviseInput {
+  /** Who asks for the revision; recorded with the time. */
+  revisedBy: string;
+  /** What to change; sent to the writer next to the previous version. */
+  feedback: string;
+}
+
 /** A run that is registered (it has an id and is stored as `started`) but has not executed yet. */
 export interface PendingRun {
   /** Absent without a memory store. */
@@ -262,10 +307,19 @@ export interface ArticleGenerationWorkflow {
   /** Continues a run that did not publish, reusing the stored output of its completed steps. */
   /** Publishes a stored article live. Refuses articles that failed the gate without an override reason. */
   approve(workflowId: string, input: ApprovalInput): Promise<ApprovalResult>;
+  /** Closes a `needs_review` or `awaiting_approval` run as `rejected` (terminal), keeping the reason. */
+  reject(workflowId: string, input: RejectInput): Promise<RejectResult>;
+  /**
+   * Sends a `needs_review` or `awaiting_approval` run back to the writer with the reviewer's
+   * feedback. The outline is kept; writer, editor, SEO, quality, review, classification and publisher
+   * run again under the usual policy. The check is done before this returns, the run in `execute`.
+   */
+  revise(workflowId: string, input: ReviseInput): Promise<PendingRun>;
   resume(workflowId: string, options?: { force?: boolean }): Promise<ArticleWorkflowResult>;
 }
 
-export type WorkflowResumeErrorCode = "memory_unavailable" | "not_found" | "already_published";
+export type WorkflowResumeErrorCode =
+  "memory_unavailable" | "not_found" | "already_published" | "already_rejected";
 
 /** Thrown when a run cannot be resumed; nothing is executed or changed. */
 export class WorkflowResumeError extends Error {
@@ -342,6 +396,11 @@ const graphState = Annotation.Root({
   qualityPassed: optional<boolean>(),
   qualityViolations: optional<QualityViolation[]>(),
   qualityFeedback: optional<string>(),
+  /** A revision: what the reviewer asked to change, and the version they read. */
+  reviewerFeedback: optional<string>(),
+  previousArticle: optional<string>(),
+  /** A revision whose earlier version is at the target under this slug: not a duplicate of itself. */
+  ownSlug: optional<string>(),
   force: Annotation<boolean>({ default: () => false, reducer: (_, update) => update }),
   duplicate: optional<DuplicateInfo>(),
   llmUsage: optional<LlmUsage>(),
@@ -634,6 +693,8 @@ export function createArticleGenerationWorkflow(
           topic: state.topic,
           outline: required(state.outline, "outline"),
           feedback: state.qualityFeedback,
+          reviewerFeedback: state.reviewerFeedback,
+          previousArticle: state.previousArticle,
           brief: requiredBrief(state),
           minWords: requiredBrief(state).minWords,
           maxWords: requiredBrief(state).maxWords
@@ -705,7 +766,8 @@ export function createArticleGenerationWorkflow(
           duplicate = { matchedOn: stored.matchedOn, workflowId: stored.workflowId };
         } else {
           const remote = await publisher.findExisting?.({ slug: seoOutput.slug });
-          if (remote) {
+          // The draft this very run sent before it was revised is updated, not a duplicate.
+          if (remote && state.ownSlug !== seoOutput.slug) {
             duplicate = {
               matchedOn: "remote",
               remote: remote.url ?? remote.id ?? seoOutput.slug
@@ -845,6 +907,7 @@ export function createArticleGenerationWorkflow(
           category: required(state.category, "category"),
           author: "OpenBlogAgent",
           language: requiredBrief(state).language,
+          revisesDraft: state.ownSlug === seoOutput.slug,
           // Only this policy ever sends a live post straight from a run.
           status: policy === "publish_if_gate_passes" ? "publish" : "draft"
         };
@@ -1081,6 +1144,30 @@ export function createArticleGenerationWorkflow(
     }
   }
 
+  /** The stored run, if a reviewer may act on it; otherwise the error that says why. */
+  async function loadReviewable(workflowId: string) {
+    if (!memory) {
+      throw new ReviewError("memory_unavailable", "Reviewing an article requires a memory store");
+    }
+    const stored = await memory.loadWorkflow(workflowId);
+    if (!stored) {
+      throw new ReviewError("not_found", `Workflow ${workflowId} was not found`);
+    }
+    if (stored.status === "published") {
+      throw new ReviewError("already_published", `Workflow ${workflowId} is already published`);
+    }
+    if (stored.status === "rejected") {
+      throw new ReviewError("already_rejected", `Workflow ${workflowId} was already rejected`);
+    }
+    if (!REVIEWABLE_STATUSES.includes(stored.status)) {
+      throw new ReviewError(
+        "invalid_state",
+        `Workflow ${workflowId} is ${stored.status}; only needs_review and awaiting_approval runs can be rejected or revised`
+      );
+    }
+    return stored;
+  }
+
   const workflowApi: ArticleGenerationWorkflow = {
     name: ARTICLE_GENERATION_WORKFLOW_NAME,
     async run(input: ArticleWorkflowInput): Promise<ArticleWorkflowResult> {
@@ -1142,6 +1229,12 @@ export function createArticleGenerationWorkflow(
         }
 
         const { article } = stored;
+        if (stored.workflowStatus === "rejected" || article.reviewState === "rejected") {
+          throw new ApprovalError(
+            "already_rejected",
+            `The article of workflow ${workflowId} was rejected; generate it again instead`
+          );
+        }
         if (article.reviewState === "published") {
           throw new ApprovalError(
             "already_published",
@@ -1225,6 +1318,68 @@ export function createArticleGenerationWorkflow(
       });
     },
 
+    async reject(workflowId: string, input: RejectInput): Promise<RejectResult> {
+      const reason = input.reason.trim();
+      if (!reason) {
+        throw new ReviewError("invalid_input", "A rejection needs a reason");
+      }
+      const stored = await loadReviewable(workflowId);
+      return inRun(workflowId, stored.steps, async () => {
+        await memory!.rejectWorkflow({ workflowId, actor: input.rejectedBy, note: reason });
+        logger.info("Article rejected", { workflowId, rejectedBy: input.rejectedBy, reason });
+        return { status: "rejected", workflowId };
+      });
+    },
+
+    async revise(workflowId: string, input: ReviseInput): Promise<PendingRun> {
+      const feedback = input.feedback.trim();
+      if (!feedback) {
+        throw new ReviewError("invalid_input", "A revision needs feedback for the writer");
+      }
+      const stored = await loadReviewable(workflowId);
+      const article = (await memory!.loadArticle(workflowId))?.article;
+
+      // Only the outline is kept: everything from the writer on is produced again.
+      const restored = restoreState(stored.steps);
+      const keepOutline = restored.completedSteps?.includes("planner") === true;
+      const lastPublish = [...stored.steps]
+        .reverse()
+        .find((entry) => entry.step === "publisher" && entry.status === "succeeded");
+      const sentDraft =
+        lastPublish !== undefined &&
+        stepOutputSchemas.publisher!.parse(lastPublish.output).publishResult?.success === true;
+
+      return {
+        workflowId,
+        execute: () =>
+          inRun(workflowId, stored.steps, async () => {
+            await memory!.recordRevision({ workflowId, actor: input.revisedBy, note: feedback });
+            logger.info("Revising article workflow", {
+              workflowId,
+              revisedBy: input.revisedBy,
+              topic: stored.topic
+            });
+
+            return execute(
+              resolveBrief(storedBrief(stored)),
+              { workflowId },
+              stored.metadata?.force === true || allowDuplicates,
+              {
+                ...(keepOutline ? { outline: restored.outline, completedSteps: ["planner"] } : {}),
+                reviewerFeedback: feedback,
+                previousArticle: article?.editedMarkdown,
+                ownSlug: sentDraft ? (article?.slug ?? undefined) : undefined
+              },
+              // The budget covers the whole run, so what the first version spent still counts.
+              stored.steps.reduce(
+                (total, previous) => addUsage(total, previous.usage ?? emptyUsage()),
+                emptyUsage()
+              )
+            );
+          })
+      };
+    },
+
     async resume(
       workflowId: string,
       resumeOptions: { force?: boolean } = {}
@@ -1243,6 +1398,13 @@ export function createArticleGenerationWorkflow(
         throw new WorkflowResumeError(
           "already_published",
           `Workflow ${workflowId} is already published`
+        );
+      }
+
+      if (stored.status === "rejected") {
+        throw new WorkflowResumeError(
+          "already_rejected",
+          `Workflow ${workflowId} was rejected and cannot be resumed`
         );
       }
 

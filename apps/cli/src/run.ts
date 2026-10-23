@@ -13,6 +13,7 @@ import {
   reportApprovalOutcome,
   reportRunOutcome,
   summarizeApproval,
+  summarizeRejection,
   summarizeRun,
   type CliSummary
 } from "./report";
@@ -99,12 +100,31 @@ export async function runCli(options: RunCliOptions = {}): Promise<number> {
           emit(summary, formatSummary(summary));
           return code;
         }
+        case "reject": {
+          const result = await app.workflow.reject(command.workflowId, {
+            rejectedBy: currentUser(),
+            reason: command.reason
+          });
+          logger.info("Article rejected", { workflowId: result.workflowId });
+          const summary = summarizeRejection(result, flags.dryRun);
+          emit(summary, formatSummary(summary));
+          return EXIT.ok;
+        }
         case "resume":
+        case "revise":
         case "generate": {
-          const result =
-            command.name === "resume"
-              ? await app.workflow.resume(command.workflowId, { force: flags.force })
-              : await app.workflow.run({ ...command.brief, force: flags.force });
+          let result;
+          if (command.name === "resume") {
+            result = await app.workflow.resume(command.workflowId, { force: flags.force });
+          } else if (command.name === "revise") {
+            const revision = await app.workflow.revise(command.workflowId, {
+              revisedBy: currentUser(),
+              feedback: command.feedback
+            });
+            result = await revision.execute();
+          } else {
+            result = await app.workflow.run({ ...command.brief, force: flags.force });
+          }
           const code = reportRunOutcome(result, logger);
           const summary: CliSummary = summarizeRun(command.name, result, flags.dryRun);
           emit(summary, formatSummary(summary));

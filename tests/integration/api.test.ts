@@ -26,10 +26,12 @@ const replies = () => [
 ];
 
 /** Replays one reply per call; the call numbers in `failOn` throw instead; `gate` holds every call until released. */
-function fakeProvider(options: { failOn?: number[]; gate?: Promise<void> } = {}) {
+function fakeProvider(
+  options: { failOn?: number[]; gate?: Promise<void>; script?: string[] } = {}
+) {
   let calls = 0;
   let cursor = 0;
-  const script = replies();
+  const script = options.script ?? replies();
   return {
     id: "fake",
     get calls() {
@@ -209,6 +211,112 @@ describe("HTTP API", () => {
     expect(missing.statusCode).toBe(404);
   });
 
+  it("rejects a stored article for good and shows the decision", async () => {
+    const llm = fakeProvider();
+    const app = await server(llm);
+    const { workflowId } = (
+      await app.inject({ method: "POST", url: "/runs", headers: auth, payload: { topic: "R" } })
+    ).json();
+    expect((await waitForRun(app, workflowId)).status).toBe("awaiting_approval");
+    const post = (action: string, payload: object) =>
+      app.inject({ method: "POST", url: `/runs/${workflowId}/${action}`, headers: auth, payload });
+
+    expect((await post("reject", {})).statusCode).toBe(400);
+    expect((await post("reject", { reason: "x", extra: 1 })).statusCode).toBe(400);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/runs/nope/reject",
+          headers: auth,
+          payload: { reason: "x" }
+        })
+      ).statusCode
+    ).toBe(404);
+
+    const rejected = await post("reject", { reason: "Off brand", rejectedBy: "alice" });
+    expect(rejected.statusCode).toBe(200);
+    expect(rejected.json()).toEqual({ workflowId, status: "rejected" });
+
+    const run = await waitForRun(app, workflowId);
+    expect(run.status).toBe("rejected");
+    expect(run.decisions).toEqual([
+      expect.objectContaining({ action: "reject", actor: "alice", note: "Off brand" })
+    ]);
+    expect(run.decisions[0].createdAt).toBeTruthy();
+    for (const [action, payload] of [
+      ["reject", { reason: "again" }],
+      ["revise", { feedback: "again" }],
+      ["approve", { overrideReason: "x" }],
+      ["resume", {}]
+    ] as const) {
+      const response = await post(action, payload);
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({ code: "already_rejected" });
+    }
+    expect(llm.calls).toBe(5);
+  });
+
+  it("revises a stored article through the queue, then approves it", async () => {
+    const script = [...replies(), ...replies().slice(1)];
+    const app = await server(fakeProvider({ script }));
+    const { workflowId } = (
+      await app.inject({ method: "POST", url: "/runs", headers: auth, payload: { topic: "V" } })
+    ).json();
+    expect((await waitForRun(app, workflowId)).status).toBe("awaiting_approval");
+    const revise = (payload: object) =>
+      app.inject({
+        method: "POST",
+        url: `/runs/${workflowId}/revise`,
+        headers: auth,
+        payload
+      });
+
+    expect((await revise({})).statusCode).toBe(400);
+    expect((await revise({ feedback: "" })).statusCode).toBe(400);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/runs/nope/revise",
+          headers: auth,
+          payload: { feedback: "x" }
+        })
+      ).statusCode
+    ).toBe(404);
+
+    const accepted = await revise({ feedback: "Add an example", revisedBy: "alice" });
+    expect(accepted.statusCode).toBe(202);
+    expect(accepted.json()).toEqual({ workflowId, status: "started" });
+
+    let run = await waitForRun(app, workflowId);
+    for (let attempt = 0; attempt < 200 && run.decisions.length === 0; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      run = await waitForRun(app, workflowId);
+    }
+    expect(run.errorMessage).toBeNull();
+    expect(run.status).toBe("awaiting_approval");
+    expect(run.decisions).toEqual([
+      expect.objectContaining({ action: "revise", actor: "alice", note: "Add an example" })
+    ]);
+    expect(
+      run.steps
+        .filter((step: { step: string }) => step.step === "writer")
+        .map((s: { attempt: number }) => s.attempt)
+    ).toEqual([1, 2]);
+
+    const approve = await app.inject({
+      method: "POST",
+      url: `/runs/${workflowId}/approve`,
+      headers: auth
+    });
+    expect(approve.statusCode).toBe(200);
+    // A published run cannot be revised.
+    const late = await revise({ feedback: "too late" });
+    expect(late.statusCode).toBe(409);
+    expect(late.json()).toMatchObject({ code: "already_published" });
+  });
+
   it("validates the request body", async () => {
     const app = await server(fakeProvider());
 
@@ -309,7 +417,14 @@ describe("HTTP API", () => {
 
     expect(response.statusCode).toBe(200);
     expect(Object.keys(response.json().paths)).toEqual(
-      expect.arrayContaining(["/runs", "/runs/{id}", "/runs/{id}/resume", "/runs/{id}/approve"])
+      expect.arrayContaining([
+        "/runs",
+        "/runs/{id}",
+        "/runs/{id}/resume",
+        "/runs/{id}/approve",
+        "/runs/{id}/reject",
+        "/runs/{id}/revise"
+      ])
     );
   });
   it("accepts the brief fields when starting a run", async () => {

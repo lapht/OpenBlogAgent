@@ -4,6 +4,7 @@ import type { Identifier } from "@openblog/types";
 
 import {
   ArticleRepository,
+  DecisionRepository,
   PromptRepository,
   StepRepository,
   TopicRepository,
@@ -55,6 +56,13 @@ export interface BeginApprovalParams {
   workflowId: Identifier;
   approvedBy: string;
   overrideReason?: string;
+}
+
+export interface DecisionParams {
+  workflowId: Identifier;
+  actor: string;
+  /** The rejection reason, or the feedback for the writer. */
+  note: string;
 }
 
 export interface CompleteApprovalParams {
@@ -114,7 +122,8 @@ export class MemoryService {
     private readonly promptRepository: PromptRepository,
     private readonly articleRepository: ArticleRepository,
     private readonly stepRepository: StepRepository,
-    private readonly runInTransaction: RunInTransaction
+    private readonly runInTransaction: RunInTransaction,
+    private readonly decisionRepository: DecisionRepository
   ) {}
 
   static normalizeTopic(topic: string): string {
@@ -246,6 +255,35 @@ export class MemoryService {
     });
   }
 
+  /** Closes a stored article as rejected (terminal) and records who rejected it and why. */
+  async rejectWorkflow(params: DecisionParams): Promise<void> {
+    this.runInTransaction(() => {
+      const now = new Date().toISOString();
+      this.decisionRepository.append({
+        id: randomUUID(),
+        workflowId: params.workflowId,
+        action: "reject",
+        actor: params.actor,
+        note: params.note,
+        createdAt: now
+      });
+      this.workflowRepository.updateStatus(params.workflowId, "rejected", now, null);
+      this.articleRepository.markRejected(params.workflowId);
+    });
+  }
+
+  /** Records that a reviewer sent the article back to the writer, with their feedback. */
+  async recordRevision(params: DecisionParams): Promise<void> {
+    this.decisionRepository.append({
+      id: randomUUID(),
+      workflowId: params.workflowId,
+      action: "revise",
+      actor: params.actor,
+      note: params.note,
+      createdAt: new Date().toISOString()
+    });
+  }
+
   /** Stores the publish that followed an approval; the article and run become published only on success. */
   async completeApproval(params: CompleteApprovalParams): Promise<void> {
     this.runInTransaction(() => {
@@ -346,6 +384,12 @@ export class MemoryService {
       costUsd: steps.reduce((sum, record) => sum + (record.usage?.costUsd ?? 0), 0),
       review: (review as { review?: StoredReview } | undefined)?.review ?? null,
       models: this.stepRepository.latestModels([workflowId]).get(workflowId) ?? {},
+      decisions: this.decisionRepository.getByWorkflowId(workflowId).map((decision) => ({
+        action: decision.action,
+        actor: decision.actor,
+        note: decision.note,
+        createdAt: decision.createdAt
+      })),
       steps: steps.map((record) => ({
         step: record.step,
         status: record.status,

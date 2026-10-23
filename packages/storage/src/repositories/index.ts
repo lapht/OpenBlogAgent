@@ -41,3 +41,4 @@ export * from "./topic-repository";
 export * from "./prompt-repository";
 export * from "./article-repository";
 export * from "./step-repository";
+export * from "./decision-repository";

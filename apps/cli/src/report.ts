@@ -1,4 +1,9 @@
-import type { ApprovalResult, ArticleWorkflowResult, StoredWorkflowSummary } from "@openblog/graph";
+import type {
+  ApprovalResult,
+  ArticleWorkflowResult,
+  RejectResult,
+  StoredWorkflowSummary
+} from "@openblog/graph";
 import type { ILogger } from "@openblog/logger";
 import type { ResolvedArticleBrief } from "@openblog/types";
 
@@ -13,7 +18,7 @@ export const EXIT = {
 
 /** The stable object `--json` prints. Fields only get added, never renamed. */
 export interface CliSummary {
-  command: "generate" | "resume" | "approve";
+  command: "generate" | "resume" | "revise" | "approve" | "reject";
   status: string;
   exitCode: number;
   dryRun: boolean;
@@ -63,7 +68,7 @@ export function exitCodeForRun(result: ArticleWorkflowResult): number {
 }
 
 export function summarizeRun(
-  command: "generate" | "resume",
+  command: "generate" | "resume" | "revise",
   result: ArticleWorkflowResult,
   dryRun: boolean
 ): CliSummary {
@@ -102,6 +107,26 @@ export function summarizeApproval(result: ApprovalResult, dryRun: boolean): CliS
     outputPath: result.publishResult.outputPath ?? null,
     remoteUrl: text(result.publishResult.metadata?.link),
     failure: result.failure ?? null,
+    violations: [],
+    review: null
+  };
+}
+
+export function summarizeRejection(result: RejectResult, dryRun: boolean): CliSummary {
+  return {
+    command: "reject",
+    status: result.status,
+    exitCode: EXIT.ok,
+    dryRun,
+    workflowId: result.workflowId,
+    topic: null,
+    brief: null,
+    title: null,
+    slug: null,
+    publisherId: null,
+    outputPath: null,
+    remoteUrl: null,
+    failure: null,
     violations: [],
     review: null
   };

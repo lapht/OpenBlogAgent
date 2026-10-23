@@ -38,6 +38,16 @@ describe("argument parsing", () => {
       name: "approve",
       options: { override: "ok" }
     });
+    expect(parseCommand(["reject", "wf-1", "--reason", " Off brand "])).toMatchObject({
+      name: "reject",
+      workflowId: "wf-1",
+      reason: "Off brand"
+    });
+    expect(parseCommand(["revise", "wf-1", "--feedback", "Shorter"])).toMatchObject({
+      name: "revise",
+      workflowId: "wf-1",
+      feedback: "Shorter"
+    });
     expect(parseCommand(["list"])).toMatchObject({ name: "list" });
     expect(parseCommand(["--help"])).toMatchObject({ name: "help" });
   });
@@ -52,7 +62,13 @@ describe("argument parsing", () => {
     [["generate", "t", "--bogus"], /bogus/],
     [["generate", "t", "--publisher"], /publisher/],
     [["generate", "t", "--override", "why"], /--override/],
-    [["approve", "wf", "--force"], /--force/]
+    [["approve", "wf", "--force"], /--force/],
+    [["reject", "wf"], /--reason/],
+    [["reject", "wf", "--reason", "  "], /--reason/],
+    [["reject", "--reason", "x"], /exactly one workflow id/],
+    [["revise", "wf"], /--feedback/],
+    [["revise", "wf", "--reason", "x"], /--reason only applies to reject/],
+    [["generate", "t", "--feedback", "x"], /--feedback only applies to revise/]
   ])("rejects %j", (argv, message) => {
     expect(() => parseCommand(argv as string[])).toThrow(UsageError);
     expect(() => parseCommand(argv as string[])).toThrow(message);
@@ -257,6 +273,54 @@ describe("CLI commands", () => {
 
     expect(await cli(["approve", workflowId, "--json"])).toBe(1);
     expect(lastJson()).toMatchObject({ status: "error", error: { code: "already_published" } });
+  });
+
+  it("reject closes a stored article for good", async () => {
+    const draft = { OPENBLOG_PUBLICATION_POLICY: "publish_after_approval" };
+    await cli(["generate", "Review me", "--json"], draft);
+    const { workflowId } = lastJson();
+
+    expect(await cli(["reject", workflowId, "--reason", "Off brand", "--json"])).toBe(0);
+    expect(lastJson()).toMatchObject({ command: "reject", status: "rejected", workflowId });
+
+    for (const argv of [
+      ["approve", workflowId, "--override", "x"],
+      ["revise", workflowId, "--feedback", "x"],
+      ["reject", workflowId, "--reason", "x"],
+      ["resume", workflowId]
+    ]) {
+      expect(await cli([...argv, "--json"])).toBe(1);
+      expect(lastJson()).toMatchObject({ status: "error", error: { code: "already_rejected" } });
+    }
+    expect(await cli(["list", "--json"])).toBe(0);
+    expect(lastJson()).toMatchObject({ runs: [{ workflowId, status: "rejected" }] });
+    expect(fs.existsSync(path.join(dir, "out"))).toBe(false);
+  });
+
+  it("revise sends the article back to the writer, then it can be approved", async () => {
+    const draft = { OPENBLOG_PUBLICATION_POLICY: "publish_after_approval" };
+    await cli(["generate", "Review me", "--json"], draft);
+    const { workflowId } = lastJson();
+    const writer = scriptedProvider(...replies().slice(1)); // no planner call: the outline is kept
+
+    expect(
+      await cli(["revise", workflowId, "--feedback", "Add an example", "--json"], draft, {
+        llm: writer
+      })
+    ).toBe(0);
+
+    expect(lastJson()).toMatchObject({
+      command: "revise",
+      status: "awaiting_approval",
+      workflowId
+    });
+    expect(writer.prompts).toHaveLength(4);
+    expect(writer.prompts[0]).toContain("Add an example");
+    expect(await cli(["approve", workflowId, "--json"])).toBe(0);
+    expect(lastJson()).toMatchObject({ status: "published" });
+
+    expect(await cli(["revise", workflowId, "--feedback", "x", "--json"])).toBe(1);
+    expect(lastJson()).toMatchObject({ error: { code: "already_published" } });
   });
 
   it("approve --dry-run publishes nothing", async () => {

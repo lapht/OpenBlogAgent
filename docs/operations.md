@@ -11,6 +11,8 @@ Run after `npm run build` as `npm start -- <command>` (or `openblog <command>` f
 | `generate <topic>` | Plan, write, edit, add SEO metadata, check quality, classify and publish as the policy allows |
 | `resume <id>`      | Continue a `failed` run from its last good step; finished steps are not repeated              |
 | `approve <id>`     | Publish a stored article live; `--override "reason"` if it failed the quality gate            |
+| `reject <id>`      | Close a stored article as rejected, for good; `--reason "why"` is required                    |
+| `revise <id>`      | Send a stored article back to the writer; `--feedback "what to change"` is required           |
 | `list`             | The 20 most recent runs, newest first, with status, failed step, total tokens and cost        |
 
 Options: `--dry-run`, `--publisher <id>`, `--force`, `--json`, `--help`, and for `generate` the brief options `--brief <file>` (YAML or JSON), `--language`, `--audience`, `--tone`, `--keyword`, `--min-words`, `--max-words`, `--notes` (flags override the file; see the README). An invalid brief exits `64` before any provider call; `--dry-run` and `--json` show the effective brief. `--dry-run` runs everything except the publish call, on a throwaway copy of the database: nothing is stored, written or sent, and earlier runs are still visible to duplicate checks, `resume` and `approve`.
@@ -25,8 +27,16 @@ Options: `--dry-run`, `--publisher <id>`, `--force`, `--json`, `--help`, and for
 | `needs_review`      | The quality gate rejected the article after the allowed regenerations; nothing was published                                 | Read the violations, then `approve <id> --override "reason"` or regenerate |
 | `failed`            | A step or the publisher failed; `failed_step` and `error_code` say which                                                     | Fix the cause, then `resume <id>`                                          |
 | `duplicate`         | The topic, slug or title was already published                                                                               | `generate ... --force` if intended                                         |
+| `rejected`          | A reviewer closed the article with `reject`; terminal                                                                        | none (`approve`, `revise` and `resume` refuse it); `generate` again        |
 
 A stored article also has a review state (`needs_review` → `approved` → `published`). If publishing fails during `approve`, the article stays `approved` and approving again retries it.
+
+### Reject and revise
+
+Both apply to runs in `needs_review` or `awaiting_approval`. Any other status is refused with a stable code: `already_published`, `already_rejected`, `invalid_state` (for example `failed`: use `resume`), `not_found`, `invalid_input` (empty reason or feedback); the CLI exits `1` and prints it as `error.code`.
+
+- `reject <id> --reason "..."` sets the status `rejected` and stores the reason, who rejected and when. A rejected article does not count as a duplicate of later runs (topic, slug and title are free again). A draft that was already sent to a target is **not** deleted there; remove it by hand.
+- `revise <id> --feedback "..."` runs the writer again with your feedback and the version you read, keeping the outline, then editor, SEO, quality gate, review, classification and publisher under the same `OPENBLOG_PUBLICATION_POLICY`. The stored brief is reused and everything counts against the run budget (what the first version spent included). Feedback, who and when are stored. If the quality gate asks for a regeneration, your feedback is kept in the writer prompt. If a draft of this run is already at the target, the revision updates that same post (same slug; the Markdown publisher replaces its own draft file). Each revision adds a writer attempt, so the run's step history shows them all. The result is one of the usual outcomes, so `needs_review` → `revise` → `awaiting_approval` → `approve` → `published` works.
 
 ## Exit codes
 
@@ -74,7 +84,9 @@ Send the key as `Authorization: Bearer <key>` or `X-API-Key: <key>`.
 | `GET /runs?limit=20`      | The most recent runs with tokens, cost and review                                                                                                                                                                                                                                                    |
 | `GET /runs/{id}`          | Status, failure, totals and every step execution (`404` for an unknown id)                                                                                                                                                                                                                           |
 | `POST /runs/{id}/resume`  | `202`; continues from the last good step (`409` if published or already running)                                                                                                                                                                                                                     |
-| `POST /runs/{id}/approve` | `{ "approvedBy": "...", "overrideReason": "..." }` publishes live and waits for the result; the same refusals as the CLI (`422 gate_not_passed`, `409 already_published`)                                                                                                                            |
+| `POST /runs/{id}/reject`  | `{ "reason": "...", "rejectedBy": "..." }` closes a `needs_review`/`awaiting_approval` run as `rejected` (`409 already_rejected`, `already_published`, `invalid_state`; `404 not_found`)                                                                                                             |
+| `POST /runs/{id}/revise`  | `{ "feedback": "...", "revisedBy": "..." }` returns `202` and runs in the queue like `resume`; same refusals as `reject`. `GET /runs/{id}` lists `decisions` (action, actor, note, createdAt)                                                                                                        |
+| `POST /runs/{id}/approve` | `{ "approvedBy": "...", "overrideReason": "..." }` publishes live and waits for the result; the same refusals as the CLI (`422 gate_not_passed`, `409 already_published`, `409 already_rejected`)                                                                                                    |
 
 Runs execute in a bounded queue: `OPENBLOG_API_CONCURRENCY` at once, `OPENBLOG_API_QUEUE_SIZE` waiting; beyond that the answer is `429 queue_full` with `Retry-After`. Poll `GET /runs/{id}` until the status is no longer `started` or `running`. A queued run is stored as `started`. If the server stops while a run is executing, that run stays `running` in the store; `resume` it. On shutdown the server waits for running and queued jobs. The OpenAPI document is at `/openapi.json`. Errors have the shape `{ "error": "...", "code": "..." }`.
 

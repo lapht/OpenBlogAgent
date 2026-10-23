@@ -47,7 +47,7 @@ export interface StoredArticle {
   tags: string[];
   editedMarkdown: string;
   seo: Record<string, unknown>;
-  reviewState: "needs_review" | "approved" | "published";
+  reviewState: "needs_review" | "approved" | "published" | "rejected";
   /** Null when unknown (stored before the quality gate existed). */
   gatePassed: boolean | null;
 }
@@ -90,11 +90,21 @@ export interface StoredStepSummary {
   model: string | null;
 }
 
+/** A human decision on a run: a rejection with its reason, or a revision with the feedback. */
+export interface StoredDecision {
+  action: "reject" | "revise";
+  actor: string;
+  note: string;
+  createdAt: string;
+}
+
 /** One stored run with its steps. */
 export interface StoredRunDetails extends StoredWorkflowSummary {
   errorMessage: string | null;
   completedAt: string | null;
   steps: StoredStepSummary[];
+  /** Rejections and revisions, oldest first. */
+  decisions: StoredDecision[];
 }
 
 /** Workflow bookkeeping. Implemented by `MemoryService` in the storage package. */
@@ -186,6 +196,10 @@ export interface MemoryPort {
     workflowId: string;
     publishResult: Record<string, unknown>;
   }): Promise<void>;
+  /** Closes a stored article as rejected (terminal) and records who rejected it and why. */
+  rejectWorkflow(params: { workflowId: string; actor: string; note: string }): Promise<void>;
+  /** Records that a reviewer sent the article back to the writer, with their feedback. */
+  recordRevision(params: { workflowId: string; actor: string; note: string }): Promise<void>;
   failWorkflow(params: {
     workflowId: string;
     errorMessage: string;

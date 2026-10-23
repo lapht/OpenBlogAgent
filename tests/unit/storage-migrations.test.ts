@@ -10,6 +10,7 @@ import { createSQLiteMemoryService } from "../../packages/storage/src/memory";
 import { MemoryService } from "../../packages/storage/src/memory/service";
 import {
   ArticleRepository,
+  DecisionRepository,
   PromptRepository,
   StepRepository,
   TopicRepository,
@@ -144,6 +145,23 @@ describe("storage migrations", () => {
     db.close();
   });
 
+  it("adds the decisions table to a v5 database", () => {
+    const db = new Database(":memory:");
+    runStorageMigrations(db);
+    db.exec("DROP TABLE workflow_decisions");
+    db.pragma("user_version = 5");
+
+    runStorageMigrations(db);
+
+    expect(db.pragma("user_version", { simple: true })).toBe(LATEST_SCHEMA_VERSION);
+    expect(
+      (db.prepare("PRAGMA table_info(workflow_decisions)").all() as { name: string }[]).map(
+        (column) => column.name
+      )
+    ).toEqual(["id", "workflow_id", "action", "actor", "note", "created_at"]);
+    db.close();
+  });
+
   it("is a no-op on a database that is already current", () => {
     const db = new Database(":memory:");
     runStorageMigrations(db);
@@ -176,7 +194,8 @@ describe("storage transactions and step artifacts", () => {
       new PromptRepository(db),
       articles,
       new StepRepository(db),
-      (fn) => db.transaction(fn)()
+      (fn) => db.transaction(fn)(),
+      new DecisionRepository(db)
     );
     return { db, service };
   }

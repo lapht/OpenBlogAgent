@@ -6,6 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Human review of stored articles: `reject <id> --reason` closes a `needs_review`/`awaiting_approval` run as `rejected` (terminal; it no longer counts as a duplicate), and `revise <id> --feedback` re-runs the writer with the reviewer's feedback and the previous version, then editor, SEO, quality gate, review, classification and publisher under the same policy and budget, updating the remote draft in place. `POST /runs/{id}/reject` and `POST /runs/{id}/revise` (queued); `GET /runs/{id}` returns the `decisions` (reason/feedback, actor, time). Stable error codes: `already_published`, `already_rejected`, `invalid_state`, `not_found`, `invalid_input`. Migration v6 adds `workflow_decisions`.
 - Per-step model routing: `OPENBLOG_MODEL_PLANNER`, `_WRITER`, `_EDITOR`, `_SEO`, `_CLASSIFICATION` and `_REVIEW` (unset: the provider's model). The model the provider reports is stored per step execution (`workflow_steps.model`, migration v5) and shown by `list --json` (`models`) and `GET /runs/{id}` (`model` per step). Ollama as a fallback keeps using `OLLAMA_MODEL`.
 - `npm run test:live`: opt-in smoke tests against real OpenRouter, Ollama, WordPress and Ghost (drafts only, cleaned up), skipped without `OPENBLOG_LIVE_*` variables, plus a manual-only "Live smoke tests" workflow.
 - Ghost publisher using the Admin API (JWT auth, draft by default, idempotent by slug).

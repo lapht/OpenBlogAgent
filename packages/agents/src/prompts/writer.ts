@@ -10,6 +10,10 @@ export interface WriterPromptOptions {
   /** Problems found in a previous attempt, to be fixed by this one. */
   feedback?: string;
   brief?: ArticleBrief;
+  /** What a human reviewer asks to change in `previousArticle` (a revision). */
+  reviewerFeedback?: string;
+  /** The version the reviewer read. */
+  previousArticle?: string;
   /** Requested length; defaults to the quality gate's default range. */
   minWords?: number;
   maxWords?: number;
@@ -20,7 +24,7 @@ export function buildWriterPrompt(
   outline: string[],
   options: WriterPromptOptions = {}
 ): string {
-  const { feedback, brief } = options;
+  const { feedback, brief, reviewerFeedback, previousArticle } = options;
   const minWords = options.minWords ?? DEFAULT_ARTICLE_RULES.minWords;
   const maxWords = options.maxWords ?? DEFAULT_ARTICLE_RULES.maxWords;
 
@@ -44,6 +48,14 @@ export function buildWriterPrompt(
     ...briefLines(brief, ["audience", "tone", "keywords", "notes"]),
     "Outline:",
     ...outline.map((section, index) => `${index + 1}. ${section}`),
+    ...(reviewerFeedback
+      ? [
+          "",
+          "A human reviewer read the previous version of this article and asks for changes. Write the whole article again and apply every change below:",
+          reviewerFeedback,
+          ...(previousArticle ? ["", "Previous version:", previousArticle] : [])
+        ]
+      : []),
     ...(feedback
       ? [
           "",
