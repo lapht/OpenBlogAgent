@@ -99,6 +99,10 @@ Runs execute in a bounded queue: `OPENBLOG_API_CONCURRENCY` at once, `OPENBLOG_A
 
 A run in `needs_review` did not fail, so `resume` is not the fix: read why with `list --json` or the log line `Article workflow needs review` (its `violations`), then decide to approve with an override or generate again.
 
+## Fetching external content
+
+Research features read URLs through the content fetcher only (ADR-038). A failure is a `FetchError` with one of these codes: `fetch_blocked` (scheme, credentials in the URL, host not in `OPENBLOG_FETCH_ALLOWED_HOSTS`, or an address that is loopback, private, link-local, CGNAT or metadata, also after a redirect), `fetch_timeout`, `fetch_too_large`, `fetch_http_error` (status or redirect limit), `fetch_unsupported_type` and `fetch_network` (DNS or connection failure). Logs and errors carry the URL without credentials and query string. To read a feed on a local network deliberately, set `OPENBLOG_FETCH_ALLOW_PRIVATE=true`; leave it off on any server that exposes the API.
+
 ## Logs
 
 JSON lines on stderr, one per event. Make them readable in development with `OPENBLOG_LOG_PRETTY=true`.

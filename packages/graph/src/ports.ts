@@ -1,8 +1,15 @@
 import type { TextGenerationProvider } from "@openblog/providers";
 import type { ExistingPost, PublishArticle, PublishResult } from "@openblog/publishers";
+import type { ContentFetcher } from "@openblog/research";
 
 /** Text generation. Implemented by the providers package (OpenRouter, Ollama, fallback). */
 export type LlmPort = TextGenerationProvider;
+
+/**
+ * Reads external URLs (feeds, sitemaps, source pages). The only way research code may use the
+ * network; implemented by the research package with SSRF protection.
+ */
+export type ContentFetcherPort = ContentFetcher;
 
 /** Publishes a finished article. Implemented by `DefaultPublisherManager`. */
 export interface PublishPort {
