@@ -88,6 +88,8 @@ export interface StoredStepSummary {
   usage: StepUsage | null;
   /** Model the provider reported for this execution; null when none was recorded. */
   model: string | null;
+  /** SHA-256 of the prompt this execution sent first; null when it made no call or predates the hash. */
+  promptHash: string | null;
 }
 
 /** A human decision on a run: a rejection with its reason, or a revision with the feedback. */
@@ -170,6 +172,7 @@ export interface MemoryPort {
     completedAt: string;
     usage?: StepUsage;
     model?: string;
+    promptHash?: string;
   }): Promise<void>;
   /** Ends a run stopped by the duplicate policy; `duplicateOfWorkflowId` is null for a remote post. */
   markDuplicate(params: {

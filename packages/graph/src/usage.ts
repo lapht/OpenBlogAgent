@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
+import { hashPrompt } from "@openblog/agents";
 import type { ILogger } from "@openblog/logger";
 
 import type { LlmPort } from "./ports";
@@ -68,18 +69,26 @@ export function usageSince(before: LlmUsage, after: LlmUsage): LlmUsage {
 
 const storage = new AsyncLocalStorage<LlmUsage>();
 const modelStorage = new AsyncLocalStorage<string[]>();
+const promptStorage = new AsyncLocalStorage<string[]>();
 
 /**
  * Runs `fn` with a usage counter; every call through a tracked LLM inside it is counted.
  * `initial` carries what earlier attempts of the same run already consumed (a resumed run).
  */
 export function withUsageTracking<T>(fn: () => Promise<T>, initial?: LlmUsage): Promise<T> {
-  return modelStorage.run([], () => storage.run({ ...(initial ?? emptyUsage()) }, fn));
+  return promptStorage.run([], () =>
+    modelStorage.run([], () => storage.run({ ...(initial ?? emptyUsage()) }, fn))
+  );
 }
 
 /** The model each provider call of the run in progress reported, in call order. */
 export function currentModels(): string[] {
   return [...(modelStorage.getStore() ?? [])];
+}
+
+/** SHA-256 of every prompt sent by the run in progress, in call order (also the ones that failed). */
+export function currentPromptHashes(): string[] {
+  return [...(promptStorage.getStore() ?? [])];
 }
 
 /** Usage of the run in progress (a copy), or zeros outside one. */
@@ -108,6 +117,7 @@ export function trackUsage(llm: LlmPort, logger?: ILogger, budget: UsageBudget =
       // A resumed run that is already over budget must not spend more.
       enforce(storage.getStore());
 
+      promptStorage.getStore()?.push(hashPrompt(request.prompt));
       const started = Date.now();
       const result = await llm.generate(request);
       const promptTokens = result.usage?.promptTokens ?? 0;

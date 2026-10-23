@@ -24,11 +24,11 @@ export function createPlannerAgent(
   options: StructuredOutputOptions = {}
 ): PlannerAgent {
   return {
-    buildPrompt: (input) => buildPlannerPrompt(input.topic, input.brief),
+    buildPrompt: (input) => buildPlannerPrompt(input.topic, input.brief, options.promptTemplate),
     run(input: PlannerAgentInput): Promise<string[]> {
       return generateStructured(provider, {
         ...options,
-        prompt: buildPlannerPrompt(input.topic, input.brief),
+        prompt: buildPlannerPrompt(input.topic, input.brief, options.promptTemplate),
         schema: plannerOutlineSchema,
         shape: "array",
         label: "Planner"

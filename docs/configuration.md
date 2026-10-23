@@ -85,6 +85,27 @@ The values are OpenRouter model ids (`vendor/model`). When OpenRouter is not con
 
 The planner, writer, editor and SEO prompts name the language explicitly, the article is published with it (`language` in the Markdown front matter), and the quality gate applies its language-specific phrase rules (AI disclaimers, leftover placeholders) only to the languages it knows (`en`, `it`); length, structure, outline and edit-ratio rules apply to every language. Slugs are always lowercase ASCII (accents are dropped). WordPress and Ghost receive no language field: their posts take the site's language. Other languages work, but without the phrase rules.
 
+## Prompt overrides
+
+| Variable               | Default | Purpose                                                                                                       |
+| ---------------------- | ------- | ------------------------------------------------------------------------------------------------------------- |
+| `OPENBLOG_PROMPTS_DIR` | none    | Directory with optional `planner.md`, `writer.md`, `editor.md`, `seo.md`, `classification.md` and `review.md` |
+
+A file replaces the instructions (role, style, tone) of that agent's prompt; a missing file keeps the built-in text, and without the variable nothing changes. The parts the code depends on are always added after your text and cannot be overridden: the output language, the brief fields, the JSON structure and rules the replies are parsed with, the outline and article text, and for the writer the requirements the quality gate enforces (no H1, H2 sections, the word range). The two ends of the pipeline therefore stay safe, while house style is yours.
+
+Placeholders, written `{{name}}` (unset brief fields render as nothing):
+
+| Agent            | Placeholders                                                                                                                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `planner`        | `{{topic}}` (required), `{{brief.language}}`, `{{brief.audience}}`, `{{brief.tone}}`, `{{brief.targetKeyword}}`, `{{brief.secondaryKeywords}}`, `{{brief.notes}}`, `{{brief.minWords}}`, `{{brief.maxWords}}` |
+| `writer`         | `{{topic}}` (required), `{{outline}}` and the `brief.*` ones                                                                                                                                                  |
+| `editor`         | the `brief.*` ones                                                                                                                                                                                            |
+| `seo`            | `{{outline}}` and the `brief.*` ones                                                                                                                                                                          |
+| `classification` | `{{maxTags}}`                                                                                                                                                                                                 |
+| `review`         | `{{title}}`, `{{metaDescription}}`, `{{outline}}`                                                                                                                                                             |
+
+The files are checked when the application is created (every CLI command and the server start): a missing directory, an unreadable or empty file, an unknown placeholder, a stray `{{` or a planner/writer file without `{{topic}}` stops it with a message naming the file, before any run. Each step execution stores the SHA-256 of the first prompt it sent (`workflow_steps.prompt_hash`, `promptHash` per step in `GET /runs/{id}`), so a run shows which text it used.
+
 ## Duplicates
 
 | Variable                    | Default | Purpose                                                                                          |

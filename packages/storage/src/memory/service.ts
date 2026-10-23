@@ -97,6 +97,7 @@ export interface RecordStepParams {
   completedAt: string;
   usage?: StepUsageRecord;
   model?: string;
+  promptHash?: string;
 }
 
 /** Runs `fn` atomically: every write inside commits together or not at all. */
@@ -337,7 +338,8 @@ export class MemoryService {
       startedAt: params.startedAt,
       completedAt: params.completedAt,
       usage: params.usage ?? null,
-      model: params.model ?? null
+      model: params.model ?? null,
+      promptHash: params.promptHash ?? null
     });
   }
 
@@ -353,7 +355,8 @@ export class MemoryService {
       steps: this.stepRepository.getByWorkflowId(workflowId).map((record) => ({
         ...record,
         usage: record.usage ?? undefined,
-        model: record.model ?? undefined
+        model: record.model ?? undefined,
+        promptHash: record.promptHash ?? undefined
       }))
     };
   }
@@ -419,7 +422,8 @@ export class MemoryService {
         startedAt: record.startedAt,
         completedAt: record.completedAt,
         usage: record.usage,
-        model: record.model
+        model: record.model,
+        promptHash: record.promptHash
       }))
     };
   }

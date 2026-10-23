@@ -30,7 +30,7 @@ export function createEditorAgent(
     run(input: EditorAgentInput): Promise<EditorOutput> {
       return generateStructured(provider, {
         ...options,
-        prompt: buildEditorPrompt(input),
+        prompt: buildEditorPrompt(input, options.promptTemplate),
         schema: editorOutputSchema,
         label: "Editor agent"
       });

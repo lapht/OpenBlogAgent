@@ -119,6 +119,8 @@ export interface WorkflowStepRecord {
   usage: StepUsageRecord | null;
   /** Model the provider reported for this execution; null when none was recorded. */
   model: string | null;
+  /** SHA-256 of the prompt this execution sent first; null when it made no call or predates the hash. */
+  promptHash: string | null;
 }
 
 /** The editorial review a run stored with its `editorial_review` step. */

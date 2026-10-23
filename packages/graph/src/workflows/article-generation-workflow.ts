@@ -14,6 +14,7 @@ import {
   type EditorialReview,
   formatViolations,
   plannerOutlineSchema,
+  type PromptOverrides,
   type SeoOutput,
   seoOutputSchema,
   validateArticle
@@ -36,6 +37,7 @@ import {
   emptyUsage,
   type LlmUsage,
   currentModels,
+  currentPromptHashes,
   trackUsage,
   type UsageBudget,
   usageSince,
@@ -361,6 +363,11 @@ export interface CreateArticleGenerationWorkflowOptions {
     /** Minimum overall score (0 to 10); lower scores park the article as `needs_review`. Defaults to 7. */
     minScore?: number;
   };
+  /**
+   * Operator-written instructions per agent (`OPENBLOG_PROMPTS_DIR`), already validated; an agent
+   * without one keeps its built-in prompt. The output contracts stay in code either way.
+   */
+  prompts?: PromptOverrides;
   /** Per-run token and cost limits; a run that exceeds them stops with `budget_exceeded`. */
   budget?: UsageBudget;
   quality?: {
@@ -526,6 +533,7 @@ function step(
     result: ({ output: ArticleWorkflowUpdate } | { error: WorkflowStepError }) & {
       usage: LlmUsage;
       model?: string;
+      promptHash?: string;
     }
   ): Promise<void> => {
     if (!memory || !state.workflowId) {
@@ -539,6 +547,7 @@ function step(
         completedAt: new Date().toISOString(),
         usage: result.usage,
         ...(result.model ? { model: result.model } : {}),
+        ...(result.promptHash ? { promptHash: result.promptHash } : {}),
         ...("output" in result
           ? { status: "succeeded", output: result.output }
           : {
@@ -571,6 +580,9 @@ function step(
       const started = Date.now();
       const usageBefore = currentUsage();
       const modelsBefore = currentModels().length;
+      const promptsBefore = currentPromptHashes().length;
+      /** The first prompt this execution sent: the effective text of the step (retries only append to it). */
+      const promptUsed = () => currentPromptHashes()[promptsBefore];
       /** The model(s) the providers reported for the calls of this execution. */
       const modelUsed = () =>
         [...new Set(currentModels().slice(modelsBefore))].join(", ") || undefined;
@@ -579,7 +591,8 @@ function step(
         await record(state, startedAt, {
           output,
           usage: usageSince(usageBefore, currentUsage()),
-          model: modelUsed()
+          model: modelUsed(),
+          promptHash: promptUsed()
         });
         logger.info("Step finished", { outcome: "succeeded", durationMs: Date.now() - started });
         return output;
@@ -589,7 +602,8 @@ function step(
         await record(state, startedAt, {
           error: stepError,
           usage: usageSince(usageBefore, currentUsage()),
-          model: modelUsed()
+          model: modelUsed(),
+          promptHash: promptUsed()
         });
         logger.error("Step finished", {
           outcome: "failed",
@@ -654,12 +668,22 @@ export function createArticleGenerationWorkflow(
     const model = options.models?.[agent];
     return model ? { id: llm.id, generate: (request) => llm.generate({ ...request, model }) } : llm;
   };
-  const plannerAgent = createPlannerAgent(llmFor("planner"));
-  const writerAgent = createWriterAgent(llmFor("writer"));
-  const editorAgent = createEditorAgent(llmFor("editor"));
-  const seoAgent = createSeoAgent(llmFor("seo"));
-  const classificationAgent = createClassificationAgent(llmFor("classification"));
-  const reviewAgent = createEditorialReviewAgent(llmFor("review"));
+  const plannerAgent = createPlannerAgent(llmFor("planner"), {
+    promptTemplate: options.prompts?.planner
+  });
+  const writerAgent = createWriterAgent(llmFor("writer"), {
+    promptTemplate: options.prompts?.writer
+  });
+  const editorAgent = createEditorAgent(llmFor("editor"), {
+    promptTemplate: options.prompts?.editor
+  });
+  const seoAgent = createSeoAgent(llmFor("seo"), { promptTemplate: options.prompts?.seo });
+  const classificationAgent = createClassificationAgent(llmFor("classification"), {
+    promptTemplate: options.prompts?.classification
+  });
+  const reviewAgent = createEditorialReviewAgent(llmFor("review"), {
+    promptTemplate: options.prompts?.review
+  });
   const reviewEnabled = options.review?.enabled ?? false;
   const reviewMinScore = options.review?.minScore ?? 7;
 

@@ -3,6 +3,7 @@ export * from "./structured-output";
 export * from "./quality";
 export * from "./planner/agent";
 export * from "./writer/agent";
+export * from "./prompts/overrides";
 export * from "./review/agent";
 
 // Re-export agent factories for convenience

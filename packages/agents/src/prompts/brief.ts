@@ -31,6 +31,20 @@ export function briefLines(
   return lines.length > 0 ? ["", "Brief:", ...lines, ""] : [];
 }
 
+/** The `{{brief.*}}` placeholder values of a brief; empty strings for what it does not say. */
+export function briefValues(brief: ArticleBrief | undefined): Record<string, string> {
+  return {
+    "brief.language": brief?.language ?? "",
+    "brief.audience": brief?.audience ?? "",
+    "brief.tone": brief?.tone ?? "",
+    "brief.targetKeyword": brief?.targetKeyword ?? "",
+    "brief.secondaryKeywords": brief?.secondaryKeywords?.join(", ") ?? "",
+    "brief.notes": brief?.notes ?? "",
+    "brief.minWords": brief?.minWords === undefined ? "" : String(brief.minWords),
+    "brief.maxWords": brief?.maxWords === undefined ? "" : String(brief.maxWords)
+  };
+}
+
 /** English name of a language code (`it` -> "Italian"); the code itself when it has no name. */
 export function languageName(code: string): string {
   try {
