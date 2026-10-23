@@ -6,6 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- `npm run test:live`: opt-in smoke tests against real OpenRouter, Ollama, WordPress and Ghost (drafts only, cleaned up), skipped without `OPENBLOG_LIVE_*` variables, plus a manual-only "Live smoke tests" workflow.
 - Ghost publisher using the Admin API (JWT auth, draft by default, idempotent by slug).
 - Article brief: `generate` accepts `--brief <file>`, `--audience`, `--tone`, `--keyword`, `--min-words`, `--max-words`, `--notes` and `--language`, and `POST /runs` the same fields. The brief is validated (exit code 64 / HTTP 400), stored with the run, reused by `resume`, shown by `--dry-run`/`--json`, and sent to the planner, writer, editor and SEO prompts.
 
