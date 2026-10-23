@@ -86,6 +86,13 @@ export async function runCli(options: RunCliOptions = {}): Promise<number> {
     try {
       switch (command.name) {
         case "list": {
+          const recovered = flags.recoverStale ? await app.recoverStaleRuns() : [];
+          if (flags.recoverStale) {
+            logger.info("Recovered stale runs", {
+              count: recovered.length,
+              workflowIds: recovered
+            });
+          }
           const runs = await app.listRuns();
           emit({ command: "list", status: "ok", exitCode: EXIT.ok, runs }, formatRunList(runs));
           return EXIT.ok;

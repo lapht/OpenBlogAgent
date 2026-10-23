@@ -102,6 +102,10 @@ The planner, writer, editor and SEO prompts name the language explicitly, the ar
 | `OPENBLOG_API_CONCURRENCY` | `1`     | Runs executed at the same time                                                         |
 | `OPENBLOG_API_QUEUE_SIZE`  | `10`    | Runs allowed to wait for a free slot; more requests get 429                            |
 
+| Variable                           | Default | Purpose                                                                                                            |
+| ---------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------ |
+| `OPENBLOG_RUN_STALE_AFTER_MINUTES` | `60`    | Minutes without activity (run or step written) after which a `started`/`running` run is recovered as `interrupted` |
+
 ## Editorial review
 
 Off by default. When enabled, an article that passed the quality gate gets one more model call that scores SEO, readability, structure, completeness and repetition from 0 to 10. The overall score is the mean of the five (computed by the code, not the model). Below the minimum the run ends as `needs_review` with the violation `editorial_review_below_threshold`; nothing is published. Scores and rationale are stored with the `editorial_review` step, returned in `generate --json` (`review`) and shown by `list`. The extra call counts toward the run budget.

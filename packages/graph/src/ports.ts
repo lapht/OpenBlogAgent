@@ -132,6 +132,11 @@ export interface MemoryPort {
     steps: StoredWorkflowStep[];
   } | null>;
   markRunning(workflowId: string): Promise<void>;
+  /**
+   * Marks `started`/`running` runs idle for `staleAfterMinutes` as `interrupted` (resumable) and
+   * returns their ids. Optional: only the persistent store has it.
+   */
+  recoverStaleRuns?(staleAfterMinutes: number, now?: Date): Promise<string[]>;
   /** The most recent runs, newest first. Optional: only the persistent store can list. */
   listWorkflows?(limit?: number): Promise<StoredWorkflowSummary[]>;
   /** One stored run with its steps; null if the id is unknown. Optional: only the persistent store has it. */

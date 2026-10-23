@@ -128,6 +128,25 @@ export class WorkflowRepository implements IRepositoryContract<WorkflowRecord> {
     return rows.map((row) => this.mapRow(row));
   }
 
+  /**
+   * Ids of `started`/`running` runs with no activity since `cutoff` (ISO time): neither the run
+   * nor any of its steps was written after it.
+   */
+  findStaleActive(cutoff: string): Identifier[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id FROM workflows
+         WHERE status IN ('started', 'running')
+           AND updated_at < ?
+           AND NOT EXISTS (
+             SELECT 1 FROM workflow_steps WHERE workflow_id = workflows.id AND completed_at >= ?
+           )
+         ORDER BY created_at ASC, rowid ASC`
+      )
+      .all(cutoff, cutoff) as { id: Identifier }[];
+    return rows.map((row) => row.id);
+  }
+
   /** Flags a run as a duplicate of another stored run (or of a remote post, then `null`). */
   markDuplicate(id: Identifier, duplicateOfWorkflowId: Identifier | null): void {
     this.db

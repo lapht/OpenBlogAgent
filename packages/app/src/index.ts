@@ -49,6 +49,11 @@ export interface Application {
   listRuns(limit?: number): Promise<StoredWorkflowSummary[]>;
   /** One stored run with its steps; null if the id is unknown. */
   getRun(workflowId: string): Promise<StoredRunDetails | null>;
+  /**
+   * Marks runs abandoned by a dead process as `interrupted` so `resume` can pick them up.
+   * Returns the ids; empty when the store cannot recover runs.
+   */
+  recoverStaleRuns(now?: Date): Promise<string[]>;
   /** What was wired, for diagnostics. */
   info: {
     publisherIds: string[];
@@ -199,6 +204,9 @@ export async function createApplication(
     },
     async getRun(workflowId: string): Promise<StoredRunDetails | null> {
       return (await memory?.getRunDetails?.(workflowId)) ?? null;
+    },
+    async recoverStaleRuns(now?: Date): Promise<string[]> {
+      return (await memory?.recoverStaleRuns?.(config.OPENBLOG_RUN_STALE_AFTER_MINUTES, now)) ?? [];
     },
     info: { publisherIds: publishers.map((publisher) => publisher.id), taxonomyProvider },
     async dispose(): Promise<void> {
