@@ -19,6 +19,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- `@langchain/langgraph` upgraded from 0.2.x (0.2.74 installed) to 1.5.2 (ADR-037). No behavior change; the workflow keeps its own `workflow_steps` for resume.
 - The writer prompt asks for the quality gate's word range (`OPENBLOG_QUALITY_MIN_WORDS`/`MAX_WORDS`, or the brief's) instead of a hard-coded 1200-1800; planner, writer, editor and SEO prompts are version 3. The language `en` was hard-coded in the published article before. `workflows.metadata_json` of new runs holds `{ "brief": ..., "force"?: true }`.
 - Realigned `docs/CURRENT_STATE.md`, `plan/ROADMAP.md` and `CLAUDE.md` with the code on `main`.
 

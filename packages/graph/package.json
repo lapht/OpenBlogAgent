@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "@langchain/langgraph": "^0.2.39",
+    "@langchain/langgraph": "^1.5.2",
     "@openblog/agents": "*",
     "@openblog/logger": "*",
     "@openblog/providers": "*",
