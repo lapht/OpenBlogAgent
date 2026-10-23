@@ -5,6 +5,7 @@ import type {
   StoredWorkflowSummary
 } from "@openblog/graph";
 import type { ILogger } from "@openblog/logger";
+import type { TopicCollection } from "@openblog/research";
 import type { ResolvedArticleBrief } from "@openblog/types";
 
 /** Documented exit codes (see `--help`). */
@@ -159,6 +160,49 @@ export function formatSummary(summary: CliSummary): string {
     ...summary.violations.map((violation) => `violation: ${violation.code}: ${violation.message}`)
   ];
   return lines.filter(Boolean).join("\n");
+}
+
+export interface ResearchSummary {
+  command: "research collect";
+  status: "ok" | "failed";
+  exitCode: number;
+  sources: TopicCollection["sources"];
+  candidates: TopicCollection["candidates"];
+}
+
+/** `ok` when at least one source answered; one failing source never fails the collection. */
+export function summarizeCollection(collection: TopicCollection): ResearchSummary {
+  const failed =
+    collection.sources.length > 0 && collection.sources.every((s) => s.status === "failed");
+  return {
+    command: "research collect",
+    status: failed ? "failed" : "ok",
+    exitCode: failed ? EXIT.failed : EXIT.ok,
+    sources: collection.sources,
+    candidates: collection.candidates
+  };
+}
+
+export function formatCollection(collection: TopicCollection): string {
+  const sources = collection.sources.map((source) => {
+    const outcome =
+      source.status === "ok"
+        ? `${source.count} entries`
+        : `FAILED ${source.error?.code}: ${source.error?.message}`;
+    const warnings = source.warnings.map((warning) => `\n    warning: ${warning}`).join("");
+    return `  ${source.name} (${source.type}): ${outcome}${warnings}`;
+  });
+  const candidates = collection.candidates.map(
+    (candidate) =>
+      `- ${candidate.title}\n  ${candidate.url}  [${candidate.source}${candidate.publishedAt ? `, ${candidate.publishedAt.slice(0, 10)}` : ""}]`
+  );
+  return [
+    "Sources:",
+    ...sources,
+    "",
+    `Candidates (${collection.candidates.length}):`,
+    ...(candidates.length > 0 ? candidates : ["  none"])
+  ].join("\n");
 }
 
 export function formatRunList(runs: StoredWorkflowSummary[]): string {

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { Identifier } from "@openblog/types";
+import { normalizeTopic, type Identifier } from "@openblog/types";
 
 import {
   ArticleRepository,
@@ -128,7 +128,7 @@ export class MemoryService {
   ) {}
 
   static normalizeTopic(topic: string): string {
-    return topic.trim().toLowerCase().replace(/\s+/g, " ");
+    return normalizeTopic(topic);
   }
 
   async beginWorkflow(params: WorkflowStartParams): Promise<WorkflowStartResult> {

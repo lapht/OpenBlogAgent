@@ -100,6 +100,27 @@ Research features (feeds, sitemaps, source pages) read external URLs only throug
 
 Only `http` and `https` are fetched, never with credentials in the URL. Content types: HTML, XHTML, XML, RSS, Atom and plain text.
 
+## Research sources
+
+| Variable                         | Default | Purpose                                                                        |
+| -------------------------------- | ------- | ------------------------------------------------------------------------------ |
+| `OPENBLOG_RESEARCH_SOURCES_FILE` | none    | YAML or JSON file listing the feeds and sitemaps that `research collect` reads |
+
+```yaml
+sources:
+  - name: Example Blog # unique, shown in reports and on candidates
+    type: feed # RSS 2.0, RSS 1.0 or Atom
+    url: https://example.com/feed.xml
+    weight: 1 # 0-10, default 1; the heavier source wins when two list the same article
+    exclude: [sponsored] # drop entries mentioning any of these (title, summary or URL)
+  - name: Docs
+    type: sitemap # XML sitemap or sitemap index
+    url: https://docs.example.net/sitemap.xml
+    include: [guides] # keep only entries mentioning at least one of these
+```
+
+Unknown fields, duplicate names and non-http(s) URLs are rejected with the file name and every problem. All requests go through the content fetcher above, so its limits and address rules apply.
+
 ## Prompt overrides
 
 | Variable               | Default | Purpose                                                                                                       |

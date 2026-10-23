@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Example Blog</title>
+    <link>https://example.com/</link>
+    <item>
+      <title>Caching &amp; Invalidation: A Field Guide</title>
+      <link>https://example.com/posts/caching-guide?utm_source=rss&amp;utm_medium=feed#comments</link>
+      <pubDate>Tue, 06 Oct 2026 09:30:00 GMT</pubDate>
+      <description><![CDATA[<p>How to <b>cache</b> without &quot;surprises&quot;.</p>]]></description>
+    </item>
+    <item>
+      <title>Sourdough for Beginners</title>
+      <link>/posts/sourdough</link>
+      <dc:date>2026-09-30T08:00:00Z</dc:date>
+      <content:encoded><![CDATA[<p>Flour, water, patience.</p>]]></content:encoded>
+    </item>
+    <item>
+      <title>No link here, only a permalink guid</title>
+      <guid isPermaLink="true">https://example.com/posts/guid-only</guid>
+      <pubDate>not a date</pubDate>
+    </item>
+    <item>
+      <title>Sponsored: buy our thing</title>
+      <link>https://example.com/posts/sponsored</link>
+    </item>
+    <item>
+      <link>https://example.com/posts/untitled</link>
+    </item>
+  </channel>
+</rss>
