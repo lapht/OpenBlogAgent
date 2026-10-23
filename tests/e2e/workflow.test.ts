@@ -15,7 +15,7 @@ import { routedProvider, type Reply } from "../mocks/routed-provider";
 const outline = ["Why caching matters", "Choosing a cache strategy", "Invalidation in practice"];
 const seo = JSON.stringify({
   title: "Caching made simple",
-  metaDescription: "How to cache well.",
+  metaDescription: "Caching made simple: how to cache well.",
   slug: "caching-made-simple",
   h1: "Caching",
   headings: [{ level: "H2", text: "Why caching matters" }]
@@ -327,7 +327,7 @@ describe("workflow end to end (offline)", () => {
       topic: "Caching",
       audience: "backend engineers",
       tone: "dry and precise",
-      targetKeyword: "cache invalidation",
+      targetKeyword: "caching",
       secondaryKeywords: ["ttl", "cdn"],
       notes: "Mention Redis only once.",
       minWords: 1100,
@@ -381,13 +381,13 @@ describe("workflow end to end (offline)", () => {
         const prompt = promptOf(llm, agent);
         expect(prompt).toContain("Audience: backend engineers");
         expect(prompt).toContain("Tone: dry and precise");
-        expect(prompt).toContain("Target keyword: cache invalidation");
+        expect(prompt).toContain("Target keyword: caching");
         expect(prompt).toContain("Secondary keywords: ttl, cdn");
         expect(prompt).toContain("Editorial notes: Mention Redis only once.");
       }
       expect(promptOf(llm, "editor")).toContain("Tone: dry and precise");
       expect(promptOf(llm, "editor")).not.toContain("Editorial notes");
-      expect(promptOf(llm, "seo")).toContain("Target keyword: cache invalidation");
+      expect(promptOf(llm, "seo")).toContain("Target keyword: caching");
       expect(promptOf(llm, "seo")).not.toContain("Tone:");
       expect(promptOf(llm, "classification")).not.toContain("Brief:");
     });
@@ -423,7 +423,7 @@ describe("workflow end to end (offline)", () => {
       expect(resumed.brief).toEqual({ ...brief, language: "en" });
       const writerPrompts = llm.prompts.filter((entry) => entry.agent === "writer");
       expect(writerPrompts).toHaveLength(2);
-      expect(writerPrompts[1]!.prompt).toContain("Target keyword: cache invalidation");
+      expect(writerPrompts[1]!.prompt).toContain("Target keyword: caching");
       expect(writerPrompts[1]!.prompt).toContain("between 1100 and 2100 words");
     });
 

@@ -128,12 +128,16 @@ Token usage (and the cost the provider reports, which OpenRouter does and Ollama
 
 The gate checks the finished article and regenerates it up to `OPENBLOG_QUALITY_MAX_ATTEMPTS` times; if it still fails the run ends as `needs_review` and nothing is published.
 
-| Variable                                | Default | Purpose                                                              |
-| --------------------------------------- | ------- | -------------------------------------------------------------------- |
-| `OPENBLOG_QUALITY_MAX_ATTEMPTS`         | `2`     | Regenerations before the run is parked as `needs_review`             |
-| `OPENBLOG_QUALITY_MIN_WORDS`            | `1000`  | Minimum word count                                                   |
-| `OPENBLOG_QUALITY_MAX_WORDS`            | `2200`  | Maximum word count                                                   |
-| `OPENBLOG_QUALITY_MIN_H2`               | `3`     | Minimum number of `##` sections                                      |
-| `OPENBLOG_QUALITY_MIN_OUTLINE_COVERAGE` | `0.6`   | Share of outline sections (0 to 1) the article must cover            |
-| `OPENBLOG_QUALITY_MIN_EDIT_RATIO`       | `0.7`   | The edited text must be at least this fraction of the written length |
-| `OPENBLOG_QUALITY_MAX_EDIT_RATIO`       | `1.3`   | ...and at most this multiple of it                                   |
+| Variable                                | Default | Purpose                                                                              |
+| --------------------------------------- | ------- | ------------------------------------------------------------------------------------ |
+| `OPENBLOG_QUALITY_MAX_ATTEMPTS`         | `2`     | Regenerations before the run is parked as `needs_review`                             |
+| `OPENBLOG_QUALITY_MIN_WORDS`            | `1000`  | Minimum word count                                                                   |
+| `OPENBLOG_QUALITY_MAX_WORDS`            | `2200`  | Maximum word count                                                                   |
+| `OPENBLOG_QUALITY_MIN_H2`               | `3`     | Minimum number of `##` sections                                                      |
+| `OPENBLOG_QUALITY_MIN_OUTLINE_COVERAGE` | `0.6`   | Share of outline sections (0 to 1) the article must cover                            |
+| `OPENBLOG_QUALITY_MIN_EDIT_RATIO`       | `0.7`   | The edited text must be at least this fraction of the written length                 |
+| `OPENBLOG_QUALITY_MAX_EDIT_RATIO`       | `1.3`   | ...and at most this multiple of it                                                   |
+| `OPENBLOG_QUALITY_KEYWORD_MIN_DENSITY`  | `0.005` | With a target keyword: its words must be at least this share (0 to 1) of the article |
+| `OPENBLOG_QUALITY_KEYWORD_MAX_DENSITY`  | `0.03`  | ...and at most this share, above which the keyword looks stuffed                     |
+
+When the brief has a `targetKeyword` (`--keyword`), the gate also checks that the keyword appears in the SEO title, the meta description, at least one H2 heading and the introduction (the text before the first H2), and that its density stays in that range. Matching is by whole words and ignores case and diacritics. Without a keyword none of these rules run.

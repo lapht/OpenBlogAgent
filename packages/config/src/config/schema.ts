@@ -123,7 +123,10 @@ export const envSchema = z.object({
   OPENBLOG_QUALITY_MIN_H2: z.coerce.number().int().min(0).default(3),
   OPENBLOG_QUALITY_MIN_OUTLINE_COVERAGE: z.coerce.number().min(0).max(1).default(0.6),
   OPENBLOG_QUALITY_MIN_EDIT_RATIO: z.coerce.number().positive().default(0.7),
-  OPENBLOG_QUALITY_MAX_EDIT_RATIO: z.coerce.number().positive().default(1.3)
+  OPENBLOG_QUALITY_MAX_EDIT_RATIO: z.coerce.number().positive().default(1.3),
+  /** With a target keyword: the keyword's share of the article's words must stay within this range (fractions, 0.01 = 1%). */
+  OPENBLOG_QUALITY_KEYWORD_MIN_DENSITY: z.coerce.number().min(0).max(1).default(0.005),
+  OPENBLOG_QUALITY_KEYWORD_MAX_DENSITY: z.coerce.number().min(0).max(1).default(0.03)
 });
 
 export type EnvSchema = z.infer<typeof envSchema>;

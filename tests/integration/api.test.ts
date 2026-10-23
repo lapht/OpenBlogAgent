@@ -438,7 +438,6 @@ describe("HTTP API", () => {
       payload: {
         topic: "With a brief",
         audience: "beginners",
-        targetKeyword: "caching",
         secondaryKeywords: ["ttl"],
         minWords: 1,
         maxWords: 5000
