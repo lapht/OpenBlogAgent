@@ -30,7 +30,7 @@ Build a robust, open and extensible platform for automated blog operations.
 - [x] SQLite memory storage (`packages/storage`; transactional, versioned migrations)
 - [x] Markdown publisher (safe file names, no silent overwrite)
 - [~] WordPress publisher (idempotent, drafts first, taxonomy resolution; tested with mocked HTTP only, never against a real site)
-- [ ] Ghost publisher — **not implemented**: `GhostPublisher` only prepares a payload and makes no HTTP call
+- [x] Ghost publisher (Admin API, JWT, draft by default, idempotent by slug; tested against a fake server only, never a real Ghost site; ADR-029)
 - [ ] Tool adapters and capability registration model
 
 ## Phase 4 - Orchestration

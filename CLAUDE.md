@@ -37,7 +37,6 @@ Commits must follow Conventional Commits (commitlint via husky; lint-staged runs
 - **`packages/config`**: env loading and a Zod schema. All runtime config is `OPENBLOG_*`, `OPENROUTER_*` and `OLLAMA_*` environment variables (see `.env.example`).
 - **`types`, `logger` (Pino), `shared`, `storage`**: small shared types, logging, constants and SQLite persistence. Wiring is explicit constructor/factory injection; there is no DI container.
 - **`apps/cli`** is the real entry point (`run.ts`: arguments, `createApplication`, exit code). `apps/server` is a Fastify app: public `GET /health`, `/version`, `/openapi.json`, plus `/runs` endpoints (start, list, inspect, resume, approve) behind `OPENBLOG_API_KEY` that run workflows in a bounded in-process queue; `main.ts` builds the application with `createApplication` like the CLI, and `buildServer` registers the run routes only when given an `application`.
-- The top-level `src/mastra/` is an empty leftover directory. Don't build there.
 
 TypeScript is strict CommonJS (`tsconfig.base.json`) with `noUnusedLocals`/`noUnusedParameters` on, so unused imports fail the build.
 
@@ -47,7 +46,7 @@ TypeScript is strict CommonJS (`tsconfig.base.json`) with `noUnusedLocals`/`noUn
 
 ## Output
 
-The markdown publisher writes `{OPENBLOG_OUTPUT_DIR}/{slug}.md` (default `output/articles/`) with YAML frontmatter (serialized with `yaml`; slug sanitized; fails with `already_exists` unless `OPENBLOG_MARKDOWN_OVERWRITE=true`). The README also mentions `output/article.md`, which is stale from an earlier phase.
+The markdown publisher writes `{OPENBLOG_OUTPUT_DIR}/{slug}.md` (default `output/articles/`) with YAML frontmatter (serialized with `yaml`; slug sanitized; fails with `already_exists` unless `OPENBLOG_MARKDOWN_OVERWRITE=true`).
 
 ## Notes
 
