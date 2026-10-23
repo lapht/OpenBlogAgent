@@ -228,7 +228,7 @@ npm start -- approve <workflowId> --override "reason"   # for an article that fa
 
 ## Article brief
 
-Only the topic is required. A run can also carry a brief: `language`, `audience`, `tone`, `targetKeyword`, `secondaryKeywords`, `minWords`, `maxWords` and `notes`. Every agent that can use a field receives it, and the brief is stored with the run, so `resume` follows the same brief. Unknown fields and `minWords > maxWords` are rejected before any provider call (CLI exit code 64, API `400`).
+Only the topic is required. A run can also carry a brief: `language` (default `OPENBLOG_CONTENT_LANGUAGE`, `en`), `audience`, `tone`, `targetKeyword`, `secondaryKeywords`, `minWords`, `maxWords` and `notes`. Every agent that can use a field receives it, and the brief is stored with the run, so `resume` follows the same brief. Unknown fields and `minWords > maxWords` are rejected before any provider call (CLI exit code 64, API `400`).
 
 ```bash
 npm start -- generate "Cache invalidation" --audience "backend engineers" --tone "dry and precise" \

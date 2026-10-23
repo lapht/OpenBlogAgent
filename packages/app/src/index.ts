@@ -155,6 +155,7 @@ export async function createApplication(
     defaultCategory: taxonomyConfig.defaultCategory,
     maxTags: taxonomyConfig.maxTags,
     allowDuplicates: config.OPENBLOG_ALLOW_DUPLICATES,
+    contentLanguage: config.OPENBLOG_CONTENT_LANGUAGE,
     publicationPolicy: config.OPENBLOG_PUBLICATION_POLICY,
     review: {
       enabled: config.OPENBLOG_REVIEW_ENABLED,

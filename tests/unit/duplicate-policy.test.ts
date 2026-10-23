@@ -121,7 +121,7 @@ describe("duplicate policy", () => {
     ) as Array<{ status: string; is_duplicate: number; metadata_json: string }>;
     expect(rows[1]).toMatchObject({ status: "published", is_duplicate: 1 });
     expect(JSON.parse(rows[1]!.metadata_json)).toEqual({
-      brief: { topic: "Same topic" },
+      brief: { topic: "Same topic", language: "en" },
       force: true
     });
     await first.handle.disconnect();

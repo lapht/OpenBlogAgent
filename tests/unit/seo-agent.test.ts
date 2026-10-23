@@ -113,4 +113,35 @@ describe("Classification agent", () => {
       createClassificationAgent(provider, { maxAttempts: 2 }).run(input)
     ).rejects.toThrow(StructuredOutputError);
   });
+  it.each([
+    ["Perché la cache è così importante", "perche-la-cache-e-cosi-importante"],
+    ["Straße über Größe", "strasse-uber-grosse"],
+    ["Ærø og Łódź", "aero-og-lodz"],
+    ["Café — crème brûlée & más", "cafe-creme-brulee-mas"]
+  ])("turns the slug %j into URL-safe ASCII", async (raw, expected) => {
+    const result = await createSeoAgent(scriptedProvider(seo({ slug: raw }))).run(seoInput);
+
+    expect(result.slug).toBe(expected);
+  });
+
+  it("retries when the slug has no ASCII letters at all", async () => {
+    const provider = scriptedProvider(seo({ slug: "キャッシュ" }), seo({ slug: "kyasshu" }));
+
+    const result = await createSeoAgent(provider).run(seoInput);
+
+    expect(result.slug).toBe("kyasshu");
+    expect(provider.prompts[1]).toContain("slug must not be empty");
+  });
+
+  it("asks for the output language and an ASCII slug when the brief names a language", async () => {
+    const provider = scriptedProvider(seo());
+
+    await createSeoAgent(provider).run({
+      ...seoInput,
+      brief: { topic: "Cache", language: "it" }
+    });
+
+    expect(provider.prompts[0]).toContain("written in Italian (it)");
+    expect(provider.prompts[0]).toContain("lowercase ASCII");
+  });
 });

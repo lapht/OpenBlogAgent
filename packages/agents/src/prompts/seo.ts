@@ -1,14 +1,18 @@
 import type { SeoAgentInput } from "../seo/agent";
 
-import { briefLines } from "./brief";
+import { briefLines, languageLines } from "./brief";
 
-export const SEO_PROMPT_VERSION = "2";
+export const SEO_PROMPT_VERSION = "3";
 
 export function buildSeoPrompt(input: SeoAgentInput): string {
   return [
     "You are an SEO expert.",
     "Analyze the article content and produce SEO-optimized metadata.",
-    ...briefLines(input.brief, ["language", "audience", "keywords"]),
+    ...languageLines(
+      input.brief,
+      "The article is written in {language}: write the title, metaDescription, h1 and heading texts in {language}."
+    ),
+    ...briefLines(input.brief, ["audience", "keywords"]),
     "",
     "Output rules:",
     "- Return valid JSON only.",
@@ -16,7 +20,7 @@ export function buildSeoPrompt(input: SeoAgentInput): string {
     "- Do not add explanations outside the JSON.",
     "- The title must be at most 60 characters.",
     "- The metaDescription must be at most 155 characters.",
-    "- The slug must be lowercase, URL-safe, and use hyphens instead of spaces.",
+    "- The slug must be lowercase ASCII (a-z, 0-9 and hyphens only) whatever the language: drop accents and transliterate special characters.",
     "- The h1 is only a suggested WordPress title, not article content.",
     "- headings must contain only H2 and H3 items found or suggested from the article structure.",
     "",

@@ -31,7 +31,7 @@ An article that fails the gate is never sent, under any policy (`needs_review`).
 
 ## Markdown output
 
-The default publisher. `generate` writes `{OPENBLOG_OUTPUT_DIR}/{slug}.md` (default `output/articles/`): YAML front matter (title, slug, description, status, category, tags, dates, author, language) followed by the article. The `status` is `draft` until `approve` replaces the file with the live version (only a draft written by this publisher is replaced). Any other existing file is never overwritten unless `OPENBLOG_MARKDOWN_OVERWRITE=true`; the publish fails with `already_exists`.
+The default publisher. `generate` writes `{OPENBLOG_OUTPUT_DIR}/{slug}.md` (default `output/articles/`): YAML front matter (title, slug, description, status, category, tags, dates, author, language) followed by the article (`language` is the run's content language, `OPENBLOG_CONTENT_LANGUAGE` or the brief's). WordPress and Ghost have no per-post language in the payloads this project sends, so they ignore it. The `status` is `draft` until `approve` replaces the file with the live version (only a draft written by this publisher is replaced). Any other existing file is never overwritten unless `OPENBLOG_MARKDOWN_OVERWRITE=true`; the publish fails with `already_exists`.
 
 ## WordPress prerequisites
 

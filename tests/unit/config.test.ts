@@ -70,4 +70,16 @@ describe("loadEnv", () => {
     expect(message).not.toContain("secret-value-123");
     expect(message).not.toContain("secret-port");
   });
+  it("defaults the content language to en and accepts a language code", () => {
+    expect(loadEnv({}).OPENBLOG_CONTENT_LANGUAGE).toBe("en");
+    expect(loadEnv({ OPENBLOG_CONTENT_LANGUAGE: "it" }).OPENBLOG_CONTENT_LANGUAGE).toBe("it");
+    expect(loadEnv({ OPENBLOG_CONTENT_LANGUAGE: "pt-BR" }).OPENBLOG_CONTENT_LANGUAGE).toBe("pt-BR");
+    expect(loadEnv({ OPENBLOG_CONTENT_LANGUAGE: "" }).OPENBLOG_CONTENT_LANGUAGE).toBe("en");
+  });
+
+  it("rejects an invalid content language", () => {
+    expect(() => loadEnv({ OPENBLOG_CONTENT_LANGUAGE: "italian please" })).toThrow(
+      /OPENBLOG_CONTENT_LANGUAGE/
+    );
+  });
 });

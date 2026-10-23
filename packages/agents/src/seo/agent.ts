@@ -67,10 +67,24 @@ export function createSeoAgent(
   };
 }
 
+/** Letters that NFD does not take apart into a base letter plus an accent. */
+const TRANSLITERATIONS: Record<string, string> = {
+  ß: "ss",
+  æ: "ae",
+  œ: "oe",
+  ø: "o",
+  đ: "d",
+  ð: "d",
+  þ: "th",
+  ł: "l",
+  ı: "i"
+};
+
 function normalizeSlug(value: string): string {
   return value
     .trim()
     .toLowerCase()
+    .replace(/[ßæœøđðþłı]/g, (letter) => TRANSLITERATIONS[letter]!)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9\s-]/g, "")

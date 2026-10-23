@@ -148,7 +148,7 @@ describe("CLI commands", () => {
       dryRun: false,
       workflowId: expect.any(String),
       topic: "My topic",
-      brief: { topic: "My topic", minWords: 1, maxWords: 2200 },
+      brief: { topic: "My topic", language: "en", minWords: 1, maxWords: 2200 },
       title: "A title",
       slug: "a-title",
       publisherId: "markdown",
