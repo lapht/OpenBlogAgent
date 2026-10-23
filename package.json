@@ -23,6 +23,7 @@
     "start": "node apps/cli/dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:live": "vitest run --config vitest.live.config.ts",
     "test:coverage": "vitest run --coverage",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "check:deps": "node scripts/check-deps.mjs",

@@ -38,8 +38,7 @@ Last reviewed against `main` by static reading of the code plus a local run of b
 
 ## Known limitations
 
-- Real services were never exercised by an automated test: OpenRouter, Ollama and a WordPress site are only covered with mocked HTTP. Try a new setup with `--dry-run` and the default `draft` policy first.
-- The Ghost publisher is only covered with a fake Admin API server, never a real Ghost site.
+- Real services are not part of `npm test`: OpenRouter, Ollama, WordPress and Ghost are covered with mocked HTTP only. `npm run test:live` (opt-in, see `docs/development.md`) can check them, but no live run has been recorded yet: OpenRouter, Ollama, WordPress and Ghost are **not verified live**. Update this line with the date after the first successful run. Try a new setup with `--dry-run` and the default `draft` policy first.
 - Duplicate detection is exact (topic text, slug, title); there is no semantic similarity.
 - `--dry-run` skips the publisher's remote duplicate lookup.
 - A process killed mid-run leaves the run in `running`; `resume <id>` continues it.
