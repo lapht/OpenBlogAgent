@@ -5,6 +5,7 @@ import type { Identifier } from "@openblog/types";
  * when stopped by the duplicate policy. `awaiting_approval`: the article passed the quality gate
  * and waits for `approve`; `needs_review`: it failed the gate. A reviewer can close a stored article
  * as `rejected` (terminal) or send it back to the writer (`revise`, which runs the workflow again).
+ * `interrupted`: a `started`/`running` run whose process died; it keeps its steps and can be resumed.
  */
 export type WorkflowStatus =
   | "started"
@@ -14,7 +15,8 @@ export type WorkflowStatus =
   | "needs_review"
   | "failed"
   | "duplicate"
-  | "rejected";
+  | "rejected"
+  | "interrupted";
 
 export type FinalWorkflowStatus = Extract<
   WorkflowStatus,

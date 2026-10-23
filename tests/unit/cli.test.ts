@@ -34,6 +34,13 @@ describe("argument parsing", () => {
       options: { publisher: "wordpress", force: true }
     });
     expect(parseCommand(["resume", "wf-1"])).toMatchObject({ name: "resume", workflowId: "wf-1" });
+    expect(parseCommand(["list", "--recover-stale"])).toMatchObject({
+      name: "list",
+      options: { recoverStale: true }
+    });
+    expect(() => parseCommand(["resume", "wf-1", "--recover-stale"])).toThrow(
+      /only applies to list/
+    );
     expect(parseCommand(["approve", "wf-1", "--override", "ok"])).toMatchObject({
       name: "approve",
       options: { override: "ok" }

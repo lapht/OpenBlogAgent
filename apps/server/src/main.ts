@@ -1,5 +1,6 @@
 import { createApplication } from "@openblog/app";
 import { loadEnv } from "@openblog/config";
+import { logger } from "@openblog/logger";
 
 import { buildServer } from "./app";
 
@@ -7,6 +8,10 @@ const bootstrap = async (): Promise<void> => {
   const env = loadEnv();
   // The same wiring the CLI uses, so a run over HTTP behaves like one from the command line.
   const application = await createApplication(env);
+
+  // Runs queued or executing when the previous process died would stay active forever.
+  const recovered = await application.recoverStaleRuns();
+  logger.info("Recovered stale runs", { count: recovered.length, workflowIds: recovered });
 
   const app = await buildServer({
     application,

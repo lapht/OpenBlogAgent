@@ -36,6 +36,8 @@ export const envSchema = z.object({
   OPENBLOG_API_CONCURRENCY: z.coerce.number().int().positive().default(1),
   /** Runs that may wait for a free slot; further requests get 429. */
   OPENBLOG_API_QUEUE_SIZE: z.coerce.number().int().min(0).default(10),
+  /** Minutes without activity after which a `started`/`running` run counts as abandoned (`interrupted`). */
+  OPENBLOG_RUN_STALE_AFTER_MINUTES: z.coerce.number().int().positive().default(60),
 
   OPENROUTER_API_KEY: optionalString(), // secret
   OPENROUTER_MODEL: optionalString(),

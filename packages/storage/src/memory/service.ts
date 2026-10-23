@@ -197,6 +197,26 @@ export class MemoryService {
     this.workflowRepository.updateStatus(workflowId, "running", null, null);
   }
 
+  /**
+   * Moves `started`/`running` runs without activity for `staleAfterMinutes` to `interrupted`,
+   * keeping their steps so `resume` can continue them. Returns the ids it changed.
+   */
+  async recoverStaleRuns(staleAfterMinutes: number, now: Date = new Date()): Promise<string[]> {
+    return this.runInTransaction(() => {
+      const cutoff = new Date(now.getTime() - staleAfterMinutes * 60_000).toISOString();
+      const ids = this.workflowRepository.findStaleActive(cutoff);
+      for (const id of ids) {
+        this.workflowRepository.updateStatus(
+          id,
+          "interrupted",
+          null,
+          `No activity since ${cutoff}; the process running it is presumed dead`
+        );
+      }
+      return ids;
+    });
+  }
+
   /** Records the final status and keeps the generated content, also when publishing failed. */
   async finishWorkflow(params: FinishWorkflowParams): Promise<void> {
     this.runInTransaction(() => {

@@ -202,6 +202,38 @@ describe("workflow end to end (offline)", () => {
     expect(rows("SELECT status FROM workflows")).toEqual([{ status: "published" }]);
   });
 
+  it("recovers a run left running by a dead process and resumes it from its last good step", async () => {
+    const wordpress = stubWordPress({ failWrites: [500] });
+    const llm = routedProvider(healthy());
+    const app = await start(llm, {
+      OPENBLOG_DEFAULT_PUBLISHER: "wordpress",
+      OPENBLOG_WORDPRESS_ENDPOINT: WORDPRESS_ENDPOINT,
+      OPENBLOG_WORDPRESS_USERNAME: "bot",
+      OPENBLOG_WORDPRESS_APPLICATION_PASSWORD: "secret"
+    });
+    const failed = await app.workflow.run({ topic: "Caching" });
+    expect(failed.status).toBe("failed");
+    const callsBefore = llm.prompts.length;
+
+    // The process died while publishing: the run was left in `running`.
+    const db = new Database(path.join(dir, "memory.db"));
+    db.prepare("UPDATE workflows SET status = 'running' WHERE id = ?").run(failed.workflowId);
+    db.close();
+
+    expect(await app.recoverStaleRuns(new Date(Date.now() - 60_000))).toEqual([]);
+    expect(await app.recoverStaleRuns(new Date(Date.now() + 61 * 60_000))).toEqual([
+      failed.workflowId
+    ]);
+    expect(rows("SELECT status FROM workflows")).toEqual([{ status: "interrupted" }]);
+
+    const resumed = await app.workflow.resume(failed.workflowId!);
+
+    expect(resumed.status).toBe("published");
+    expect(llm.prompts).toHaveLength(callsBefore);
+    expect(wordpress.posts).toHaveLength(1);
+    expect(rows("SELECT status FROM workflows")).toEqual([{ status: "published" }]);
+  });
+
   it("regenerates a failing article, then parks it as needs_review without publishing", async () => {
     const llm = routedProvider({
       ...healthy(),

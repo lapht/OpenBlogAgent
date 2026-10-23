@@ -18,6 +18,8 @@ export interface CliOptions {
   reason?: string;
   /** What the writer should change (revise only). */
   feedback?: string;
+  /** Mark runs abandoned by a dead process as interrupted before listing (list only). */
+  recoverStale: boolean;
 }
 
 export type ParsedCommand =
@@ -41,11 +43,11 @@ export const HELP = `Usage: openblog <command> [options]
 
 Commands:
   generate [topic]     Generate an article about <topic> and publish it as the policy allows
-  resume <id>          Continue a failed run from its last good step
+  resume <id>          Continue a failed or interrupted run from its last good step
   approve <id>         Publish a stored article live (--override "reason" if it failed the gate)
   reject <id>          Close a stored article as rejected (--reason "why"); terminal
   revise <id>          Send a stored article back to the writer (--feedback "what to change")
-  list                 Show the most recent runs
+  list                 Show the most recent runs (--recover-stale marks abandoned runs interrupted)
 
 Options:
   --dry-run            Run everything except the publish call; nothing is stored or published
@@ -54,6 +56,7 @@ Options:
   --override <reason>  Approve an article that did not pass the quality gate (approve only)
   --reason <text>      Why the article is rejected (reject only, required)
   --feedback <text>    What the writer should change (revise only, required)
+  --recover-stale      Mark runs idle for OPENBLOG_RUN_STALE_AFTER_MINUTES as interrupted (list only)
   --json               Print one JSON summary object on stdout; logs always go to stderr
 
 Brief options (generate only; each overrides the same field of --brief):
@@ -93,6 +96,7 @@ export function parseCommand(argv: string[]): ParsedCommand {
         override: { type: "string" },
         reason: { type: "string" },
         feedback: { type: "string" },
+        "recover-stale": { type: "boolean" },
         brief: { type: "string" },
         language: { type: "string" },
         audience: { type: "string" },
@@ -115,7 +119,8 @@ export function parseCommand(argv: string[]): ParsedCommand {
     publisher: values.publisher,
     override: values.override,
     reason: values.reason,
-    feedback: values.feedback
+    feedback: values.feedback,
+    recoverStale: values["recover-stale"] ?? false
   };
 
   if (values.help) {
@@ -140,6 +145,9 @@ export function parseCommand(argv: string[]): ParsedCommand {
   }
   if (options.feedback !== undefined && name !== "revise") {
     throw new UsageError("--feedback only applies to revise");
+  }
+  if (options.recoverStale && name !== "list") {
+    throw new UsageError("--recover-stale only applies to list");
   }
   if (options.force && name !== "generate" && name !== "resume") {
     throw new UsageError("--force only applies to generate and resume");

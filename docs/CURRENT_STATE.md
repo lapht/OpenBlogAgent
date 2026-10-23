@@ -43,7 +43,7 @@ Last reviewed against `main` by static reading of the code plus a local run of b
 - Real services are not part of `npm test`: OpenRouter, Ollama, WordPress and Ghost are covered with mocked HTTP only. `npm run test:live` (opt-in, see `docs/development.md`) can check them, but no live run has been recorded yet: OpenRouter, Ollama, WordPress and Ghost are **not verified live**. Update this line with the date after the first successful run. Try a new setup with `--dry-run` and the default `draft` policy first.
 - Duplicate detection is exact (topic text, slug, title); there is no semantic similarity.
 - `--dry-run` skips the publisher's remote duplicate lookup.
-- A process killed mid-run leaves the run in `running`; `resume <id>` continues it.
+- A process killed mid-run leaves the run in `running` until `list --recover-stale` (or a server start) marks it `interrupted` after `OPENBLOG_RUN_STALE_AFTER_MINUTES`; `resume <id>` continues either (ADR-034).
 - Local Node 18 cannot run `health.test.ts`; Node 20 cannot load a better-sqlite3 binary built for Node 18. CI runs on a clean install.
 
 See the milestones in the GitHub backlog for what comes after the MVP.

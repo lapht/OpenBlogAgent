@@ -6,22 +6,23 @@ How to run, inspect, recover and back up OpenBlogAgent. Settings are in [Configu
 
 Run after `npm run build` as `npm start -- <command>` (or `openblog <command>` from the `bin` of `apps/cli`, or inside Docker).
 
-| Command            | What it does                                                                                  |
-| ------------------ | --------------------------------------------------------------------------------------------- |
-| `generate <topic>` | Plan, write, edit, add SEO metadata, check quality, classify and publish as the policy allows |
-| `resume <id>`      | Continue a `failed` run from its last good step; finished steps are not repeated              |
-| `approve <id>`     | Publish a stored article live; `--override "reason"` if it failed the quality gate            |
-| `reject <id>`      | Close a stored article as rejected, for good; `--reason "why"` is required                    |
-| `revise <id>`      | Send a stored article back to the writer; `--feedback "what to change"` is required           |
-| `list`             | The 20 most recent runs, newest first, with status, failed step, total tokens and cost        |
+| Command            | What it does                                                                                      |
+| ------------------ | ------------------------------------------------------------------------------------------------- |
+| `generate <topic>` | Plan, write, edit, add SEO metadata, check quality, classify and publish as the policy allows     |
+| `resume <id>`      | Continue a `failed` or `interrupted` run from its last good step; finished steps are not repeated |
+| `approve <id>`     | Publish a stored article live; `--override "reason"` if it failed the quality gate                |
+| `reject <id>`      | Close a stored article as rejected, for good; `--reason "why"` is required                        |
+| `revise <id>`      | Send a stored article back to the writer; `--feedback "what to change"` is required               |
+| `list`             | The 20 most recent runs, newest first, with status, failed step, total tokens and cost            |
 
-Options: `--dry-run`, `--publisher <id>`, `--force`, `--json`, `--help`, and for `generate` the brief options `--brief <file>` (YAML or JSON), `--language`, `--audience`, `--tone`, `--keyword`, `--min-words`, `--max-words`, `--notes` (flags override the file; see the README). An invalid brief exits `64` before any provider call; `--dry-run` and `--json` show the effective brief. `--dry-run` runs everything except the publish call, on a throwaway copy of the database: nothing is stored, written or sent, and earlier runs are still visible to duplicate checks, `resume` and `approve`.
+Options: `--dry-run`, `--publisher <id>`, `--force`, `--recover-stale` (`list` only: mark runs with no activity for `OPENBLOG_RUN_STALE_AFTER_MINUTES` as `interrupted` first, logging how many), `--json`, `--help`, and for `generate` the brief options `--brief <file>` (YAML or JSON), `--language`, `--audience`, `--tone`, `--keyword`, `--min-words`, `--max-words`, `--notes` (flags override the file; see the README). An invalid brief exits `64` before any provider call; `--dry-run` and `--json` show the effective brief. `--dry-run` runs everything except the publish call, on a throwaway copy of the database: nothing is stored, written or sent, and earlier runs are still visible to duplicate checks, `resume` and `approve`.
 
 ## Run statuses
 
 | Status              | Meaning                                                                                                                      | Next step                                                                  |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `running`           | In progress (or the process died: it will stay `running`)                                                                    | Wait, or `resume` if the process is gone                                   |
+| `running`           | In progress (or the process died: it stays `running` until recovered)                                                        | Wait, or `list --recover-stale` then `resume` if the process is gone       |
+| `interrupted`       | Recovered as abandoned: no activity for `OPENBLOG_RUN_STALE_AFTER_MINUTES`; its steps are kept                               | `resume <id>`                                                              |
 | `awaiting_approval` | The article passed the quality gate; under `draft` a draft is at the target, under `publish_after_approval` nothing was sent | `approve <id>`                                                             |
 | `published`         | The target confirmed a live post (or file)                                                                                   | none                                                                       |
 | `needs_review`      | The quality gate rejected the article after the allowed regenerations; nothing was published                                 | Read the violations, then `approve <id> --override "reason"` or regenerate |
@@ -88,7 +89,7 @@ Send the key as `Authorization: Bearer <key>` or `X-API-Key: <key>`.
 | `POST /runs/{id}/revise`  | `{ "feedback": "...", "revisedBy": "..." }` returns `202` and runs in the queue like `resume`; same refusals as `reject`. `GET /runs/{id}` lists `decisions` (action, actor, note, createdAt)                                                                                                        |
 | `POST /runs/{id}/approve` | `{ "approvedBy": "...", "overrideReason": "..." }` publishes live and waits for the result; the same refusals as the CLI (`422 gate_not_passed`, `409 already_published`, `409 already_rejected`)                                                                                                    |
 
-Runs execute in a bounded queue: `OPENBLOG_API_CONCURRENCY` at once, `OPENBLOG_API_QUEUE_SIZE` waiting; beyond that the answer is `429 queue_full` with `Retry-After`. Poll `GET /runs/{id}` until the status is no longer `started` or `running`. A queued run is stored as `started`. If the server stops while a run is executing, that run stays `running` in the store; `resume` it. On shutdown the server waits for running and queued jobs. The OpenAPI document is at `/openapi.json`. Errors have the shape `{ "error": "...", "code": "..." }`.
+Runs execute in a bounded queue: `OPENBLOG_API_CONCURRENCY` at once, `OPENBLOG_API_QUEUE_SIZE` waiting; beyond that the answer is `429 queue_full` with `Retry-After`. Poll `GET /runs/{id}` until the status is no longer `started` or `running`. A queued run is stored as `started`. If the server stops while a run is executing, that run stays `running` (or `started`) in the store until the next server start, which marks runs idle for `OPENBLOG_RUN_STALE_AFTER_MINUTES` as `interrupted` and logs how many; `resume` them. On shutdown the server waits for running and queued jobs. The OpenAPI document is at `/openapi.json`. Errors have the shape `{ "error": "...", "code": "..." }`.
 
 ## Recovering a failed run
 
