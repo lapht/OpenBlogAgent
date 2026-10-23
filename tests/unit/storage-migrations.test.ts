@@ -162,6 +162,27 @@ describe("storage migrations", () => {
     db.close();
   });
 
+  it("adds the step prompt hash column to a v6 database and keeps its steps", () => {
+    const db = new Database(":memory:");
+    runStorageMigrations(db);
+    db.exec("ALTER TABLE workflow_steps DROP COLUMN prompt_hash");
+    db.pragma("user_version = 6");
+    db.exec(`
+      INSERT INTO workflows (id, name, topic, topic_normalized, status, started_at, created_at, updated_at)
+      VALUES ('w1','n','Topic','topic','completed','t','t','t');
+      INSERT INTO workflow_steps (id, workflow_id, step, status, attempt, started_at, completed_at)
+      VALUES ('s1','w1','planner','succeeded',1,'t','t');
+    `);
+
+    runStorageMigrations(db);
+
+    expect(db.pragma("user_version", { simple: true })).toBe(LATEST_SCHEMA_VERSION);
+    expect(db.prepare("SELECT step, prompt_hash FROM workflow_steps").all()).toEqual([
+      { step: "planner", prompt_hash: null }
+    ]);
+    db.close();
+  });
+
   it("is a no-op on a database that is already current", () => {
     const db = new Database(":memory:");
     runStorageMigrations(db);

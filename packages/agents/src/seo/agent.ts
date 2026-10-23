@@ -59,7 +59,7 @@ export function createSeoAgent(
     run(input: SeoAgentInput): Promise<SeoOutput> {
       return generateStructured(provider, {
         ...options,
-        prompt: buildSeoPrompt(input),
+        prompt: buildSeoPrompt(input, options.promptTemplate),
         schema: seoOutputSchema,
         label: "SEO agent"
       });

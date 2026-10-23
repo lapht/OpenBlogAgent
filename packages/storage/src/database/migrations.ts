@@ -152,6 +152,11 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_workflow_decisions_workflow_id
       ON workflow_decisions(workflow_id);
     `);
+  },
+
+  // v7: hash of the prompt each step execution sent first.
+  (db) => {
+    addMissingColumns(db, "workflow_steps", { prompt_hash: "TEXT" });
   }
 ];
 

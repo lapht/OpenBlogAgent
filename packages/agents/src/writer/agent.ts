@@ -2,6 +2,7 @@ import type { TextGenerationProvider } from "@openblog/providers";
 import type { ArticleBrief } from "@openblog/types";
 
 import { buildWriterPrompt } from "../prompts/writer";
+import type { StructuredOutputOptions } from "../structured-output";
 
 export interface WriterAgentInput {
   topic: string;
@@ -25,13 +26,17 @@ export interface WriterAgent {
   run(input: WriterAgentInput): Promise<string>;
 }
 
-export function createWriterAgent(provider: TextGenerationProvider): WriterAgent {
+export function createWriterAgent(
+  provider: TextGenerationProvider,
+  options: Pick<StructuredOutputOptions, "promptTemplate"> = {}
+): WriterAgent {
+  const prompt = (input: WriterAgentInput) =>
+    buildWriterPrompt(input.topic, input.outline, { ...input, template: options.promptTemplate });
+
   return {
-    buildPrompt: (input) => buildWriterPrompt(input.topic, input.outline, input),
+    buildPrompt: prompt,
     async run(input: WriterAgentInput): Promise<string> {
-      const { text } = await provider.generate({
-        prompt: buildWriterPrompt(input.topic, input.outline, input)
-      });
+      const { text } = await provider.generate({ prompt: prompt(input) });
       const article = text.trim();
 
       if (article.length === 0) {

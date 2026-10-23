@@ -1,11 +1,20 @@
 import type { ClassificationAgentInput } from "../classification/agent";
 
+import { renderPromptTemplate } from "./overrides";
+
 export const CLASSIFICATION_PROMPT_VERSION = "1";
 
-export function buildClassificationPrompt(input: ClassificationAgentInput): string {
+export function buildClassificationPrompt(
+  input: ClassificationAgentInput,
+  template?: string
+): string {
   return [
-    "You are a content classification expert.",
-    "Analyze the article and assign exactly one category and a small set of relevant tags.",
+    ...(template !== undefined
+      ? [renderPromptTemplate(template, { maxTags: String(input.maxTags) })]
+      : [
+          "You are a content classification expert.",
+          "Analyze the article and assign exactly one category and a small set of relevant tags."
+        ]),
     "",
     "Classification rules:",
     "- Return valid JSON only.",

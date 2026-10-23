@@ -27,6 +27,7 @@ import {
 } from "@openblog/publishers";
 import { createSQLiteMemoryService } from "@openblog/storage";
 
+import { loadPromptOverrides } from "./prompts";
 import { loadStaticTaxonomy } from "./taxonomy";
 
 export { loadStaticTaxonomy, type StaticTaxonomy } from "./taxonomy";
@@ -68,6 +69,17 @@ export async function createApplication(
   overrides: ApplicationOverrides = {}
 ): Promise<Application> {
   const logger = overrides.logger ?? defaultLogger;
+
+  // Before anything is opened: an unusable override must stop the application here, not a run.
+  const prompts = config.OPENBLOG_PROMPTS_DIR
+    ? loadPromptOverrides(config.OPENBLOG_PROMPTS_DIR)
+    : undefined;
+  if (prompts) {
+    logger.info("Prompt overrides loaded", {
+      dir: config.OPENBLOG_PROMPTS_DIR,
+      agents: Object.keys(prompts)
+    });
+  }
 
   const llm = overrides.llm ?? createLlm(config);
 
@@ -165,6 +177,7 @@ export async function createApplication(
       listTags: async () => (await tags.list()).map((entry) => entry.name)
     },
     memory,
+    prompts,
     defaultCategory: taxonomyConfig.defaultCategory,
     maxTags: taxonomyConfig.maxTags,
     allowDuplicates: config.OPENBLOG_ALLOW_DUPLICATES,

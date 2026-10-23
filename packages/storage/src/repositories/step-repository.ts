@@ -20,6 +20,7 @@ interface StepRow {
   total_tokens: number | null;
   cost_usd: number | null;
   model: string | null;
+  prompt_hash: string | null;
 }
 
 export class StepRepository {
@@ -39,8 +40,8 @@ export class StepRepository {
         `INSERT INTO workflow_steps (
           id, workflow_id, step, status, attempt, output_json,
           error_code, error_message, started_at, completed_at,
-          llm_calls, prompt_tokens, completion_tokens, total_tokens, cost_usd, model
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          llm_calls, prompt_tokens, completion_tokens, total_tokens, cost_usd, model, prompt_hash
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         record.id,
@@ -58,7 +59,8 @@ export class StepRepository {
         record.usage?.completionTokens ?? null,
         record.usage?.totalTokens ?? null,
         record.usage?.costUsd ?? null,
-        record.model
+        record.model,
+        record.promptHash
       );
 
     return record;
@@ -159,7 +161,8 @@ export class StepRepository {
               totalTokens: row.total_tokens ?? 0,
               costUsd: row.cost_usd ?? 0
             },
-      model: row.model
+      model: row.model,
+      promptHash: row.prompt_hash
     }));
   }
 }

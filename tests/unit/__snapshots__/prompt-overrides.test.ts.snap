@@ -1,0 +1,360 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`built-in prompts > are unchanged (full brief) 1`] = `
+{
+  "classification": "You are a content classification expert.
+Analyze the article and assign exactly one category and a small set of relevant tags.
+
+Classification rules:
+- Return valid JSON only.
+- Do not wrap the JSON in Markdown fences.
+- Do not add explanations outside the JSON.
+- category must be exactly one of the availableCategories provided below.
+- Do not invent a category.
+- tags must be an array with at most 4 items.
+- Tags must be specific and relevant to the article.
+- Avoid duplicate tags.
+- Avoid overly generic tags such as 'blog', 'article', 'technology', 'news' unless they are truly central.
+- Prefer tags from availableTags when relevant, but you may return new tags if needed.
+
+Return this exact JSON structure:
+{
+  "category": "One category from availableCategories",
+  "tags": [
+    "Specific tag 1",
+    "Specific tag 2"
+  ]
+}
+
+Available Categories:
+1. News
+2. Guides
+
+Available Tags:
+1. ai
+
+Article Text:
+Text",
+  "editor": "You are an experienced editor.
+Improve the text for readability, tone consistency, and clarity.
+Remove redundancies and break up overly long sentences.
+The article is written in Italian (it); keep it in Italian (it).
+
+Brief:
+- Audience: backend engineers
+- Tone: dry
+- Target keyword: caching
+- Secondary keywords: ttl, cdn
+
+
+Output rules:
+- Return valid JSON only.
+- Do not wrap the JSON in Markdown fences.
+- Do not add explanations outside the JSON.
+- The \`editedText\` field may contain Markdown content.
+- Preserve useful Markdown formatting such as headings, lists, quotes, and code blocks.
+- Escape all double quotes inside JSON string values.
+
+Return this exact JSON structure:
+{
+  "editedText": "The edited article text in Markdown.",
+  "changesSummary": "Short summary of the changes made."
+}
+
+Original text:
+Raw text",
+  "planner": "You are a pragmatic content strategist.
+Create a simple and practical article outline for the topic: Caching
+Write the section titles in Italian (it).
+
+Brief:
+- Audience: backend engineers
+- Tone: dry
+- Target keyword: caching
+- Secondary keywords: ttl, cdn
+- Editorial notes: No hype.
+
+Return valid JSON only.
+Use this exact shape: ["Section title", "Section title"]
+Create 4 to 6 sections maximum.
+Avoid overly broad, academic, or redundant sections.
+The outline should be suitable for a clear blog post, not a long-form essay.
+Include an introduction and a conclusion through the section titles.",
+  "review": "You are a strict editorial reviewer for a blog.
+Score the article below from 0 to 10 on each dimension. Use the whole range: 5 is mediocre, 8 is good, 10 is excellent.
+
+Dimensions:
+- seo: the title and meta description fit the content and are specific; keywords are used naturally.
+- readability: clear sentences, consistent tone, easy to follow.
+- structure: a logical flow with an introduction, well-ordered sections and a conclusion.
+- completeness: every outline section is covered with enough substance.
+- repetition: 10 means no repeated ideas or phrases, 0 means the text repeats itself heavily.
+
+Output rules:
+- Return valid JSON only.
+- Do not wrap the JSON in Markdown fences.
+- Scores are numbers between 0 and 10.
+- \`rationale\` is two or three sentences naming the main weaknesses (or why it is good).
+
+Return this exact JSON structure:
+{
+  "scores": {
+    "seo": 0,
+    "readability": 0,
+    "structure": 0,
+    "completeness": 0,
+    "repetition": 0
+  },
+  "rationale": "Short explanation of the scores."
+}
+
+Title: A title
+Meta description: A description
+
+Outline:
+- Why caching matters
+- Invalidation
+- Conclusion
+
+Article:
+Text",
+  "seo": "You are an SEO expert.
+Analyze the article content and produce SEO-optimized metadata.
+The article is written in Italian (it): write the title, metaDescription, h1 and heading texts in Italian (it).
+
+Brief:
+- Audience: backend engineers
+- Target keyword: caching
+- Secondary keywords: ttl, cdn
+
+
+Output rules:
+- Return valid JSON only.
+- Do not wrap the JSON in Markdown fences.
+- Do not add explanations outside the JSON.
+- The title must be at most 60 characters.
+- The metaDescription must be at most 155 characters.
+- The slug must be lowercase ASCII (a-z, 0-9 and hyphens only) whatever the language: drop accents and transliterate special characters.
+- The h1 is only a suggested WordPress title, not article content.
+- headings must contain only H2 and H3 items found or suggested from the article structure.
+
+Return this exact JSON structure:
+{
+  "title": "SEO title, max 60 characters",
+  "metaDescription": "SEO meta description, max 155 characters",
+  "slug": "url-safe-slug",
+  "h1": "Suggested WordPress title",
+  "headings": [
+    {
+      "level": "H2",
+      "text": "Section heading"
+    }
+  ]
+}
+
+Article Outline:
+1. Why caching matters
+2. Invalidation
+3. Conclusion
+
+Article Text:
+Text",
+  "writer": "You are a clear and concise technical blog writer.
+Write a Markdown article about: Caching
+Requirements:
+- Do not include an H1 title.
+- Start directly with the introduction.
+- Use H2 sections aligned with the outline.
+- Keep the article between 500 and 900 words.
+- Write in a clear, practical, human tone.
+- Prefer short paragraphs and simple explanations.
+- Avoid unnecessary depth, filler, repetition, and academic style.
+- If the topic is technical, explain only what is useful to the reader.
+- End with a short practical conclusion.
+- Write the whole article in Italian (it), including headings. Keep code, commands and proper names as they are.
+
+Brief:
+- Audience: backend engineers
+- Tone: dry
+- Target keyword: caching
+- Secondary keywords: ttl, cdn
+- Editorial notes: No hype.
+
+Outline:
+1. Why caching matters
+2. Invalidation
+3. Conclusion
+
+A human reviewer read the previous version of this article and asks for changes. Write the whole article again and apply every change below:
+shorter intro
+
+Previous version:
+Old text
+
+Your previous attempt was rejected by automatic checks. Write the article again and fix every problem below:
+fix the length",
+}
+`;
+
+exports[`built-in prompts > are unchanged (topic only) 1`] = `
+{
+  "classification": "You are a content classification expert.
+Analyze the article and assign exactly one category and a small set of relevant tags.
+
+Classification rules:
+- Return valid JSON only.
+- Do not wrap the JSON in Markdown fences.
+- Do not add explanations outside the JSON.
+- category must be exactly one of the availableCategories provided below.
+- Do not invent a category.
+- tags must be an array with at most 4 items.
+- Tags must be specific and relevant to the article.
+- Avoid duplicate tags.
+- Avoid overly generic tags such as 'blog', 'article', 'technology', 'news' unless they are truly central.
+- Prefer tags from availableTags when relevant, but you may return new tags if needed.
+
+Return this exact JSON structure:
+{
+  "category": "One category from availableCategories",
+  "tags": [
+    "Specific tag 1",
+    "Specific tag 2"
+  ]
+}
+
+Available Categories:
+1. News
+2. Guides
+
+Available Tags:
+1. ai
+
+Article Text:
+Text",
+  "editor": "You are an experienced editor.
+Improve the text for readability, tone consistency, and clarity.
+Remove redundancies and break up overly long sentences.
+
+Output rules:
+- Return valid JSON only.
+- Do not wrap the JSON in Markdown fences.
+- Do not add explanations outside the JSON.
+- The \`editedText\` field may contain Markdown content.
+- Preserve useful Markdown formatting such as headings, lists, quotes, and code blocks.
+- Escape all double quotes inside JSON string values.
+
+Return this exact JSON structure:
+{
+  "editedText": "The edited article text in Markdown.",
+  "changesSummary": "Short summary of the changes made."
+}
+
+Original text:
+Raw text",
+  "planner": "You are a pragmatic content strategist.
+Create a simple and practical article outline for the topic: Caching
+Return valid JSON only.
+Use this exact shape: ["Section title", "Section title"]
+Create 4 to 6 sections maximum.
+Avoid overly broad, academic, or redundant sections.
+The outline should be suitable for a clear blog post, not a long-form essay.
+Include an introduction and a conclusion through the section titles.",
+  "review": "You are a strict editorial reviewer for a blog.
+Score the article below from 0 to 10 on each dimension. Use the whole range: 5 is mediocre, 8 is good, 10 is excellent.
+
+Dimensions:
+- seo: the title and meta description fit the content and are specific; keywords are used naturally.
+- readability: clear sentences, consistent tone, easy to follow.
+- structure: a logical flow with an introduction, well-ordered sections and a conclusion.
+- completeness: every outline section is covered with enough substance.
+- repetition: 10 means no repeated ideas or phrases, 0 means the text repeats itself heavily.
+
+Output rules:
+- Return valid JSON only.
+- Do not wrap the JSON in Markdown fences.
+- Scores are numbers between 0 and 10.
+- \`rationale\` is two or three sentences naming the main weaknesses (or why it is good).
+
+Return this exact JSON structure:
+{
+  "scores": {
+    "seo": 0,
+    "readability": 0,
+    "structure": 0,
+    "completeness": 0,
+    "repetition": 0
+  },
+  "rationale": "Short explanation of the scores."
+}
+
+Title: A title
+Meta description: A description
+
+Outline:
+- Why caching matters
+- Invalidation
+- Conclusion
+
+Article:
+Text",
+  "seo": "You are an SEO expert.
+Analyze the article content and produce SEO-optimized metadata.
+
+Output rules:
+- Return valid JSON only.
+- Do not wrap the JSON in Markdown fences.
+- Do not add explanations outside the JSON.
+- The title must be at most 60 characters.
+- The metaDescription must be at most 155 characters.
+- The slug must be lowercase ASCII (a-z, 0-9 and hyphens only) whatever the language: drop accents and transliterate special characters.
+- The h1 is only a suggested WordPress title, not article content.
+- headings must contain only H2 and H3 items found or suggested from the article structure.
+
+Return this exact JSON structure:
+{
+  "title": "SEO title, max 60 characters",
+  "metaDescription": "SEO meta description, max 155 characters",
+  "slug": "url-safe-slug",
+  "h1": "Suggested WordPress title",
+  "headings": [
+    {
+      "level": "H2",
+      "text": "Section heading"
+    }
+  ]
+}
+
+Article Outline:
+1. Why caching matters
+2. Invalidation
+3. Conclusion
+
+Article Text:
+Text",
+  "writer": "You are a clear and concise technical blog writer.
+Write a Markdown article about: Caching
+Requirements:
+- Do not include an H1 title.
+- Start directly with the introduction.
+- Use H2 sections aligned with the outline.
+- Keep the article between 500 and 900 words.
+- Write in a clear, practical, human tone.
+- Prefer short paragraphs and simple explanations.
+- Avoid unnecessary depth, filler, repetition, and academic style.
+- If the topic is technical, explain only what is useful to the reader.
+- End with a short practical conclusion.
+Outline:
+1. Why caching matters
+2. Invalidation
+3. Conclusion
+
+A human reviewer read the previous version of this article and asks for changes. Write the whole article again and apply every change below:
+shorter intro
+
+Previous version:
+Old text
+
+Your previous attempt was rejected by automatic checks. Write the article again and fix every problem below:
+fix the length",
+}
+`;

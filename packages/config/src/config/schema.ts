@@ -117,6 +117,9 @@ export const envSchema = z.object({
   OPENBLOG_REVIEW_MIN_SCORE: z.coerce.number().min(0).max(10).default(7),
 
   /** How many times a failing article is regenerated before it is parked as `needs_review`. */
+  /** Directory with optional `planner.md`, `writer.md`, `editor.md`, `seo.md`, `classification.md` and `review.md` replacing the instructions of each agent's prompt. */
+  OPENBLOG_PROMPTS_DIR: optionalString(),
+
   OPENBLOG_QUALITY_MAX_ATTEMPTS: z.coerce.number().int().min(0).default(2),
   OPENBLOG_QUALITY_MIN_WORDS: z.coerce.number().int().positive().default(1000),
   OPENBLOG_QUALITY_MAX_WORDS: z.coerce.number().int().positive().default(2200),

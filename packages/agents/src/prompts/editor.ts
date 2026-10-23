@@ -1,14 +1,19 @@
 import type { EditorAgentInput } from "../editor/agent";
 
-import { briefLines, languageLines } from "./brief";
+import { briefLines, briefValues, languageLines } from "./brief";
+import { renderPromptTemplate } from "./overrides";
 
 export const EDITOR_PROMPT_VERSION = "3";
 
-export function buildEditorPrompt(input: EditorAgentInput): string {
+export function buildEditorPrompt(input: EditorAgentInput, template?: string): string {
   return [
-    "You are an experienced editor.",
-    "Improve the text for readability, tone consistency, and clarity.",
-    "Remove redundancies and break up overly long sentences.",
+    ...(template !== undefined
+      ? [renderPromptTemplate(template, briefValues(input.brief))]
+      : [
+          "You are an experienced editor.",
+          "Improve the text for readability, tone consistency, and clarity.",
+          "Remove redundancies and break up overly long sentences."
+        ]),
     ...languageLines(input.brief, "The article is written in {language}; keep it in {language}."),
     ...briefLines(input.brief, ["audience", "tone", "keywords"]),
     "",

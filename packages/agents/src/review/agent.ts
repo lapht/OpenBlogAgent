@@ -56,7 +56,7 @@ export function createEditorialReviewAgent(
     run(input: EditorialReviewInput): Promise<EditorialReview> {
       return generateStructured(provider, {
         ...options,
-        prompt: buildReviewPrompt(input),
+        prompt: buildReviewPrompt(input, options.promptTemplate),
         schema: editorialReviewSchema,
         label: "Editorial review agent"
       });

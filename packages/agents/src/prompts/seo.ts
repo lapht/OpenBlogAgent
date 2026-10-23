@@ -1,13 +1,23 @@
 import type { SeoAgentInput } from "../seo/agent";
 
-import { briefLines, languageLines } from "./brief";
+import { briefLines, briefValues, languageLines } from "./brief";
+import { renderPromptTemplate } from "./overrides";
 
 export const SEO_PROMPT_VERSION = "3";
 
-export function buildSeoPrompt(input: SeoAgentInput): string {
+export function buildSeoPrompt(input: SeoAgentInput, template?: string): string {
   return [
-    "You are an SEO expert.",
-    "Analyze the article content and produce SEO-optimized metadata.",
+    ...(template !== undefined
+      ? [
+          renderPromptTemplate(template, {
+            outline: input.outline.map((section, index) => `${index + 1}. ${section}`).join("\n"),
+            ...briefValues(input.brief)
+          })
+        ]
+      : [
+          "You are an SEO expert.",
+          "Analyze the article content and produce SEO-optimized metadata."
+        ]),
     ...languageLines(
       input.brief,
       "The article is written in {language}: write the title, metaDescription, h1 and heading texts in {language}."

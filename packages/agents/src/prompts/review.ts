@@ -1,11 +1,23 @@
 import type { EditorialReviewInput } from "../review/agent";
 
+import { renderPromptTemplate } from "./overrides";
+
 export const REVIEW_PROMPT_VERSION = "1";
 
-export function buildReviewPrompt(input: EditorialReviewInput): string {
+export function buildReviewPrompt(input: EditorialReviewInput, template?: string): string {
   return [
-    "You are a strict editorial reviewer for a blog.",
-    "Score the article below from 0 to 10 on each dimension. Use the whole range: 5 is mediocre, 8 is good, 10 is excellent.",
+    ...(template !== undefined
+      ? [
+          renderPromptTemplate(template, {
+            title: input.title,
+            metaDescription: input.metaDescription,
+            outline: input.outline.map((section) => `- ${section}`).join("\n")
+          })
+        ]
+      : [
+          "You are a strict editorial reviewer for a blog.",
+          "Score the article below from 0 to 10 on each dimension. Use the whole range: 5 is mediocre, 8 is good, 10 is excellent."
+        ]),
     "",
     "Dimensions:",
     "- seo: the title and meta description fit the content and are specific; keywords are used naturally.",

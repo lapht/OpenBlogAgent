@@ -9,6 +9,8 @@ const MAX_RAW_RESPONSE_LENGTH = 2000;
 export interface StructuredOutputOptions {
   /** Total attempts (first call + re-prompts) before giving up. */
   maxAttempts?: number;
+  /** Operator override of the agent's instructions (see `validatePromptTemplate`); built-in text when unset. */
+  promptTemplate?: string;
 }
 
 export interface GenerateStructuredRequest<T> extends StructuredOutputOptions {

@@ -31,7 +31,7 @@ export function createClassificationAgent(
     run(input: ClassificationAgentInput): Promise<ClassificationOutput> {
       return generateStructured(provider, {
         ...options,
-        prompt: buildClassificationPrompt(input),
+        prompt: buildClassificationPrompt(input, options.promptTemplate),
         schema: classificationOutputSchema,
         label: "Classification agent",
         check: (output) => checkClassification(output, input)
