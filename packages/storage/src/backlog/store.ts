@@ -17,6 +17,17 @@ export const CANDIDATE_STATUSES: readonly CandidateStatus[] = [
   "used"
 ];
 
+/** What the model proposed for a candidate, with what producing it used. Informative: the score ignores it. */
+export interface CandidateEnrichment {
+  angle: string;
+  workingTitle: string;
+  targetKeyword: string;
+  motivation: string;
+  model: string | null;
+  generatedAt: string;
+  usage: { calls: number; totalTokens: number; costUsd: number };
+}
+
 export interface CandidateRecord {
   id: string;
   title: string;
@@ -37,6 +48,8 @@ export interface CandidateRecord {
   decisionNote: string | null;
   decidedAt: string | null;
   workflowId: string | null;
+  /** The proposed angle, once enriched; null before. */
+  enrichment: CandidateEnrichment | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -101,6 +114,7 @@ interface CandidateRow {
   decision_note: string | null;
   decided_at: string | null;
   workflow_id: string | null;
+  enrichment_json: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -309,6 +323,15 @@ export class TopicBacklogStore {
     return this.mustGet(candidate.id);
   }
 
+  /** Stores the model's proposal for a candidate (replacing an earlier one). Status and score are untouched. */
+  setEnrichment(idOrPrefix: string, enrichment: CandidateEnrichment): CandidateRecord {
+    const candidate = this.get(idOrPrefix);
+    this.db
+      .prepare("UPDATE topic_candidates SET enrichment_json = ?, updated_at = ? WHERE id = ?")
+      .run(JSON.stringify(enrichment), enrichment.generatedAt, candidate.id);
+    return this.mustGet(candidate.id);
+  }
+
   /** Topics and titles of published and parked runs, which a candidate must not repeat. */
   listCovered(): CoveredArticle[] {
     const rows = this.db
@@ -354,6 +377,9 @@ export class TopicBacklogStore {
       decisionNote: row.decision_note,
       decidedAt: row.decided_at,
       workflowId: row.workflow_id,
+      enrichment: row.enrichment_json
+        ? (JSON.parse(row.enrichment_json) as CandidateEnrichment)
+        : null,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };

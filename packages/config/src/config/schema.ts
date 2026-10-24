@@ -104,6 +104,7 @@ export const envSchema = z.object({
   OPENBLOG_MODEL_SEO: optionalString(),
   OPENBLOG_MODEL_CLASSIFICATION: optionalString(),
   OPENBLOG_MODEL_REVIEW: optionalString(),
+  OPENBLOG_MODEL_RESEARCH: optionalString(),
 
   /** Allow the content fetcher to reach loopback, private, link-local and metadata addresses. Off: SSRF protection. */
   OPENBLOG_FETCH_ALLOW_PRIVATE: envBoolean(false),
@@ -117,6 +118,16 @@ export const envSchema = z.object({
 
   /** YAML/JSON file listing the feeds and sitemaps `research collect` reads. */
   OPENBLOG_RESEARCH_SOURCES_FILE: optionalString(),
+  /** Ask the model for an article angle for new candidates when they are collected. One call each; off by default. */
+  OPENBLOG_RESEARCH_ENRICH: envBoolean(false),
+  /** With `OPENBLOG_RESEARCH_ENRICH`, how many of the best new candidates of a collection are enriched. */
+  OPENBLOG_RESEARCH_ENRICH_LIMIT: z.coerce.number().int().min(0).default(5),
+  /** Stop enriching in one invocation once the provider-reported cost (USD) reaches this. Unset: no limit. */
+  OPENBLOG_RESEARCH_MAX_COST: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().positive().optional()
+  ),
+
   /** Candidates scoring at least this (0-100) are accepted without a human when collected. Unset: never. */
   OPENBLOG_RESEARCH_AUTO_ACCEPT_MIN_SCORE: z.preprocess(
     (value) => (value === "" ? undefined : value),

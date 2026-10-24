@@ -42,6 +42,7 @@ export {
   loadResearchSources,
   type CollectedCandidate,
   type CollectOutcome,
+  type EnrichOutcome,
   type ResearchService
 } from "./research";
 export {
@@ -283,6 +284,7 @@ export async function createApplication(
     ? createResearchService({
         config,
         backlog: memoryStore.backlog,
+        llm,
         fetcher,
         clock: overrides.clock
       })

@@ -38,6 +38,10 @@ export interface CliOptions {
   recoverStale: boolean;
   /** Read the research sources before picking a candidate (schedule run-once only). */
   collect: boolean;
+  /** Make the candidate's proposed keyword and angle part of its brief (topics accept only). */
+  useEnrichment: boolean;
+  /** How many candidates to enrich (topics enrich only). */
+  top?: number;
 }
 
 export const CANDIDATE_STATUS_FLAGS = ["new", "accepted", "dropped", "used"] as const;
@@ -56,6 +60,7 @@ export type ParsedCommand =
   | { name: "topics"; action: "list"; status?: CandidateStatusFlag; options: CliOptions }
   | { name: "topics"; action: "accept"; id: string; brief?: CandidateBrief; options: CliOptions }
   | { name: "topics"; action: "drop"; id: string; reason?: string; options: CliOptions }
+  | { name: "topics"; action: "enrich"; id?: string; options: CliOptions }
   | {
       name: "topics";
       action: "generate";
@@ -84,6 +89,7 @@ Commands:
   list                 Show the most recent runs (--recover-stale marks abandoned runs interrupted)
   research collect     Read the feeds and sitemaps of OPENBLOG_RESEARCH_SOURCES_FILE, score the candidates and store them
   topics list          Show the topic backlog, best score first (--status new|accepted|dropped|used)
+  topics enrich [<id>] Ask the model for an angle, title and keyword (<id>, or the best --top N new candidates)
   topics accept <id>   Approve a candidate for generation (brief options store a brief with it)
   topics drop <id>     Drop a candidate (--reason "why")
   topics generate <id> Generate an article from a candidate (brief options override the stored brief)
@@ -97,6 +103,8 @@ Options:
   --reason <text>      Why the article is rejected (reject only, required)
   --feedback <text>    What the writer should change (revise only, required)
   --status <status>    Only candidates in this status (topics list only)
+  --top <n>            How many candidates to enrich (topics enrich only)
+  --use-enrichment     Put the proposed keyword and angle in the brief (topics accept only)
   --collect            Read the research sources first (schedule run-once only)
   --recover-stale      Mark runs idle for OPENBLOG_RUN_STALE_AFTER_MINUTES as interrupted (list only)
   --json               Print one JSON summary object on stdout; logs always go to stderr
@@ -144,6 +152,8 @@ export function parseCommand(argv: string[]): ParsedCommand {
         feedback: { type: "string" },
         status: { type: "string" },
         collect: { type: "boolean" },
+        top: { type: "string" },
+        "use-enrichment": { type: "boolean" },
         "recover-stale": { type: "boolean" },
         brief: { type: "string" },
         language: { type: "string" },
@@ -170,7 +180,8 @@ export function parseCommand(argv: string[]): ParsedCommand {
     reason: values.reason,
     feedback: values.feedback,
     recoverStale: values["recover-stale"] ?? false,
-    collect: values.collect ?? false
+    collect: values.collect ?? false,
+    useEnrichment: values["use-enrichment"] ?? false
   };
 
   if (values.help) {
@@ -212,6 +223,12 @@ export function parseCommand(argv: string[]): ParsedCommand {
     name === "generate" || (name === "topics" && (rest[0] === "accept" || rest[0] === "generate"));
   if (!takesBrief && briefFlags.length > 0) {
     throw new UsageError(`--${briefFlags[0]} only applies to generate and topics accept|generate`);
+  }
+  if (options.useEnrichment && !(name === "topics" && rest[0] === "accept")) {
+    throw new UsageError("--use-enrichment only applies to topics accept");
+  }
+  if (values.top !== undefined && !(name === "topics" && rest[0] === "enrich")) {
+    throw new UsageError("--top only applies to topics enrich");
   }
   if (options.collect && name !== "schedule") {
     throw new UsageError("--collect only applies to schedule run-once");
@@ -277,6 +294,22 @@ export function parseCommand(argv: string[]): ParsedCommand {
             status: values.status as CandidateStatusFlag | undefined,
             options
           };
+        }
+        case "enrich": {
+          if (args.length > 1) throw new UsageError("topics enrich takes at most one candidate id");
+          if (args.length === 1 && values.top !== undefined) {
+            throw new UsageError("give a candidate id or --top, not both");
+          }
+          if (args.length === 0 && values.top === undefined) {
+            throw new UsageError("topics enrich needs a candidate id or --top <n>");
+          }
+          if (values.top !== undefined) {
+            if (!/^\d+$/.test(values.top) || Number(values.top) < 1) {
+              throw new UsageError(`--top needs a positive whole number, got "${values.top}"`);
+            }
+            options.top = Number(values.top);
+          }
+          return { name: "topics", action: "enrich", id: args[0], options };
         }
         case "accept":
         case "drop":

@@ -68,7 +68,8 @@ export class SourceFormatError extends Error {
   }
 }
 
-export type ResearchErrorCode = "sources_not_configured" | "backlog_unavailable";
+export type ResearchErrorCode =
+  "sources_not_configured" | "backlog_unavailable" | "llm_unavailable";
 
 /** The research feature cannot run with the current setup. */
 export class ResearchError extends Error {

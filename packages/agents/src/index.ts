@@ -22,3 +22,10 @@ export {
   type SeoOutput,
   seoOutputSchema
 } from "./seo/agent";
+export {
+  createResearchAgent,
+  topicIdeaSchema,
+  type ResearchAgent,
+  type TopicIdea,
+  type TopicIdeaInput
+} from "./research/agent";
