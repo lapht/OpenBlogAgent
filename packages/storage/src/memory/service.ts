@@ -446,6 +446,14 @@ export class MemoryService {
     });
   }
 
+  /** Live articles with a public address, newest first, for internal linking. */
+  async listPublishedArticles(options: { publisherId?: string; limit?: number } = {}) {
+    return this.articleRepository.listPublished({
+      publisherId: options.publisherId,
+      limit: options.limit ?? 500
+    });
+  }
+
   /** A published or parked article of another run with this slug or title. */
   async findDuplicateArticle(params: {
     workflowId: Identifier;

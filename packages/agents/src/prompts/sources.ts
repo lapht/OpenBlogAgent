@@ -60,3 +60,19 @@ export function referenceRequirementLines(
     ...notes.map((note) => `  - ${note.url}`)
   ];
 }
+
+/** The articles of the same site the writer may link to; nothing when there are none. */
+export function internalLinkLines(
+  links: readonly { title: string; url: string }[] | undefined
+): string[] {
+  if (!links || links.length === 0) {
+    return [];
+  }
+  return [
+    "",
+    "Internal links:",
+    "- Where it genuinely helps the reader, link to these articles of the same site with Markdown links, using exactly these URLs:",
+    ...links.map((link) => `  - ${link.title}: ${link.url}`),
+    `- Use at most ${links.length} of them, only once each and in the body (not in headings), and do not link to any other page of this site.`
+  ];
+}

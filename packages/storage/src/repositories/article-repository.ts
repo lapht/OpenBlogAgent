@@ -233,6 +233,48 @@ export class ArticleRepository implements IRepositoryContract<ArticleRecord> {
   }
 
   /**
+   * Articles that are live (run `published`, review state `published`) with a public http(s)
+   * address, newest first. With `publisherId`, only those published through that publisher.
+   */
+  listPublished(options: { publisherId?: string; limit: number }): Array<{
+    workflowId: Identifier;
+    title: string;
+    slug: string | null;
+    category: string | null;
+    tags: string[];
+    url: string;
+  }> {
+    const rows = this.db
+      .prepare(
+        `SELECT a.workflow_id AS workflow_id, a.title AS title, a.slug AS slug, a.category AS category,
+                a.tags_json AS tags_json, a.publish_remote_url AS url
+         FROM articles a
+         JOIN workflows w ON w.id = a.workflow_id
+         WHERE w.status = 'published' AND a.review_state = 'published'
+           AND a.title IS NOT NULL AND a.publish_remote_url LIKE 'http%'
+           AND (? IS NULL OR json_extract(a.publish_result_json, '$.publisherId') = ?)
+         ORDER BY a.updated_at DESC, a.rowid DESC
+         LIMIT ?`
+      )
+      .all(options.publisherId ?? null, options.publisherId ?? null, options.limit) as Array<{
+      workflow_id: string;
+      title: string;
+      slug: string | null;
+      category: string | null;
+      tags_json: string;
+      url: string;
+    }>;
+    return rows.map((row) => ({
+      workflowId: row.workflow_id,
+      title: row.title,
+      slug: row.slug,
+      category: row.category,
+      tags: JSON.parse(row.tags_json) as string[],
+      url: row.url
+    }));
+  }
+
+  /**
    * A stored article of another run (published or waiting for review) with the same slug or the
    * same title, ignoring case. The oldest match wins.
    */

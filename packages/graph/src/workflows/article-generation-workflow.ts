@@ -15,6 +15,7 @@ import {
   formatViolations,
   plannerOutlineSchema,
   type PromptOverrides,
+  selectRelatedArticles,
   type SeoOutput,
   seoOutputSchema,
   type SourceNote,
@@ -130,6 +131,9 @@ export class SourceError extends Error {
     this.code = code;
   }
 }
+
+/** An article of the same site the writer may link to, as stored with the `find_links` step. */
+const internalLinkSchema = z.object({ workflowId: z.string(), title: z.string(), url: z.string() });
 
 const nonEmptyTextSchema = z.string().trim().min(1);
 const classificationSchema = z.object({
@@ -416,6 +420,18 @@ export interface CreateArticleGenerationWorkflowOptions {
     /** Characters shared by all pages of a run. Defaults to 15000. */
     maxCharsTotal?: number;
   };
+  /**
+   * Links to related articles that are already live. Off unless `max` is above 0 and the memory
+   * store can list published articles.
+   */
+  internalLinks?: {
+    /** Most links offered to the writer. 0 turns the feature off. */
+    max: number;
+    /** Only articles published through this publisher are offered (the target the new one goes to). */
+    publisherId?: string;
+    /** Address of the target site (`https://blog.example.com`); links to it that were not offered are invalid. */
+    siteOrigin?: string;
+  };
   /** Told when a run ends in a state that needs a person (the notifier decides which events it sends). */
   notifier?: NotifierPort;
   /** Per-run token and cost limits; a run that exceeds them stops with `budget_exceeded`. */
@@ -444,6 +460,8 @@ const graphState = Annotation.Root({
   /** Text read from the brief's source pages; absent when the brief has none. */
   sources: optional<SourceDocumentState[]>(),
   skippedSources: optional<Array<z.infer<typeof skippedSourceSchema>>>(),
+  /** Articles of the same site the writer may link to; absent when internal linking is off. */
+  internalLinks: optional<z.infer<typeof internalLinkSchema>[]>(),
   outline: optional<string[]>(),
   article: optional<string>(),
   editedText: optional<string>(),
@@ -489,6 +507,7 @@ const stepOutputSchemas: Record<string, z.ZodType<ArticleWorkflowUpdate, z.ZodTy
     skippedSources: z.array(skippedSourceSchema).optional()
   }),
   planner: z.object({ outline: plannerOutlineSchema }),
+  find_links: z.object({ internalLinks: z.array(internalLinkSchema) }),
   writer: z.object({ article: nonEmptyTextSchema }),
   editor: z.object({ editedText: nonEmptyTextSchema }),
   seo: z.object({ seoOutput: seoOutputSchema }),
@@ -763,6 +782,8 @@ export function createArticleGenerationWorkflow(
   const reviewAgent = createEditorialReviewAgent(llmFor("review"), {
     promptTemplate: options.prompts?.review
   });
+  const linksEnabled =
+    (options.internalLinks?.max ?? 0) > 0 && memory?.listPublishedArticles !== undefined;
   const reviewEnabled = options.review?.enabled ?? false;
   const reviewMinScore = options.review?.minScore ?? 7;
 
@@ -844,6 +865,30 @@ export function createArticleGenerationWorkflow(
       })
     )
     .addNode(
+      "find_links",
+      step("find_links", stepContext, async (state) => {
+        const brief = requiredBrief(state);
+        const published = await memory!.listPublishedArticles!({
+          publisherId: options.internalLinks?.publisherId
+        });
+        const internalLinks = selectRelatedArticles(
+          {
+            topic: state.topic,
+            targetKeyword: brief.targetKeyword,
+            secondaryKeywords: brief.secondaryKeywords,
+            outline: state.outline
+          },
+          published,
+          options.internalLinks?.max ?? 0
+        );
+        logger.info("Related articles selected", {
+          candidates: published.length,
+          offered: internalLinks.length
+        });
+        return { internalLinks };
+      })
+    )
+    .addNode(
       "writer",
       step("writer", stepContext, async (state) => {
         const input = {
@@ -854,6 +899,7 @@ export function createArticleGenerationWorkflow(
           previousArticle: state.previousArticle,
           brief: requiredBrief(state),
           sources: sourceNotes(state),
+          internalLinks: state.internalLinks,
           minWords: requiredBrief(state).minWords,
           maxWords: requiredBrief(state).maxWords
         };
@@ -958,6 +1004,14 @@ export function createArticleGenerationWorkflow(
             language: requiredBrief(state).language,
             sources: state.sources
               ? [...new Set(state.sources.flatMap((source) => [source.url, source.finalUrl]))]
+              : undefined,
+            internalLinks: state.internalLinks
+              ? {
+                  urls: state.internalLinks.map((link) => link.url),
+                  origins: options.internalLinks?.siteOrigin
+                    ? [options.internalLinks.siteOrigin]
+                    : []
+                }
               : undefined
           },
           {
@@ -1087,7 +1141,8 @@ export function createArticleGenerationWorkflow(
       state.brief?.sources?.length ? "read_sources" : "planner"
     )
     .addEdge("read_sources", "planner")
-    .addEdge("planner", "writer")
+    .addConditionalEdges("planner", () => (linksEnabled ? "find_links" : "writer"))
+    .addEdge("find_links", "writer")
     .addEdge("writer", "editor")
     .addEdge("editor", "seo")
     .addEdge("seo", "duplicate_check")
@@ -1542,6 +1597,7 @@ export function createArticleGenerationWorkflow(
       const restored = restoreState(stored.steps);
       const keepOutline = restored.completedSteps?.includes("planner") === true;
       const keepSources = restored.completedSteps?.includes("read_sources") === true;
+      const keepLinks = restored.completedSteps?.includes("find_links") === true;
       const lastPublish = [...stored.steps]
         .reverse()
         .find((entry) => entry.step === "publisher" && entry.status === "succeeded");
@@ -1565,13 +1621,19 @@ export function createArticleGenerationWorkflow(
               { workflowId },
               stored.metadata?.force === true || allowDuplicates,
               {
+                // Everything before the writer is kept: what the writer saw stays what it sees.
                 ...(keepOutline
                   ? {
                       outline: restored.outline,
-                      completedSteps: keepSources ? ["read_sources", "planner"] : ["planner"]
+                      completedSteps: [
+                        ...(keepSources ? ["read_sources"] : []),
+                        "planner",
+                        ...(keepLinks ? ["find_links"] : [])
+                      ]
                     }
                   : {}),
                 ...(keepSources ? { sources: restored.sources } : {}),
+                ...(keepLinks ? { internalLinks: restored.internalLinks } : {}),
                 reviewerFeedback: feedback,
                 previousArticle: article?.editedMarkdown,
                 ownSlug: sentDraft ? (article?.slug ?? undefined) : undefined

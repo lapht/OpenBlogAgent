@@ -1,4 +1,6 @@
-import { normalizeTopic } from "@openblog/types";
+import { normalizeTopic, titleTokens } from "@openblog/types";
+
+export { titleTokens };
 
 import type { TopicCandidate } from "./types";
 
@@ -52,25 +54,6 @@ export const OVERLAP_THRESHOLD = 0.4;
 export const OVERLAP_PENALTY = 60;
 
 const DAY_MS = 86_400_000;
-
-const STOPWORDS = new Set(
-  (
-    "the and for with from that this these those your you our are was were will can how what why when " +
-    "who which into over about than then also not but all any more most per via vs " +
-    "il lo la le gli un una uno dei del della delle degli per con come che cosa perche nel nella " +
-    "sono non piu"
-  ).split(" ")
-);
-
-/** The significant words of a title: lowercase letters and digits, no short or filler words. */
-export function titleTokens(title: string): Set<string> {
-  const tokens = normalizeTopic(title)
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter((token) => token.length >= 3 && !STOPWORDS.has(token));
-  return new Set(tokens);
-}
 
 /** Share of words two titles have in common (Jaccard); 0 when either has fewer than two. */
 export function tokenOverlap(a: string, b: string): number {

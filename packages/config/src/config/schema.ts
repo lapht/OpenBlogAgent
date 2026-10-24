@@ -194,6 +194,9 @@ export const envSchema = z.object({
   /** Characters of source text shared by all the pages of one run. */
   OPENBLOG_SOURCES_MAX_CHARS_TOTAL: z.coerce.number().int().positive().default(15000),
 
+  /** Related published articles the writer may link to (0: off). Only articles with a public address on the same target are offered. */
+  OPENBLOG_INTERNAL_LINKS_MAX: z.coerce.number().int().min(0).max(10).default(0),
+
   /** Language of the generated articles (e.g. `en`, `it`); a brief's `language` overrides it. */
   OPENBLOG_CONTENT_LANGUAGE: z.preprocess(
     (value) => (value === "" ? undefined : value),
