@@ -150,6 +150,14 @@ Used by `openblog schedule run-once` (see Scheduling in `docs/operations.md`, AD
 | `OPENBLOG_SCHEDULE_ALLOWED_WINDOW`   | none    | Local time window `HH:MM-HH:MM` (it may cross midnight, e.g. `22:00-06:00`) in which a run may be started   |
 | `OPENBLOG_SCHEDULE_LOCK_TTL_MINUTES` | `120`   | After this long the lock of a `run-once` whose process died is taken over; keep it above the longest run    |
 
+## Internal links
+
+| Variable                      | Default | Purpose                                                                                                       |
+| ----------------------------- | ------- | ------------------------------------------------------------------------------------------------------------- |
+| `OPENBLOG_INTERNAL_LINKS_MAX` | `0`     | Related published articles of the same site offered to the writer as links (0 to 10); 0 turns the feature off |
+
+With a value above 0, a `find_links` step runs after the planner. It takes the articles that are live (run `published`, so not drafts) with a public `http(s)` address, published through the default publisher (`OPENBLOG_DEFAULT_PUBLISHER`, or any when it is unset), and offers the most related ones to the writer by word overlap alone: the topic, keywords and outline against each article's title (3 points per shared word), tags (2), slug (1) and category (1); at least one title or tag word must be shared. The Markdown publisher stores a file path, not an address, so its articles are never offered; WordPress and Ghost give a post URL. The quality gate then rejects a link to the site that was not offered (`internal_link_not_offered`); the site is the origin of the offered links and of the default publisher's endpoint. See ADR-045.
+
 ## Grounded generation
 
 | Variable                                | Default | Purpose                                                                                       |

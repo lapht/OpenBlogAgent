@@ -5,6 +5,7 @@ export * from "./planner/agent";
 export * from "./writer/agent";
 export * from "./prompts/overrides";
 export { referencesHeading, type SourceNote } from "./prompts/sources";
+export { urlIdentity } from "./quality/validate-article";
 export * from "./review/agent";
 
 // Re-export agent factories for convenience
@@ -29,3 +30,9 @@ export {
   type TopicIdea,
   type TopicIdeaInput
 } from "./research/agent";
+export {
+  selectRelatedArticles,
+  type InternalLink,
+  type PublishedArticle,
+  type RelatedQuery
+} from "./links/related";

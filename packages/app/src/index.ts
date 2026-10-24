@@ -240,6 +240,11 @@ export async function createApplication(
     },
     memory,
     prompts,
+    internalLinks: {
+      max: config.OPENBLOG_INTERNAL_LINKS_MAX,
+      publisherId: config.OPENBLOG_DEFAULT_PUBLISHER,
+      siteOrigin: siteOrigin(config)
+    },
     sources: {
       reader: createSourceReader(fetcher),
       allowPartial: config.OPENBLOG_SOURCES_ALLOW_PARTIAL,
@@ -320,6 +325,25 @@ export async function createApplication(
       await memoryStore?.disconnect();
     }
   };
+}
+
+/** Address of the site articles are published to, from the endpoint of the default publisher. */
+function siteOrigin(config: EnvSchema): string | undefined {
+  const endpoints: Record<string, string | undefined> = {
+    wordpress: config.OPENBLOG_WORDPRESS_ENDPOINT,
+    ghost: config.OPENBLOG_GHOST_ENDPOINT
+  };
+  const configured = Object.entries(endpoints).filter(([, endpoint]) => endpoint);
+  const chosen = config.OPENBLOG_DEFAULT_PUBLISHER
+    ? endpoints[config.OPENBLOG_DEFAULT_PUBLISHER]
+    : configured.length === 1
+      ? configured[0]![1]
+      : undefined;
+  try {
+    return chosen ? new URL(chosen).origin : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function createLlm(config: EnvSchema): LlmPort {

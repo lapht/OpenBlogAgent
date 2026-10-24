@@ -4,7 +4,12 @@ import { DEFAULT_ARTICLE_RULES } from "../quality";
 
 import { briefLines, briefValues, languageLines } from "./brief";
 import { renderPromptTemplate } from "./overrides";
-import { referenceRequirementLines, sourceNoteLines, type SourceNote } from "./sources";
+import {
+  internalLinkLines,
+  referenceRequirementLines,
+  sourceNoteLines,
+  type SourceNote
+} from "./sources";
 
 export const WRITER_PROMPT_VERSION = "3";
 
@@ -21,6 +26,8 @@ export interface WriterPromptOptions {
   maxWords?: number;
   /** Text read from the brief's source pages; the article is grounded in it and lists it as references. */
   sources?: SourceNote[];
+  /** Published articles of the same site the article may link to. */
+  internalLinks?: { title: string; url: string }[];
   /** Operator override of the style instructions; the requirements the quality gate enforces stay. */
   template?: string;
 }
@@ -30,7 +37,7 @@ export function buildWriterPrompt(
   outline: string[],
   options: WriterPromptOptions = {}
 ): string {
-  const { feedback, brief, reviewerFeedback, previousArticle, sources } = options;
+  const { feedback, brief, reviewerFeedback, previousArticle, sources, internalLinks } = options;
   const minWords = options.minWords ?? DEFAULT_ARTICLE_RULES.minWords;
   const maxWords = options.maxWords ?? DEFAULT_ARTICLE_RULES.maxWords;
 
@@ -47,7 +54,8 @@ export function buildWriterPrompt(
     ),
     ...briefLines(brief, ["audience", "tone", "keywords", "notes"]),
     ...sourceNoteLines(sources),
-    ...referenceRequirementLines(sources, brief?.language)
+    ...referenceRequirementLines(sources, brief?.language),
+    ...internalLinkLines(internalLinks)
   ];
   const head =
     options.template !== undefined

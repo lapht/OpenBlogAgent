@@ -99,6 +99,10 @@ Runs execute in a bounded queue: `OPENBLOG_API_CONCURRENCY` at once, `OPENBLOG_A
 
 A run in `needs_review` did not fail, so `resume` is not the fix: read why with `list --json` or the log line `Article workflow needs review` (its `violations`), then decide to approve with an override or generate again.
 
+## Internal links
+
+With `OPENBLOG_INTERNAL_LINKS_MAX` above 0 the writer is offered up to that many related, live articles of the same site (titles and their real addresses from the stored publish results) and told to link only to them. The offered list is the output of the `find_links` step, so `resume` and `revise` reuse it, and a regeneration keeps it. A link to any other page of the site (an address on the origin of an offered link or of the default publisher's endpoint) fails the quality gate with `internal_link_not_offered`, so the article is regenerated or parked as `needs_review`. Links to other sites are not affected here (when the run has `sources`, those rules apply). Nothing is offered until at least one article has been approved with a public address: a draft is not live, and an article that went to the Markdown publisher has no address. Off (the default), nothing changes: no step, no extra prompt text, no extra rule.
+
 ## Notifications
 
 With `OPENBLOG_NOTIFY_WEBHOOK_URL` set, OpenBlogAgent posts a message when a run ends in a state that needs a person, so scheduled runs do not wait unseen. One message is sent for each occurrence of each configured event (`OPENBLOG_NOTIFY_EVENTS`), after the outcome is stored: `awaiting_approval`, `needs_review`, `failed` (a failed step or publisher), `budget_exceeded`, and optionally `published`, `duplicate` and `schedule_limit_reached` (a daily run or cost limit stopped `schedule run-once`; the time window does not notify). A `resume` or `revise` that ends again in one of these states sends a new message; `approve` and `reject` are human actions and send nothing.

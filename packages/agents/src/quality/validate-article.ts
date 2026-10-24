@@ -25,7 +25,8 @@ export type ViolationCode =
   | "keyword_density_low"
   | "keyword_density_high"
   | "references_missing"
-  | "reference_not_provided";
+  | "reference_not_provided"
+  | "internal_link_not_offered";
 
 export interface ArticleViolation {
   code: ViolationCode;
@@ -122,6 +123,12 @@ export interface ArticleValidationInput {
    * least one of them and to no other address.
    */
   sources?: string[];
+  /**
+   * Articles of the same site the writer was allowed to link to. A link to the site (an address on
+   * one of `origins`, which also includes the offered links' own) that is not among `urls` is
+   * invented.
+   */
+  internalLinks?: { urls: string[]; origins?: string[] };
 }
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -273,10 +280,12 @@ export function validateArticle(
   }
 
   if (input.sources && input.sources.length > 0) {
-    const allowed = new Set(input.sources.map(urlIdentity));
+    const allowed = new Set(
+      [...input.sources, ...(input.internalLinks?.urls ?? [])].map(urlIdentity)
+    );
     const linked = [...new Set(extractUrls(prose))];
     const invented = linked.filter((url) => !allowed.has(urlIdentity(url)));
-    if (!linked.some((url) => allowed.has(urlIdentity(url)))) {
+    if (!linked.some((url) => input.sources!.map(urlIdentity).includes(urlIdentity(url)))) {
       add(
         "references_missing",
         `The article does not link to any of its sources; list the ones you used in a references section: ${input.sources.join(", ")}.`
@@ -286,6 +295,30 @@ export function validateArticle(
       add(
         "reference_not_provided",
         `The article links to addresses that are not among its sources: ${invented.slice(0, 3).join(", ")}. Link only to ${input.sources.join(", ")}.`
+      );
+    }
+  }
+
+  if (input.internalLinks) {
+    const offered = new Set(input.internalLinks.urls.map(urlIdentity));
+    const origins = new Set(
+      [...input.internalLinks.urls, ...(input.internalLinks.origins ?? [])].map(originOf)
+    );
+    const allowedSources = new Set((input.sources ?? []).map(urlIdentity));
+    const invented = [...new Set(extractUrls(prose))].filter(
+      (url) =>
+        origins.has(originOf(url)) &&
+        !offered.has(urlIdentity(url)) &&
+        !allowedSources.has(urlIdentity(url))
+    );
+    if (invented.length > 0) {
+      add(
+        "internal_link_not_offered",
+        `The article links to pages of its own site that were not offered: ${invented.slice(0, 3).join(", ")}. ${
+          input.internalLinks.urls.length > 0
+            ? `Link only to ${input.internalLinks.urls.join(", ")}.`
+            : "Remove those links."
+        }`
       );
     }
   }
@@ -345,6 +378,16 @@ function extractUrls(text: string): string[] {
   return (text.match(/https?:\/\/[^\s<>"'`\])]+/gi) ?? []).map((url) =>
     url.replace(/[.,;:!?]+$/, "")
   );
+}
+
+/** `https://host:port` of an address, lowercase and without a leading `www.`; the text itself when it is not an address. */
+function originOf(value: string): string {
+  try {
+    const url = new URL(value);
+    return `${url.protocol === "http:" ? "https:" : url.protocol}//${url.host.replace(/^www\./i, "").toLowerCase()}`;
+  } catch {
+    return value;
+  }
 }
 
 /** Two addresses of the same page compare equal: scheme, `www.`, fragment, tracking and trailing slash ignored. */

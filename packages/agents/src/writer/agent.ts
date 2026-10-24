@@ -20,6 +20,8 @@ export interface WriterAgentInput {
   maxWords?: number;
   /** Text read from the brief's source pages. */
   sources?: SourceNote[];
+  /** Published articles of the same site the article may link to. */
+  internalLinks?: { title: string; url: string }[];
 }
 
 export interface WriterAgent {

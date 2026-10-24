@@ -197,6 +197,17 @@ export interface MemoryPort {
     errorCode: string;
     errorMessage: string;
   }): Promise<void>;
+  /** Live articles with a public address, newest first. Optional: only the persistent store has it. */
+  listPublishedArticles?(options?: { publisherId?: string; limit?: number }): Promise<
+    Array<{
+      workflowId: string;
+      title: string;
+      slug: string | null;
+      category: string | null;
+      tags: string[];
+      url: string;
+    }>
+  >;
   /** A published or parked article of another run with this slug or title. */
   findDuplicateArticle(params: {
     workflowId: string;
