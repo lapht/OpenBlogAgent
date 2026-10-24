@@ -1,5 +1,6 @@
 import type { TextGenerationProvider } from "@openblog/providers";
 import type { ExistingPost, PublishArticle, PublishResult } from "@openblog/publishers";
+import type { Notifier, RunNotification } from "@openblog/notify";
 import type { ContentFetcher, SourceReader } from "@openblog/research";
 
 /** Text generation. Implemented by the providers package (OpenRouter, Ollama, fallback). */
@@ -13,6 +14,10 @@ export type ContentFetcherPort = ContentFetcher;
 
 /** Reads the source pages of a grounded run (fetch through the safe fetcher, then extract the text). */
 export type SourceReaderPort = SourceReader;
+
+/** Tells a person that a run needs them, after its outcome is stored. Delivery failures stay inside it. */
+export type NotifierPort = Notifier;
+export type { RunNotification };
 
 /** Publishes a finished article. Implemented by `DefaultPublisherManager`. */
 export interface PublishPort {

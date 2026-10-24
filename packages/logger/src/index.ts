@@ -46,6 +46,8 @@ const SECRET_KEYS = [
   "token",
   "accessToken",
   "headers",
+  "webhookUrl",
+  "OPENBLOG_NOTIFY_WEBHOOK_URL",
   "OPENROUTER_API_KEY",
   "OPENBLOG_WORDPRESS_APPLICATION_PASSWORD"
 ];

@@ -9,6 +9,7 @@
     "@openblog/agents": "*",
     "@openblog/logger": "*",
     "@openblog/providers": "*",
+    "@openblog/notify": "*",
     "@openblog/publishers": "*",
     "@openblog/research": "*",
     "@openblog/types": "*",

@@ -14,6 +14,7 @@
 - `@openblog/agents`: planner, writer, editor, SEO and classification agents, structured-output helper, deterministic quality rules
 - `@openblog/providers`: OpenRouter and Ollama text generation with timeouts, retries and error classification
 - `@openblog/research`: the safe content fetcher (`ContentFetcher`) that research features use to read external URLs, and the topic sources (RSS/Atom feeds, sitemaps) that turn them into candidates
+- `@openblog/notify`: the webhook notifier (generic, Slack and Discord bodies, bounded retries) behind `NotifierPort`
 - `@openblog/storage`: persistence layer (SQLite connection, migrations, repositories, memory service)
 - `@openblog/publishers`: Markdown and WordPress publishers, the publisher manager and taxonomy providers
 

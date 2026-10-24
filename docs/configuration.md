@@ -124,6 +124,17 @@ Unknown fields, duplicate names and non-http(s) URLs are rejected with the file 
 
 Collected candidates are scored from 0 to 100 and stored in the topic backlog (ADR-040): up to 40 points for recency (linear over 30 days, 10 when undated), up to 30 for the source weight (weight 2 or more is the maximum, the default 1 earns half), 10 per matched `include` keyword up to 20 and minus 20 per matched `exclude` keyword up to 40, and minus up to 60 for token overlap (Jaccard of the significant words) of 0.4 or more with an already published or parked article. A title identical to one of those is not stored at all. The breakdown and a one-line motivation are stored with the score.
 
+## Notifications
+
+| Variable                      | Default                                                 | Purpose                                                                                                            |
+| ----------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `OPENBLOG_NOTIFY_WEBHOOK_URL` | none                                                    | Webhook posted to when a run needs a person. **A secret**: Slack and Discord put a token in the path; never logged |
+| `OPENBLOG_NOTIFY_EVENTS`      | `awaiting_approval,needs_review,failed,budget_exceeded` | Comma-separated events that are sent; also `published`, `duplicate` and `schedule_limit_reached`                   |
+| `OPENBLOG_NOTIFY_FORMAT`      | `generic`                                               | `generic` JSON, or a `slack` (`{ "text" }`) or `discord` (`{ "content" }`) message                                 |
+| `OPENBLOG_NOTIFY_BASE_URL`    | none                                                    | Public address of the server; when set the message links `GET /runs/{id}`                                          |
+
+Without a webhook nothing is sent. See Notifications in `docs/operations.md` and ADR-043.
+
 ## Scheduler
 
 Used by `openblog schedule run-once` (see Scheduling in `docs/operations.md`, ADR-042).

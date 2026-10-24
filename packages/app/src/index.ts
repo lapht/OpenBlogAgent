@@ -8,6 +8,7 @@ import {
   type StoredWorkflowSummary
 } from "@openblog/graph";
 import { logger as defaultLogger, type ILogger } from "@openblog/logger";
+import { createWebhookNotifier, type Notifier } from "@openblog/notify";
 import {
   createDefaultTextGenerationProvider,
   OllamaProvider,
@@ -75,6 +76,8 @@ export interface ApplicationOverrides {
   tagProvider?: ITagProvider;
   /** Replaces the safe content fetcher the research sources are read through (tests). */
   fetcher?: ContentFetcher;
+  /** Replaces the webhook notifier built from `OPENBLOG_NOTIFY_*` (tests). */
+  notifier?: Notifier;
   /** The clock research scoring and decisions use (tests). */
   clock?: () => Date;
 }
@@ -203,7 +206,20 @@ export async function createApplication(
   // One safe fetcher serves both the source pages of a run and the research sources.
   const fetcher = overrides.fetcher ?? createContentFetcherFromConfig(config);
 
+  const notifier =
+    overrides.notifier ??
+    (config.OPENBLOG_NOTIFY_WEBHOOK_URL
+      ? createWebhookNotifier({
+          url: config.OPENBLOG_NOTIFY_WEBHOOK_URL,
+          events: config.OPENBLOG_NOTIFY_EVENTS,
+          format: config.OPENBLOG_NOTIFY_FORMAT,
+          baseUrl: config.OPENBLOG_NOTIFY_BASE_URL,
+          logger
+        })
+      : undefined);
+
   const workflow = createArticleGenerationWorkflow({
+    notifier,
     logger,
     llm,
     models: {
@@ -293,6 +309,7 @@ export async function createApplication(
             workflow,
             memory,
             logger,
+            notifier,
             clock: overrides.clock
           })
         : undefined,

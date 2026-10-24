@@ -4,6 +4,7 @@ import os from "node:os";
 import type { EnvSchema } from "@openblog/config";
 import type { ArticleGenerationWorkflow, ArticleWorkflowResult, MemoryPort } from "@openblog/graph";
 import type { ILogger } from "@openblog/logger";
+import type { Notifier } from "@openblog/notify";
 import type { CandidateRecord, SchedulerStore } from "@openblog/storage";
 import { articleBriefSchema, formatBriefIssues } from "@openblog/types";
 
@@ -44,6 +45,8 @@ export interface SchedulerServiceOptions {
   workflow: ArticleGenerationWorkflow;
   memory?: MemoryPort;
   logger: ILogger;
+  /** Told when a daily limit stops a run; the notifier decides whether it sends that event. */
+  notifier?: Notifier;
   /** The clock for the lock, the limits and the window (tests). */
   clock?: () => Date;
   /** Who holds the lock; defaults to `host:pid:random`, new for every call. */
@@ -121,6 +124,17 @@ export function createSchedulerService(options: SchedulerServiceOptions): Schedu
         const limit = limitHit(clock());
         if (limit) {
           logger.info("Scheduler limit reached", limit);
+          // Being outside the window is the normal state of a night schedule, not news.
+          if (limit.reason !== "outside_window") {
+            await options.notifier
+              ?.notify({
+                event: "schedule_limit_reached",
+                status: "limit_reached",
+                errorCode: limit.reason,
+                errorMessage: limit.detail
+              })
+              .catch(() => undefined);
+          }
           return { ...common, status: "limit_reached", ...limit };
         }
 

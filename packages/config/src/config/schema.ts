@@ -1,4 +1,4 @@
-import { languageCodeSchema } from "@openblog/types";
+import { languageCodeSchema, NOTIFY_EVENTS } from "@openblog/types";
 import { z } from "zod";
 
 /**
@@ -148,6 +148,34 @@ export const envSchema = z.object({
   /** Minutes after which the lock of a `schedule run-once` whose process died counts as stale. */
   OPENBLOG_SCHEDULE_LOCK_TTL_MINUTES: z.coerce.number().int().positive().default(120),
 
+  /** Webhook that is told when a run needs a person (Slack, Discord or any JSON endpoint). A secret: never logged. */
+  OPENBLOG_NOTIFY_WEBHOOK_URL: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z
+      .string()
+      .url()
+      .refine((value) => /^https?:\/\//i.test(value), "must be an http or https URL")
+      .optional()
+  ), // secret
+  /** Comma-separated events sent to the webhook: awaiting_approval, needs_review, failed, budget_exceeded, published, duplicate, schedule_limit_reached. */
+  OPENBLOG_NOTIFY_EVENTS: z
+    .string()
+    .default("awaiting_approval,needs_review,failed,budget_exceeded")
+    .transform((value) =>
+      value
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean)
+    )
+    .pipe(z.array(z.enum(NOTIFY_EVENTS))),
+  /** Body of the notification: `generic` JSON, or a `slack` / `discord` message. */
+  OPENBLOG_NOTIFY_FORMAT: z.enum(["generic", "slack", "discord"]).default("generic"),
+  /** Public address of the server (`https://blog.example.com:3000`), used to link `GET /runs/{id}` in notifications. */
+  OPENBLOG_NOTIFY_BASE_URL: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().url().optional()
+  ),
+
   /** A source page that cannot be read: skip it and go on with the others instead of failing the run. */
   OPENBLOG_SOURCES_ALLOW_PARTIAL: envBoolean(false),
   /** Characters of text kept from one source page. */
@@ -189,5 +217,6 @@ export const SECRET_ENV_KEYS = [
   "OPENROUTER_API_KEY",
   "OPENBLOG_API_KEY",
   "OPENBLOG_GHOST_ADMIN_API_KEY",
+  "OPENBLOG_NOTIFY_WEBHOOK_URL",
   "OPENBLOG_WORDPRESS_APPLICATION_PASSWORD"
 ] as const satisfies readonly (keyof EnvSchema)[];
