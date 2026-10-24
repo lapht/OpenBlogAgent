@@ -123,6 +123,13 @@ export const envSchema = z.object({
     z.coerce.number().min(0).max(100).optional()
   ),
 
+  /** A source page that cannot be read: skip it and go on with the others instead of failing the run. */
+  OPENBLOG_SOURCES_ALLOW_PARTIAL: envBoolean(false),
+  /** Characters of text kept from one source page. */
+  OPENBLOG_SOURCES_MAX_CHARS_PER_SOURCE: z.coerce.number().int().positive().default(6000),
+  /** Characters of source text shared by all the pages of one run. */
+  OPENBLOG_SOURCES_MAX_CHARS_TOTAL: z.coerce.number().int().positive().default(15000),
+
   /** Language of the generated articles (e.g. `en`, `it`); a brief's `language` overrides it. */
   OPENBLOG_CONTENT_LANGUAGE: z.preprocess(
     (value) => (value === "" ? undefined : value),

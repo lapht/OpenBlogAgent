@@ -2,6 +2,7 @@ import type { ArticleBrief } from "@openblog/types";
 
 import { briefLines, briefValues, languageLines } from "./brief";
 import { renderPromptTemplate } from "./overrides";
+import { sourceNoteLines, type SourceNote } from "./sources";
 
 export const PLANNER_PROMPT_VERSION = "3";
 
@@ -9,10 +10,16 @@ export const PLANNER_PROMPT_VERSION = "3";
  * `template` is an operator override of the instructions (validated placeholders); the language,
  * brief and JSON contract lines stay in code and are always part of the prompt.
  */
-export function buildPlannerPrompt(topic: string, brief?: ArticleBrief, template?: string): string {
+export function buildPlannerPrompt(
+  topic: string,
+  brief?: ArticleBrief,
+  template?: string,
+  sources?: readonly SourceNote[]
+): string {
   const context = [
     ...languageLines(brief, "Write the section titles in {language}."),
-    ...briefLines(brief, ["audience", "tone", "keywords", "notes"])
+    ...briefLines(brief, ["audience", "tone", "keywords", "notes"]),
+    ...sourceNoteLines(sources)
   ];
   const contract = [
     "Return valid JSON only.",

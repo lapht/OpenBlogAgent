@@ -124,13 +124,23 @@ Unknown fields, duplicate names and non-http(s) URLs are rejected with the file 
 
 Collected candidates are scored from 0 to 100 and stored in the topic backlog (ADR-040): up to 40 points for recency (linear over 30 days, 10 when undated), up to 30 for the source weight (weight 2 or more is the maximum, the default 1 earns half), 10 per matched `include` keyword up to 20 and minus 20 per matched `exclude` keyword up to 40, and minus up to 60 for token overlap (Jaccard of the significant words) of 0.4 or more with an already published or parked article. A title identical to one of those is not stored at all. The breakdown and a one-line motivation are stored with the score.
 
+## Grounded generation
+
+| Variable                                | Default | Purpose                                                                                       |
+| --------------------------------------- | ------- | --------------------------------------------------------------------------------------------- |
+| `OPENBLOG_SOURCES_ALLOW_PARTIAL`        | `false` | A source page that cannot be read is skipped (and logged) instead of failing the run          |
+| `OPENBLOG_SOURCES_MAX_CHARS_PER_SOURCE` | `6000`  | Characters of text kept from one page                                                         |
+| `OPENBLOG_SOURCES_MAX_CHARS_TOTAL`      | `15000` | Characters shared by all pages of a run; each page gets an equal share, never above the limit |
+
+A brief can name up to 5 `sources` (http or https URLs; `--source <url>`, repeatable, or `sources` in a brief file or the `POST /runs` body). The pages are read through the content fetcher (its address rules and limits apply), their main text is extracted and given to the planner and the writer as untrusted reference material, and the article ends with a references section (`References`, `Fonti`... in the article's language) linking to the sources it used. See ADR-041.
+
 ## Prompt overrides
 
 | Variable               | Default | Purpose                                                                                                       |
 | ---------------------- | ------- | ------------------------------------------------------------------------------------------------------------- |
 | `OPENBLOG_PROMPTS_DIR` | none    | Directory with optional `planner.md`, `writer.md`, `editor.md`, `seo.md`, `classification.md` and `review.md` |
 
-A file replaces the instructions (role, style, tone) of that agent's prompt; a missing file keeps the built-in text, and without the variable nothing changes. The parts the code depends on are always added after your text and cannot be overridden: the output language, the brief fields, the JSON structure and rules the replies are parsed with, the outline and article text, and for the writer the requirements the quality gate enforces (no H1, H2 sections, the word range). The two ends of the pipeline therefore stay safe, while house style is yours.
+A file replaces the instructions (role, style, tone) of that agent's prompt; a missing file keeps the built-in text, and without the variable nothing changes. The parts the code depends on are always added after your text and cannot be overridden: the output language, the brief fields, the JSON structure and rules the replies are parsed with, the outline and article text, and for the writer the requirements the quality gate enforces (no H1, H2 sections, the word range). The two ends of the pipeline therefore stay safe, while house style is yours. The reference material of a grounded run and the reference requirements are part of that fixed code too.
 
 Placeholders, written `{{name}}` (unset brief fields render as nothing):
 

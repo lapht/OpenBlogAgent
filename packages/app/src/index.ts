@@ -27,7 +27,8 @@ import {
 } from "@openblog/publishers";
 import { createSQLiteMemoryService } from "@openblog/storage";
 
-import type { ContentFetcher } from "@openblog/research";
+import { createSourceReader, type ContentFetcher } from "@openblog/research";
+import { createContentFetcherFromConfig } from "./fetcher";
 import { loadPromptOverrides } from "./prompts";
 import { createResearchService, type ResearchService } from "./research";
 import { loadStaticTaxonomy } from "./taxonomy";
@@ -189,6 +190,9 @@ export async function createApplication(
 
   const memory = overrides.memory ?? memoryStore?.memoryService;
 
+  // One safe fetcher serves both the source pages of a run and the research sources.
+  const fetcher = overrides.fetcher ?? createContentFetcherFromConfig(config);
+
   const workflow = createArticleGenerationWorkflow({
     logger,
     llm,
@@ -209,6 +213,12 @@ export async function createApplication(
     },
     memory,
     prompts,
+    sources: {
+      reader: createSourceReader(fetcher),
+      allowPartial: config.OPENBLOG_SOURCES_ALLOW_PARTIAL,
+      maxCharsPerSource: config.OPENBLOG_SOURCES_MAX_CHARS_PER_SOURCE,
+      maxCharsTotal: config.OPENBLOG_SOURCES_MAX_CHARS_TOTAL
+    },
     defaultCategory: taxonomyConfig.defaultCategory,
     maxTags: taxonomyConfig.maxTags,
     allowDuplicates: config.OPENBLOG_ALLOW_DUPLICATES,
@@ -258,7 +268,7 @@ export async function createApplication(
       ? createResearchService({
           config,
           backlog: memoryStore.backlog,
-          fetcher: overrides.fetcher,
+          fetcher,
           clock: overrides.clock
         })
       : undefined,

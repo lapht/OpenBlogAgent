@@ -52,7 +52,14 @@ const startBody = {
       maximum: 20000,
       description: "Must not be smaller than `minWords`."
     },
-    notes: { type: "string", minLength: 1, maxLength: 2000 }
+    notes: { type: "string", minLength: 1, maxLength: 2000 },
+    sources: {
+      type: "array",
+      minItems: 1,
+      maxItems: 5,
+      items: { type: "string", format: "uri", maxLength: 2000, pattern: "^https?://" },
+      description: "Pages the article is grounded in; read first and listed as references."
+    }
   },
   required: ["topic"],
   additionalProperties: false

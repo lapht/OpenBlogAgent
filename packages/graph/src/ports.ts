@@ -1,6 +1,6 @@
 import type { TextGenerationProvider } from "@openblog/providers";
 import type { ExistingPost, PublishArticle, PublishResult } from "@openblog/publishers";
-import type { ContentFetcher } from "@openblog/research";
+import type { ContentFetcher, SourceReader } from "@openblog/research";
 
 /** Text generation. Implemented by the providers package (OpenRouter, Ollama, fallback). */
 export type LlmPort = TextGenerationProvider;
@@ -10,6 +10,9 @@ export type LlmPort = TextGenerationProvider;
  * network; implemented by the research package with SSRF protection.
  */
 export type ContentFetcherPort = ContentFetcher;
+
+/** Reads the source pages of a grounded run (fetch through the safe fetcher, then extract the text). */
+export type SourceReaderPort = SourceReader;
 
 /** Publishes a finished article. Implemented by `DefaultPublisherManager`. */
 export interface PublishPort {

@@ -4,6 +4,7 @@ import type { TextGenerationProvider } from "@openblog/providers";
 import type { ArticleBrief } from "@openblog/types";
 
 import { buildPlannerPrompt } from "../prompts/planner";
+import type { SourceNote } from "../prompts/sources";
 import { generateStructured, type StructuredOutputOptions } from "../structured-output";
 
 export const plannerOutlineSchema = z.array(z.string().trim().min(1)).min(3);
@@ -11,6 +12,8 @@ export const plannerOutlineSchema = z.array(z.string().trim().min(1)).min(3);
 export interface PlannerAgentInput {
   topic: string;
   brief?: ArticleBrief;
+  /** Text read from the brief's source pages; the outline should cover what they say. */
+  sources?: SourceNote[];
 }
 
 export interface PlannerAgent {
@@ -24,11 +27,12 @@ export function createPlannerAgent(
   options: StructuredOutputOptions = {}
 ): PlannerAgent {
   return {
-    buildPrompt: (input) => buildPlannerPrompt(input.topic, input.brief, options.promptTemplate),
+    buildPrompt: (input) =>
+      buildPlannerPrompt(input.topic, input.brief, options.promptTemplate, input.sources),
     run(input: PlannerAgentInput): Promise<string[]> {
       return generateStructured(provider, {
         ...options,
-        prompt: buildPlannerPrompt(input.topic, input.brief, options.promptTemplate),
+        prompt: buildPlannerPrompt(input.topic, input.brief, options.promptTemplate, input.sources),
         schema: plannerOutlineSchema,
         shape: "array",
         label: "Planner"

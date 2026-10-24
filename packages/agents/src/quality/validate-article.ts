@@ -23,7 +23,9 @@ export type ViolationCode =
   | "keyword_missing_in_h2"
   | "keyword_missing_in_intro"
   | "keyword_density_low"
-  | "keyword_density_high";
+  | "keyword_density_high"
+  | "references_missing"
+  | "reference_not_provided";
 
 export interface ArticleViolation {
   code: ViolationCode;
@@ -115,6 +117,11 @@ export interface ArticleValidationInput {
   keyword?: string;
   /** Language of the article (`en`, `it`, `pt-BR`...); language-specific phrase rules follow it. Defaults to `en`. */
   language?: string;
+  /**
+   * The URLs the article was grounded in; enables the reference rules: the article must link to at
+   * least one of them and to no other address.
+   */
+  sources?: string[];
 }
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -265,6 +272,24 @@ export function validateArticle(
     }
   }
 
+  if (input.sources && input.sources.length > 0) {
+    const allowed = new Set(input.sources.map(urlIdentity));
+    const linked = [...new Set(extractUrls(prose))];
+    const invented = linked.filter((url) => !allowed.has(urlIdentity(url)));
+    if (!linked.some((url) => allowed.has(urlIdentity(url)))) {
+      add(
+        "references_missing",
+        `The article does not link to any of its sources; list the ones you used in a references section: ${input.sources.join(", ")}.`
+      );
+    }
+    if (invented.length > 0) {
+      add(
+        "reference_not_provided",
+        `The article links to addresses that are not among its sources: ${invented.slice(0, 3).join(", ")}. Link only to ${input.sources.join(", ")}.`
+      );
+    }
+  }
+
   const repeated = findRepeatedParagraph(prose, config.minRepeatedParagraphWords);
   if (repeated) {
     add("repeated_paragraph", `A paragraph is repeated: "${repeated}".`);
@@ -313,6 +338,29 @@ function analyze(markdown: string): {
   }
 
   return { prose: proseLines.join("\n"), headings, fencesBalanced: fence === undefined };
+}
+
+/** http(s) addresses in the text, without the punctuation that ends a sentence or a link. */
+function extractUrls(text: string): string[] {
+  return (text.match(/https?:\/\/[^\s<>"'`\])]+/gi) ?? []).map((url) =>
+    url.replace(/[.,;:!?]+$/, "")
+  );
+}
+
+/** Two addresses of the same page compare equal: scheme, `www.`, fragment, tracking and trailing slash ignored. */
+export function urlIdentity(value: string): string {
+  try {
+    const url = new URL(value);
+    const query = [...url.searchParams.entries()]
+      .filter(([key]) => !/^utm_/i.test(key))
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, val]) => `${key}=${val}`)
+      .join("&");
+    const path = url.pathname.replace(/\/+$/, "");
+    return `${url.hostname.replace(/^www\./i, "").toLowerCase()}${path}${query ? `?${query}` : ""}`;
+  } catch {
+    return value;
+  }
 }
 
 function countWords(text: string): number {

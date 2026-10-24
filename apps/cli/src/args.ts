@@ -105,6 +105,7 @@ Brief options (generate, topics accept and topics generate; each overrides the s
   --min-words <n>      Minimum article length in words
   --max-words <n>      Maximum article length in words
   --notes <text>       Editorial notes for the writers
+  --source <url>       Ground the article in this page and list it as a reference (repeatable, up to 5)
   -h, --help           Show this help
 
 Exit codes:
@@ -141,7 +142,8 @@ export function parseCommand(argv: string[]): ParsedCommand {
         keyword: { type: "string" },
         "min-words": { type: "string" },
         "max-words": { type: "string" },
-        notes: { type: "string" }
+        notes: { type: "string" },
+        source: { type: "string", multiple: true }
       }
     });
   } catch (error) {
@@ -304,10 +306,13 @@ const BRIEF_FLAGS = [
   "keyword",
   "min-words",
   "max-words",
-  "notes"
+  "notes",
+  "source"
 ] as const;
 
-type BriefFlagValues = Partial<Record<(typeof BRIEF_FLAGS)[number], string>>;
+type BriefFlagValues = Partial<Record<Exclude<(typeof BRIEF_FLAGS)[number], "source">, string>> & {
+  source?: string[];
+};
 
 function readBriefFile(file: string): Record<string, unknown> {
   let content: string;
@@ -352,7 +357,8 @@ function briefFieldsFromValues(values: BriefFlagValues): Record<string, unknown>
       values["min-words"] === undefined ? undefined : wordCount("min-words", values["min-words"]),
     maxWords:
       values["max-words"] === undefined ? undefined : wordCount("max-words", values["max-words"]),
-    notes: values.notes
+    notes: values.notes,
+    sources: values.source
   };
   const override = Object.fromEntries(
     Object.entries(fromFlags).filter(([, value]) => value !== undefined)

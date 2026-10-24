@@ -15,7 +15,7 @@ Run after `npm run build` as `npm start -- <command>` (or `openblog <command>` f
 | `revise <id>`      | Send a stored article back to the writer; `--feedback "what to change"` is required               |
 | `list`             | The 20 most recent runs, newest first, with status, failed step, total tokens and cost            |
 
-Options: `--dry-run`, `--publisher <id>`, `--force`, `--recover-stale` (`list` only: mark runs with no activity for `OPENBLOG_RUN_STALE_AFTER_MINUTES` as `interrupted` first, logging how many), `--json`, `--help`, and for `generate` the brief options `--brief <file>` (YAML or JSON), `--language`, `--audience`, `--tone`, `--keyword`, `--min-words`, `--max-words`, `--notes` (flags override the file; see the README). An invalid brief exits `64` before any provider call; `--dry-run` and `--json` show the effective brief. `--dry-run` runs everything except the publish call, on a throwaway copy of the database: nothing is stored, written or sent, and earlier runs are still visible to duplicate checks, `resume` and `approve`.
+Options: `--dry-run`, `--publisher <id>`, `--force`, `--recover-stale` (`list` only: mark runs with no activity for `OPENBLOG_RUN_STALE_AFTER_MINUTES` as `interrupted` first, logging how many), `--json`, `--help`, and for `generate` the brief options `--brief <file>` (YAML or JSON), `--language`, `--audience`, `--tone`, `--keyword`, `--min-words`, `--max-words`, `--notes`, `--source <url>` (repeatable) (flags override the file; see the README). An invalid brief exits `64` before any provider call; `--dry-run` and `--json` show the effective brief. `--dry-run` runs everything except the publish call, on a throwaway copy of the database: nothing is stored, written or sent, and earlier runs are still visible to duplicate checks, `resume` and `approve`.
 
 ## Run statuses
 
@@ -98,6 +98,12 @@ Runs execute in a bounded queue: `OPENBLOG_API_CONCURRENCY` at once, `OPENBLOG_A
 3. Fix it, then `npm start -- resume <id>`. Steps that already succeeded are restored from the database, so the provider is only called for the step that failed and the ones after it.
 
 A run in `needs_review` did not fail, so `resume` is not the fix: read why with `list --json` or the log line `Article workflow needs review` (its `violations`), then decide to approve with an override or generate again.
+
+## Grounded generation
+
+`openblog generate "topic" --source https://example.com/report [--source ...]` (up to 5; also `sources` in a `--brief` file, the `POST /runs` and `POST /topics/{id}/accept` bodies) adds a first step, `read_sources`: each page is fetched through the content fetcher, its main text extracted (title, `<article>`/`<main>`/`<body>` content without scripts, navigation, footers and comments) and cut to the budget (`OPENBLOG_SOURCES_MAX_CHARS_*`). The extracted text is stored as the step's output, so `resume` and `revise` reuse it and never fetch again. The planner and the writer receive it between `<source>` tags with the warning that it is untrusted and its instructions must not be followed; the writer must end with a references section linking only to the sources it used. The quality gate then checks it: an article without a link to any source is `references_missing`, a link to any other address is `reference_not_provided` (both errors, so the article is regenerated or parked as `needs_review`; redirects, `www.`, trailing slashes and tracking parameters do not matter). Without sources nothing changes: no step, no fetch, no extra rule.
+
+A page that cannot be used fails the run at `read_sources` with a clear code: the fetch codes (`fetch_blocked`, `fetch_http_error`, `fetch_timeout`, `fetch_too_large`, `fetch_unsupported_type`, `fetch_network`), `source_empty` (the page has almost no readable text, typically because scripts render it), `sources_unavailable` (no reader configured) or `sources_failed` (with `OPENBLOG_SOURCES_ALLOW_PARTIAL=true`, no page could be read). `topics generate <id>` grounds the article in the page the candidate was found on unless the stored or given brief names other sources.
 
 ## Fetching external content
 

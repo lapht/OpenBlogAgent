@@ -16,6 +16,12 @@ export function buildEditorPrompt(input: EditorAgentInput, template?: string): s
         ]),
     ...languageLines(input.brief, "The article is written in {language}; keep it in {language}."),
     ...briefLines(input.brief, ["audience", "tone", "keywords"]),
+    ...(input.brief?.sources?.length
+      ? [
+          "",
+          `The article ends with a references section linking to its sources. Keep that section and every link exactly as they are.`
+        ]
+      : []),
     "",
     "Output rules:",
     "- Return valid JSON only.",
