@@ -154,10 +154,50 @@ export async function runCli(options: RunCliOptions = {}): Promise<number> {
               );
               return EXIT.ok;
             }
+            case "enrich": {
+              if (command.id) {
+                const candidate = await research.enrich(command.id);
+                emit(
+                  {
+                    command: "topics enrich",
+                    status: "ok",
+                    exitCode: EXIT.ok,
+                    candidates: [candidate]
+                  },
+                  formatCandidate(candidate)
+                );
+                return EXIT.ok;
+              }
+              const outcome = await research.enrichTop(flags.top!);
+              const failed = outcome.failed.length > 0 && outcome.enriched.length === 0;
+              const exitCode = failed ? EXIT.failed : EXIT.ok;
+              emit(
+                {
+                  command: "topics enrich",
+                  status: failed ? "failed" : "ok",
+                  exitCode,
+                  candidates: outcome.enriched,
+                  failed: outcome.failed,
+                  costUsd: outcome.costUsd,
+                  totalTokens: outcome.totalTokens,
+                  stoppedByBudget: outcome.stoppedByBudget
+                },
+                [
+                  formatCandidates(outcome.enriched),
+                  ...outcome.failed.map((entry) => `FAILED ${entry.title}: ${entry.error}`),
+                  outcome.stoppedByBudget ? "Stopped: OPENBLOG_RESEARCH_MAX_COST reached." : "",
+                  `${outcome.totalTokens} tokens, $${outcome.costUsd.toFixed(4)}`
+                ]
+                  .filter(Boolean)
+                  .join("\n")
+              );
+              return exitCode;
+            }
             case "accept": {
               const candidate = research.accept(command.id, {
                 by: currentUser(),
-                brief: command.brief
+                brief: command.brief,
+                useEnrichment: flags.useEnrichment
               });
               emit(
                 { command: "topics accept", status: "ok", exitCode: EXIT.ok, candidate },

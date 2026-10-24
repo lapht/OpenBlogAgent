@@ -200,6 +200,11 @@ const migrations: Migration[] = [
         expires_at TEXT NOT NULL
       );
     `);
+  },
+
+  // v10: the angle the model proposed for a topic candidate.
+  (db) => {
+    addMissingColumns(db, "topic_candidates", { enrichment_json: "TEXT" });
   }
 ];
 

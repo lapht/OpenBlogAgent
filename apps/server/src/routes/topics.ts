@@ -56,6 +56,12 @@ const candidate = {
     decisionNote: nullableString,
     decidedAt: nullableString,
     workflowId: nullableString,
+    enrichment: {
+      type: ["object", "null"],
+      description:
+        "The model's proposal (angle, workingTitle, targetKeyword, motivation); informative, the score ignores it.",
+      additionalProperties: true
+    },
     createdAt: { type: "string" },
     updatedAt: { type: "string" }
   }
@@ -112,7 +118,8 @@ const BACKLOG_STATUS: Record<string, number> = {
 
 const RESEARCH_STATUS: Record<string, number> = {
   sources_not_configured: 503,
-  backlog_unavailable: 503
+  backlog_unavailable: 503,
+  llm_unavailable: 503
 };
 
 /** Turns the backlog's typed errors into the API's, so clients see stable codes. */
@@ -213,6 +220,7 @@ export async function registerTopicRoutes(
                   }
                 }
               },
+              enrichment: { type: "object", additionalProperties: true },
               candidates: {
                 type: "array",
                 items: {
@@ -240,7 +248,7 @@ export async function registerTopicRoutes(
 
   app.post<{
     Params: { id: string };
-    Body?: { acceptedBy?: string; brief?: Record<string, unknown> };
+    Body?: { acceptedBy?: string; brief?: Record<string, unknown>; useEnrichment?: boolean };
   }>(
     "/topics/:id/accept",
     {
@@ -254,6 +262,11 @@ export async function registerTopicRoutes(
           type: ["object", "null"],
           properties: {
             acceptedBy: { type: "string", minLength: 1, maxLength: 100 },
+            useEnrichment: {
+              type: "boolean",
+              description:
+                "Put the proposed keyword and angle in the brief; the fields of `brief` win."
+            },
             brief: {
               type: "object",
               properties: briefProperties,
@@ -275,10 +288,47 @@ export async function registerTopicRoutes(
       try {
         return research().accept(request.params.id, {
           by: request.body?.acceptedBy ?? "api",
-          brief: request.body?.brief
+          brief: request.body?.brief,
+          useEnrichment: request.body?.useEnrichment
         });
       } catch (error) {
         return translate(error);
+      }
+    }
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/topics/:id/enrich",
+    {
+      schema: {
+        summary: "Ask the model for an article angle",
+        description:
+          "Proposes an angle, a working title, a target keyword and a motivation for the candidate, and stores them. Costs one model call (more if the reply is invalid); it never changes the score. Runs while the request waits.",
+        tags: ["topics"],
+        params: idParams,
+        response: {
+          200: candidate,
+          404: errorResponse,
+          409: errorResponse,
+          502: errorResponse,
+          503: errorResponse
+        }
+      }
+    },
+    async (request) => {
+      try {
+        return await research().enrich(request.params.id);
+      } catch (error) {
+        if (
+          error instanceof BacklogError ||
+          error instanceof ResearchError ||
+          error instanceof SourcesConfigError
+        ) {
+          return translate(error);
+        }
+        // The model could not give a valid proposal: not the client's fault, not ours.
+        request.log.warn({ err: error }, "Enrichment failed");
+        throw new ApiError(502, "enrichment_failed", "The model did not return a usable proposal");
       }
     }
   );

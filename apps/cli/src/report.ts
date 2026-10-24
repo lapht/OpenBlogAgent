@@ -301,7 +301,7 @@ export function exitCodeForSchedule(outcome: RunOnceOutcome, runCode: number): n
 }
 
 export interface TopicsSummary {
-  command: "topics list" | "topics accept" | "topics drop";
+  command: "topics list" | "topics accept" | "topics drop" | "topics enrich";
   status: "ok";
   exitCode: 0;
   candidates?: CandidateRecord[];
@@ -319,7 +319,13 @@ export function formatCandidate(candidate: CandidateRecord): string {
   return [
     `${shortId(candidate.id)}  ${String(candidate.score).padStart(3)}  ${candidate.status.padEnd(8)}  ${candidate.title}`,
     `          ${candidate.url}  [${candidate.source}${date}]`,
-    `          ${candidate.motivation}${decision}`
+    `          ${candidate.motivation}${decision}`,
+    ...(candidate.enrichment
+      ? [
+          `          proposal: ${candidate.enrichment.workingTitle} [${candidate.enrichment.targetKeyword}]`,
+          `          ${candidate.enrichment.angle}`
+        ]
+      : [])
   ].join("\n");
 }
 

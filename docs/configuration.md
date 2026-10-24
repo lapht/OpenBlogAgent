@@ -36,14 +36,15 @@ OpenRouter is used first when `OPENROUTER_API_KEY` is set; Ollama is used when i
 
 Each step can use its own model, for example a cheap one for classification and a stronger one for the writer. A variable left unset means the provider's default model (`OPENROUTER_MODEL`, or `OLLAMA_MODEL`), so nothing changes without them. The writer's variable also applies to its regenerations. Usage and the run budget stay shared by all steps.
 
-| Variable                        | Default | Purpose                                |
-| ------------------------------- | ------- | -------------------------------------- |
-| `OPENBLOG_MODEL_PLANNER`        | none    | Model of the planner (outline)         |
-| `OPENBLOG_MODEL_WRITER`         | none    | Model of the writer                    |
-| `OPENBLOG_MODEL_EDITOR`         | none    | Model of the editor                    |
-| `OPENBLOG_MODEL_SEO`            | none    | Model of the SEO agent                 |
-| `OPENBLOG_MODEL_CLASSIFICATION` | none    | Model of the classification step       |
-| `OPENBLOG_MODEL_REVIEW`         | none    | Model of the optional editorial review |
+| Variable                        | Default | Purpose                                                           |
+| ------------------------------- | ------- | ----------------------------------------------------------------- |
+| `OPENBLOG_MODEL_PLANNER`        | none    | Model of the planner (outline)                                    |
+| `OPENBLOG_MODEL_WRITER`         | none    | Model of the writer                                               |
+| `OPENBLOG_MODEL_EDITOR`         | none    | Model of the editor                                               |
+| `OPENBLOG_MODEL_SEO`            | none    | Model of the SEO agent                                            |
+| `OPENBLOG_MODEL_CLASSIFICATION` | none    | Model of the classification step                                  |
+| `OPENBLOG_MODEL_REVIEW`         | none    | Model of the optional editorial review                            |
+| `OPENBLOG_MODEL_RESEARCH`       | none    | Model that proposes angles for topic candidates (`topics enrich`) |
 
 The values are OpenRouter model ids (`vendor/model`). When OpenRouter is not configured and Ollama is the provider, they are sent to Ollama as its model names. When Ollama is only the fallback for a failed OpenRouter call, the per-step value is **not** sent: Ollama uses `OLLAMA_MODEL`, because an OpenRouter id means nothing to it. The model the provider reports for each step execution is stored (`workflow_steps.model`) and shown by `list --json` (`models`, the latest model of each step) and `GET /runs/{id}` (`model` per step, plus `models`).
 
@@ -102,10 +103,13 @@ Only `http` and `https` are fetched, never with credentials in the URL. Content 
 
 ## Research sources
 
-| Variable                                  | Default | Purpose                                                                                                            |
-| ----------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------ |
-| `OPENBLOG_RESEARCH_SOURCES_FILE`          | none    | YAML or JSON file listing the feeds and sitemaps that `research collect` reads                                     |
-| `OPENBLOG_RESEARCH_AUTO_ACCEPT_MIN_SCORE` | none    | Candidates scoring at least this (0-100) are accepted without a human when collected; unset: only a person accepts |
+| Variable                                  | Default | Purpose                                                                                                                                                   |
+| ----------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPENBLOG_RESEARCH_SOURCES_FILE`          | none    | YAML or JSON file listing the feeds and sitemaps that `research collect` reads                                                                            |
+| `OPENBLOG_RESEARCH_ENRICH`                | `false` | Ask the model for an angle, working title, target keyword and motivation for new candidates when they are collected (one call each)                       |
+| `OPENBLOG_RESEARCH_ENRICH_LIMIT`          | `5`     | With `OPENBLOG_RESEARCH_ENRICH`, how many of the best new candidates of a collection are enriched                                                         |
+| `OPENBLOG_RESEARCH_MAX_COST`              | none    | Stop enriching in one invocation (a collection, `topics enrich --top`) once the provider-reported cost in USD reaches this; separate from the run budgets |
+| `OPENBLOG_RESEARCH_AUTO_ACCEPT_MIN_SCORE` | none    | Candidates scoring at least this (0-100) are accepted without a human when collected; unset: only a person accepts                                        |
 
 ```yaml
 sources:
@@ -122,7 +126,7 @@ sources:
 
 Unknown fields, duplicate names and non-http(s) URLs are rejected with the file name and every problem. All requests go through the content fetcher above, so its limits and address rules apply.
 
-Collected candidates are scored from 0 to 100 and stored in the topic backlog (ADR-040): up to 40 points for recency (linear over 30 days, 10 when undated), up to 30 for the source weight (weight 2 or more is the maximum, the default 1 earns half), 10 per matched `include` keyword up to 20 and minus 20 per matched `exclude` keyword up to 40, and minus up to 60 for token overlap (Jaccard of the significant words) of 0.4 or more with an already published or parked article. A title identical to one of those is not stored at all. The breakdown and a one-line motivation are stored with the score.
+Collected candidates are scored from 0 to 100 and stored in the topic backlog (ADR-040): up to 40 points for recency (linear over 30 days, 10 when undated), up to 30 for the source weight (weight 2 or more is the maximum, the default 1 earns half), 10 per matched `include` keyword up to 20 and minus 20 per matched `exclude` keyword up to 40, and minus up to 60 for token overlap (Jaccard of the significant words) of 0.4 or more with an already published or parked article. A title identical to one of those is not stored at all. The breakdown and a one-line motivation are stored with the score. Enrichment (ADR-044) never changes the score or the order: it only adds a proposal to the candidate.
 
 ## Notifications
 
