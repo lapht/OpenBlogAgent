@@ -1,6 +1,7 @@
 import path from "node:path";
 
 import { TopicBacklogStore } from "../backlog";
+import { SchedulerStore } from "../scheduler";
 import { runStorageMigrations, SQLiteDatabaseConnection } from "../database";
 import {
   ArticleRepository,
@@ -20,6 +21,8 @@ export interface SQLiteMemoryServiceHandle {
   memoryService: MemoryService;
   /** The topic candidate backlog in the same database. */
   backlog: TopicBacklogStore;
+  /** Scheduler lock and usage totals in the same database. */
+  scheduler: SchedulerStore;
   disconnect(): Promise<void>;
 }
 
@@ -46,6 +49,7 @@ export async function createSQLiteMemoryService(
   return {
     memoryService,
     backlog: new TopicBacklogStore(db),
+    scheduler: new SchedulerStore(db),
     async disconnect(): Promise<void> {
       await connection.disconnect();
     }

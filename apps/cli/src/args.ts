@@ -18,7 +18,8 @@ export const COMMANDS = [
   "revise",
   "list",
   "research",
-  "topics"
+  "topics",
+  "schedule"
 ] as const;
 export type CommandName = (typeof COMMANDS)[number];
 
@@ -35,6 +36,8 @@ export interface CliOptions {
   feedback?: string;
   /** Mark runs abandoned by a dead process as interrupted before listing (list only). */
   recoverStale: boolean;
+  /** Read the research sources before picking a candidate (schedule run-once only). */
+  collect: boolean;
 }
 
 export const CANDIDATE_STATUS_FLAGS = ["new", "accepted", "dropped", "used"] as const;
@@ -49,6 +52,7 @@ export type ParsedCommand =
   | { name: "revise"; workflowId: string; feedback: string; options: CliOptions }
   | { name: "list"; options: CliOptions }
   | { name: "research"; action: "collect"; options: CliOptions }
+  | { name: "schedule"; action: "run-once"; options: CliOptions }
   | { name: "topics"; action: "list"; status?: CandidateStatusFlag; options: CliOptions }
   | { name: "topics"; action: "accept"; id: string; brief?: CandidateBrief; options: CliOptions }
   | { name: "topics"; action: "drop"; id: string; reason?: string; options: CliOptions }
@@ -83,6 +87,7 @@ Commands:
   topics accept <id>   Approve a candidate for generation (brief options store a brief with it)
   topics drop <id>     Drop a candidate (--reason "why")
   topics generate <id> Generate an article from a candidate (brief options override the stored brief)
+  schedule run-once    Do the next unit of work for cron: pick the best accepted candidate and run it (--collect first)
 
 Options:
   --dry-run            Run everything except the publish call; nothing is stored or published
@@ -92,6 +97,7 @@ Options:
   --reason <text>      Why the article is rejected (reject only, required)
   --feedback <text>    What the writer should change (revise only, required)
   --status <status>    Only candidates in this status (topics list only)
+  --collect            Read the research sources first (schedule run-once only)
   --recover-stale      Mark runs idle for OPENBLOG_RUN_STALE_AFTER_MINUTES as interrupted (list only)
   --json               Print one JSON summary object on stdout; logs always go to stderr
 
@@ -113,6 +119,9 @@ Exit codes:
   1   failed
   2   needs review (quality gate rejected the article)
   3   duplicate (topic, slug or title already published)
+  10  schedule run-once: nothing accepted to generate
+  11  schedule run-once: a daily limit or the time window stopped it
+  12  schedule run-once: another run-once holds the lock
   64  usage error
 `;
 
@@ -134,6 +143,7 @@ export function parseCommand(argv: string[]): ParsedCommand {
         reason: { type: "string" },
         feedback: { type: "string" },
         status: { type: "string" },
+        collect: { type: "boolean" },
         "recover-stale": { type: "boolean" },
         brief: { type: "string" },
         language: { type: "string" },
@@ -159,7 +169,8 @@ export function parseCommand(argv: string[]): ParsedCommand {
     override: values.override,
     reason: values.reason,
     feedback: values.feedback,
-    recoverStale: values["recover-stale"] ?? false
+    recoverStale: values["recover-stale"] ?? false,
+    collect: values.collect ?? false
   };
 
   if (values.help) {
@@ -202,6 +213,9 @@ export function parseCommand(argv: string[]): ParsedCommand {
   if (!takesBrief && briefFlags.length > 0) {
     throw new UsageError(`--${briefFlags[0]} only applies to generate and topics accept|generate`);
   }
+  if (options.collect && name !== "schedule") {
+    throw new UsageError("--collect only applies to schedule run-once");
+  }
   if (values.status !== undefined && !(name === "topics" && rest[0] === "list")) {
     throw new UsageError("--status only applies to topics list");
   }
@@ -239,6 +253,12 @@ export function parseCommand(argv: string[]): ParsedCommand {
         throw new UsageError("research takes one subcommand: collect");
       }
       return { name: "research", action: "collect", options };
+    }
+    case "schedule": {
+      if (rest.length !== 1 || rest[0] !== "run-once") {
+        throw new UsageError("schedule takes one subcommand: run-once");
+      }
+      return { name: "schedule", action: "run-once", options };
     }
     case "topics": {
       const [action, ...args] = rest;

@@ -31,6 +31,7 @@ import { createSourceReader, type ContentFetcher } from "@openblog/research";
 import { createContentFetcherFromConfig } from "./fetcher";
 import { loadPromptOverrides } from "./prompts";
 import { createResearchService, type ResearchService } from "./research";
+import { createSchedulerService, type SchedulerService } from "./scheduler";
 import { loadStaticTaxonomy } from "./taxonomy";
 
 export { loadStaticTaxonomy, type StaticTaxonomy } from "./taxonomy";
@@ -42,6 +43,13 @@ export {
   type CollectOutcome,
   type ResearchService
 } from "./research";
+export {
+  inWindow,
+  type LimitReason,
+  type RunOnceOptions,
+  type RunOnceOutcome,
+  type SchedulerService
+} from "./scheduler";
 export {
   BacklogError,
   type BacklogErrorCode,
@@ -87,6 +95,8 @@ export interface Application {
    * one, since candidates need a database.
    */
   research?: ResearchService;
+  /** `schedule run-once`: the next unit of work, safe to call from cron. Absent without the SQLite store. */
+  scheduler?: SchedulerService;
   /** What was wired, for diagnostics. */
   info: {
     publisherIds: string[];
@@ -253,6 +263,15 @@ export async function createApplication(
     taxonomyProvider
   });
 
+  const research = memoryStore
+    ? createResearchService({
+        config,
+        backlog: memoryStore.backlog,
+        fetcher,
+        clock: overrides.clock
+      })
+    : undefined;
+
   return {
     workflow,
     async listRuns(limit = 20): Promise<StoredWorkflowSummary[]> {
@@ -264,14 +283,19 @@ export async function createApplication(
     async recoverStaleRuns(now?: Date): Promise<string[]> {
       return (await memory?.recoverStaleRuns?.(config.OPENBLOG_RUN_STALE_AFTER_MINUTES, now)) ?? [];
     },
-    research: memoryStore
-      ? createResearchService({
-          config,
-          backlog: memoryStore.backlog,
-          fetcher,
-          clock: overrides.clock
-        })
-      : undefined,
+    research,
+    scheduler:
+      memoryStore && research
+        ? createSchedulerService({
+            config,
+            store: memoryStore.scheduler,
+            research,
+            workflow,
+            memory,
+            logger,
+            clock: overrides.clock
+          })
+        : undefined,
     info: { publisherIds: publishers.map((publisher) => publisher.id), taxonomyProvider },
     async dispose(): Promise<void> {
       await memoryStore?.disconnect();

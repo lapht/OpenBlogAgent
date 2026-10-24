@@ -188,6 +188,18 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_topic_candidates_status_score
       ON topic_candidates(status, score DESC);
     `);
+  },
+
+  // v9: named locks with an owner and an expiry, for the scheduler.
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS scheduler_locks (
+        name TEXT PRIMARY KEY,
+        owner TEXT NOT NULL,
+        acquired_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      );
+    `);
   }
 ];
 

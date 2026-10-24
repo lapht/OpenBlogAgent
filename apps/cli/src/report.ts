@@ -4,7 +4,7 @@ import type {
   RejectResult,
   StoredWorkflowSummary
 } from "@openblog/graph";
-import type { CandidateRecord, CollectOutcome } from "@openblog/app";
+import type { CandidateRecord, CollectOutcome, RunOnceOutcome } from "@openblog/app";
 import type { ILogger } from "@openblog/logger";
 import type { ResolvedArticleBrief } from "@openblog/types";
 
@@ -14,6 +14,12 @@ export const EXIT = {
   failed: 1,
   needsReview: 2,
   duplicate: 3,
+  /** `schedule run-once` found no accepted candidate. */
+  nothingToDo: 10,
+  /** `schedule run-once` was stopped by a daily limit or the time window. */
+  limitReached: 11,
+  /** Another `schedule run-once` holds the lock. */
+  locked: 12,
   usage: 64
 } as const;
 
@@ -187,6 +193,111 @@ export function summarizeResearch(outcome: CollectOutcome): ResearchSummary {
     skipped: outcome.skipped,
     candidates: outcome.candidates
   };
+}
+
+export interface ScheduleSummary {
+  command: "schedule run-once";
+  status: "ran" | "nothing_to_do" | "limit_reached" | "locked" | "failed";
+  exitCode: number;
+  dryRun: boolean;
+  recovered: string[];
+  collected?: CollectOutcome["counts"];
+  /** The candidate the run was started from. */
+  candidate?: CandidateRecord;
+  /** The run, as `generate --json` shows it. */
+  run?: CliSummary;
+  limit?: { reason: string; detail: string };
+  lock?: { owner: string; expiresAt: string };
+}
+
+export function summarizeSchedule(
+  outcome: RunOnceOutcome,
+  exitCode: number,
+  dryRun: boolean
+): ScheduleSummary {
+  const base = { command: "schedule run-once" as const, exitCode, dryRun };
+  switch (outcome.status) {
+    case "ran":
+      return {
+        ...base,
+        status: "ran",
+        recovered: outcome.recovered,
+        collected: outcome.collected,
+        candidate: outcome.candidate,
+        run: {
+          ...summarizeRun("generate", outcome.result, dryRun),
+          candidateId: outcome.candidate.id
+        }
+      };
+    case "nothing_to_do":
+      return {
+        ...base,
+        status: "nothing_to_do",
+        recovered: outcome.recovered,
+        collected: outcome.collected
+      };
+    case "limit_reached":
+      return {
+        ...base,
+        status: "limit_reached",
+        recovered: outcome.recovered,
+        collected: outcome.collected,
+        limit: { reason: outcome.reason, detail: outcome.detail }
+      };
+    case "locked":
+      return {
+        ...base,
+        status: "locked",
+        recovered: outcome.recovered,
+        lock: { owner: outcome.owner, expiresAt: outcome.expiresAt }
+      };
+  }
+}
+
+export function formatSchedule(summary: ScheduleSummary): string {
+  const lines: string[] = [];
+  if (summary.recovered.length > 0) {
+    lines.push(
+      `Recovered ${summary.recovered.length} abandoned run(s): ${summary.recovered.join(", ")}`
+    );
+  }
+  if (summary.collected) {
+    const c = summary.collected;
+    lines.push(`Collected: ${c.created} new, ${c.refreshed} refreshed, ${c.skipped} skipped`);
+  }
+  switch (summary.status) {
+    case "ran":
+      lines.push(
+        `Started from ${summary.candidate!.title} (score ${summary.candidate!.score})`,
+        formatSummary(summary.run!)
+      );
+      break;
+    case "nothing_to_do":
+      lines.push("Nothing to do: no accepted topic candidate.");
+      break;
+    case "limit_reached":
+      lines.push(`Not started: ${summary.limit!.detail}.`);
+      break;
+    case "locked":
+      lines.push(
+        `Not started: ${summary.lock!.owner} holds the lock until ${summary.lock!.expiresAt}.`
+      );
+      break;
+  }
+  return lines.join("\n");
+}
+
+export function exitCodeForSchedule(outcome: RunOnceOutcome, runCode: number): number {
+  switch (outcome.status) {
+    case "ran":
+      return runCode;
+    case "nothing_to_do":
+      return EXIT.nothingToDo;
+    case "limit_reached":
+      return EXIT.limitReached;
+    case "locked":
+      return EXIT.locked;
+  }
 }
 
 export interface TopicsSummary {

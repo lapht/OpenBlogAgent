@@ -19,12 +19,15 @@ import {
   formatCandidate,
   formatCandidates,
   formatResearch,
+  formatSchedule,
   formatRunList,
   formatSummary,
   reportApprovalOutcome,
   reportRunOutcome,
   summarizeApproval,
   summarizeResearch,
+  summarizeSchedule,
+  exitCodeForSchedule,
   summarizeRejection,
   summarizeRun,
   type CliSummary
@@ -124,6 +127,21 @@ export async function runCli(options: RunCliOptions = {}): Promise<number> {
           const summary = summarizeResearch(await research.collect());
           emit(summary, formatResearch(summary));
           return summary.exitCode;
+        }
+        case "schedule": {
+          if (!app.scheduler) {
+            throw new ResearchError(
+              "backlog_unavailable",
+              "The scheduler needs the SQLite memory store"
+            );
+          }
+          const outcome = await app.scheduler.runOnce({ collect: flags.collect });
+          const runCode =
+            outcome.status === "ran" ? reportRunOutcome(outcome.result, logger) : EXIT.ok;
+          const code = exitCodeForSchedule(outcome, runCode);
+          const summary = summarizeSchedule(outcome, code, flags.dryRun);
+          emit(summary, formatSchedule(summary));
+          return code;
         }
         case "topics": {
           const research = requireResearch(app);

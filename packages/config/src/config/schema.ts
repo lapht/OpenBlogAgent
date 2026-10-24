@@ -123,6 +123,31 @@ export const envSchema = z.object({
     z.coerce.number().min(0).max(100).optional()
   ),
 
+  /** `schedule run-once` starts no run when this many runs were created in the last 24 hours. Unset: no limit. */
+  OPENBLOG_SCHEDULE_MAX_RUNS_PER_DAY: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().int().min(0).optional()
+  ),
+  /** ... or when the steps finished in the last 24 hours cost this many USD. Unset: no limit. */
+  OPENBLOG_SCHEDULE_MAX_COST_PER_DAY: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().min(0).optional()
+  ),
+  /** Local time window `HH:MM-HH:MM` (may cross midnight) in which `schedule run-once` may start a run. Unset: any time. */
+  OPENBLOG_SCHEDULE_ALLOWED_WINDOW: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z
+      .string()
+      .regex(
+        /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/,
+        "must look like 08:00-20:00 (HH:MM-HH:MM)"
+      )
+      .refine((value) => value.split("-")[0] !== value.split("-")[1], "start and end must differ")
+      .optional()
+  ),
+  /** Minutes after which the lock of a `schedule run-once` whose process died counts as stale. */
+  OPENBLOG_SCHEDULE_LOCK_TTL_MINUTES: z.coerce.number().int().positive().default(120),
+
   /** A source page that cannot be read: skip it and go on with the others instead of failing the run. */
   OPENBLOG_SOURCES_ALLOW_PARTIAL: envBoolean(false),
   /** Characters of text kept from one source page. */

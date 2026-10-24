@@ -19,6 +19,32 @@ services:
       - openblog-output:/app/output
     restart: "no"
 
+  # The automatic pipeline: every OPENBLOG_SCHEDULE_INTERVAL_SECONDS (default 3600) it reads the research
+  # sources and starts a run from the best accepted topic, within the OPENBLOG_SCHEDULE_* limits.
+  # Start it with `docker compose -f docker/docker-compose.yml --profile scheduler up -d scheduler`.
+  # The lock in the shared database keeps two calls from starting two runs; exit codes 10-12 are normal.
+  scheduler:
+    profiles: ["scheduler"]
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: openblogagent:local
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - openblog-data:/app/data
+      - openblog-output:/app/output
+    entrypoint:
+      - sh
+      - -c
+      - while true; do node apps/cli/dist/index.js schedule run-once --collect --json; sleep $${OPENBLOG_SCHEDULE_INTERVAL_SECONDS:-3600}; done
+    restart: unless-stopped
+
 volumes:
   openblog-data:
   openblog-output:
