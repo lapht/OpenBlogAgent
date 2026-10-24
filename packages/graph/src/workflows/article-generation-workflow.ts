@@ -34,7 +34,9 @@ import { z } from "zod";
 import type {
   LlmPort,
   MemoryPort,
+  NotifierPort,
   PublishPort,
+  RunNotification,
   SourceReaderPort,
   StoredWorkflowStep,
   TaxonomyPort
@@ -414,6 +416,8 @@ export interface CreateArticleGenerationWorkflowOptions {
     /** Characters shared by all pages of a run. Defaults to 15000. */
     maxCharsTotal?: number;
   };
+  /** Told when a run ends in a state that needs a person (the notifier decides which events it sends). */
+  notifier?: NotifierPort;
   /** Per-run token and cost limits; a run that exceeds them stops with `budget_exceeded`. */
   budget?: UsageBudget;
   quality?: {
@@ -711,6 +715,22 @@ export function createArticleGenerationWorkflow(
   async function approvalLanguage(workflowId: string): Promise<string | undefined> {
     const stored = await memory?.loadWorkflow(workflowId);
     return stored ? storedBrief(stored).language : undefined;
+  }
+
+  /** Hands an outcome to the notifier. A notification can never change the run: its failure is only logged. */
+  async function announce(notification: RunNotification): Promise<void> {
+    if (!options.notifier) {
+      return;
+    }
+    try {
+      await options.notifier.notify(notification);
+    } catch (error) {
+      logger.warn("Notification could not be delivered", {
+        event: notification.event,
+        workflowId: notification.workflowId,
+        error: error instanceof Error ? error.name : "unknown"
+      });
+    }
   }
 
   /** The source pages as the planner and writer see them; none for a run without sources. */
@@ -1116,6 +1136,14 @@ export function createArticleGenerationWorkflow(
       });
     }
     const { topic } = brief;
+    await announce({
+      event: "duplicate",
+      workflowId: workflowMemory?.workflowId,
+      topic,
+      status: "duplicate",
+      errorCode: failure.code,
+      errorMessage: failure.message
+    });
     logger.warn("Article workflow stopped by the duplicate policy", {
       topic,
       workflow: ARTICLE_GENERATION_WORKFLOW_NAME,
@@ -1226,6 +1254,22 @@ export function createArticleGenerationWorkflow(
         });
       }
 
+      await announce({
+        event: needsReview
+          ? "needs_review"
+          : failure
+            ? "failed"
+            : awaitingApproval
+              ? "awaiting_approval"
+              : "published",
+        workflowId: workflowMemory?.workflowId,
+        topic,
+        title: output.seoOutput.title,
+        status,
+        errorCode: failure?.code,
+        errorMessage: failure?.message
+      });
+
       if (needsReview) {
         logger.warn("Article workflow needs review", {
           topic,
@@ -1285,6 +1329,15 @@ export function createArticleGenerationWorkflow(
           errorCode: error instanceof WorkflowStepError ? error.code : undefined
         });
       }
+      const code = errorCode(error);
+      await announce({
+        event: code === "budget_exceeded" ? "budget_exceeded" : "failed",
+        workflowId: workflowMemory?.workflowId,
+        topic,
+        status: "failed",
+        errorCode: code,
+        errorMessage: error instanceof Error ? error.message : String(error)
+      });
 
       throw error;
     }

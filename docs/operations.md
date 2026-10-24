@@ -99,6 +99,29 @@ Runs execute in a bounded queue: `OPENBLOG_API_CONCURRENCY` at once, `OPENBLOG_A
 
 A run in `needs_review` did not fail, so `resume` is not the fix: read why with `list --json` or the log line `Article workflow needs review` (its `violations`), then decide to approve with an override or generate again.
 
+## Notifications
+
+With `OPENBLOG_NOTIFY_WEBHOOK_URL` set, OpenBlogAgent posts a message when a run ends in a state that needs a person, so scheduled runs do not wait unseen. One message is sent for each occurrence of each configured event (`OPENBLOG_NOTIFY_EVENTS`), after the outcome is stored: `awaiting_approval`, `needs_review`, `failed` (a failed step or publisher), `budget_exceeded`, and optionally `published`, `duplicate` and `schedule_limit_reached` (a daily run or cost limit stopped `schedule run-once`; the time window does not notify). A `resume` or `revise` that ends again in one of these states sends a new message; `approve` and `reject` are human actions and send nothing.
+
+The default body is JSON with a stable shape (fields are only added):
+
+```json
+{
+  "source": "openblog",
+  "event": "awaiting_approval",
+  "workflowId": "…",
+  "topic": "…",
+  "title": "…",
+  "status": "awaiting_approval",
+  "errorCode": null,
+  "errorMessage": null,
+  "url": "https://blog.example.com:3000/runs/…",
+  "occurredAt": "2026-10-24T08:00:00.000Z"
+}
+```
+
+`url` is set only with `OPENBLOG_NOTIFY_BASE_URL` (open it with the API key). `OPENBLOG_NOTIFY_FORMAT=slack` or `discord` sends a short text message instead (headline, reason, run id, link) that the incoming webhooks of those services accept. Delivery makes up to 3 attempts (10 seconds each; retried after 0.5 s and 1 s on network errors, timeouts, `429` and `5xx`, not on other `4xx`). If it still fails, the log says `Notification failed` with the host, the number of attempts and the reason; the run is never failed or changed by a notification. The webhook address is never logged, also not inside error messages. The request is a plain HTTPS call to the address you configured: it does not go through the content fetcher and is not limited to public addresses.
+
 ## Scheduling
 
 `openblog schedule run-once [--collect] [--dry-run] [--json]` does the next unit of work and exits, so cron (or the Compose service) can call it as often as it likes:
