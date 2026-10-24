@@ -4,6 +4,7 @@ export * from "./quality";
 export * from "./planner/agent";
 export * from "./writer/agent";
 export * from "./prompts/overrides";
+export { referencesHeading, type SourceNote } from "./prompts/sources";
 export * from "./review/agent";
 
 // Re-export agent factories for convenience

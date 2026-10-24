@@ -31,3 +31,12 @@ export {
   type ScoreBreakdown,
   type ScoreContext
 } from "./topics/scoring";
+export {
+  createSourceReader,
+  MIN_SOURCE_CHARS,
+  SourceReadError,
+  truncateText,
+  type SourceDocument,
+  type SourceReader
+} from "./sources/reader";
+export { extractReadableText, htmlToText, type ExtractedPage } from "./sources/extract";

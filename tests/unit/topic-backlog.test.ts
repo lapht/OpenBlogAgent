@@ -55,7 +55,11 @@ function fakeFetcher(replies: Record<string, string>): ContentFetcher {
   };
 }
 
+// The page the top candidate was found on: `topics generate` grounds the article in it.
+const CANDIDATE_PAGE = "https://www.example.com/posts/caching-guide";
+
 const feeds = (): Record<string, string> => ({
+  [CANDIDATE_PAGE]: "Caching explained in plain words. ".repeat(20),
   "https://example.com/feed.xml": fixture("rss.xml"),
   "https://other.example.org/atom.xml": fixture("atom.xml"),
   "https://docs.example.net/sitemap.xml": fixture("sitemap.xml")
@@ -497,8 +501,11 @@ describe("topic backlog service, CLI and API", () => {
   describe("CLI", () => {
     const articleReplies = () => [
       JSON.stringify(["Intro", "Body", "Conclusion"]),
-      "Article body",
-      JSON.stringify({ editedText: "Edited body", changesSummary: "tidied" }),
+      `Article body, based on ${CANDIDATE_PAGE}`,
+      JSON.stringify({
+        editedText: `Edited body, based on ${CANDIDATE_PAGE}`,
+        changesSummary: "tidied"
+      }),
       JSON.stringify({
         title: "A title",
         metaDescription: "A description",

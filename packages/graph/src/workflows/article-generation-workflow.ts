@@ -17,6 +17,7 @@ import {
   type PromptOverrides,
   type SeoOutput,
   seoOutputSchema,
+  type SourceNote,
   validateArticle
 } from "@openblog/agents";
 import { withLogContext, withScope, type ILogger } from "@openblog/logger";
@@ -30,7 +31,14 @@ import {
 } from "@openblog/types";
 import { z } from "zod";
 
-import type { LlmPort, MemoryPort, PublishPort, StoredWorkflowStep, TaxonomyPort } from "../ports";
+import type {
+  LlmPort,
+  MemoryPort,
+  PublishPort,
+  SourceReaderPort,
+  StoredWorkflowStep,
+  TaxonomyPort
+} from "../ports";
 import {
   addUsage,
   currentUsage,
@@ -95,6 +103,31 @@ const duplicateSchema = z.object({
 });
 
 export type DuplicateInfo = z.infer<typeof duplicateSchema>;
+
+/** The text of one source page as stored with the `sources` step, so a resumed run does not fetch again (step `read_sources`). */
+const sourceDocumentSchema = z.object({
+  url: z.string(),
+  finalUrl: z.string(),
+  title: z.string().optional(),
+  text: z.string(),
+  truncated: z.boolean()
+});
+
+/** A source page that was skipped because `OPENBLOG_SOURCES_ALLOW_PARTIAL` is on. */
+const skippedSourceSchema = z.object({ url: z.string(), code: z.string(), message: z.string() });
+
+export type SourceDocumentState = z.infer<typeof sourceDocumentSchema>;
+
+/** A source page the run was asked to read could not be used. `code` says why. */
+export class SourceError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = "SourceError";
+    this.code = code;
+  }
+}
 
 const nonEmptyTextSchema = z.string().trim().min(1);
 const classificationSchema = z.object({
@@ -368,6 +401,19 @@ export interface CreateArticleGenerationWorkflowOptions {
    * without one keeps its built-in prompt. The output contracts stay in code either way.
    */
   prompts?: PromptOverrides;
+  /**
+   * Reads the pages of a brief's `sources`. Without it a run that asks for sources fails at the
+   * `sources` step; runs without sources never need it.
+   */
+  sources?: {
+    reader: SourceReaderPort;
+    /** Skip a page that cannot be read instead of failing the run. Defaults to false. */
+    allowPartial?: boolean;
+    /** Characters kept per page. Defaults to 6000. */
+    maxCharsPerSource?: number;
+    /** Characters shared by all pages of a run. Defaults to 15000. */
+    maxCharsTotal?: number;
+  };
   /** Per-run token and cost limits; a run that exceeds them stops with `budget_exceeded`. */
   budget?: UsageBudget;
   quality?: {
@@ -391,6 +437,9 @@ const graphState = Annotation.Root({
   /** The brief with its word range settled; the same for every node and attempt of a run. */
   brief: optional<ResolvedArticleBrief>(),
   workflowId: optional<string>(),
+  /** Text read from the brief's source pages; absent when the brief has none. */
+  sources: optional<SourceDocumentState[]>(),
+  skippedSources: optional<Array<z.infer<typeof skippedSourceSchema>>>(),
   outline: optional<string[]>(),
   article: optional<string>(),
   editedText: optional<string>(),
@@ -431,6 +480,10 @@ const usageSchema = z.object({
 
 /** Shape of what each step stores, used to restore state when a run is resumed. */
 const stepOutputSchemas: Record<string, z.ZodType<ArticleWorkflowUpdate, z.ZodTypeDef, unknown>> = {
+  read_sources: z.object({
+    sources: z.array(sourceDocumentSchema),
+    skippedSources: z.array(skippedSourceSchema).optional()
+  }),
   planner: z.object({ outline: plannerOutlineSchema }),
   writer: z.object({ article: nonEmptyTextSchema }),
   editor: z.object({ editedText: nonEmptyTextSchema }),
@@ -660,6 +713,11 @@ export function createArticleGenerationWorkflow(
     return stored ? storedBrief(stored).language : undefined;
   }
 
+  /** The source pages as the planner and writer see them; none for a run without sources. */
+  function sourceNotes(state: ArticleWorkflowState): SourceNote[] | undefined {
+    return state.sources?.map(({ url, title, text }) => ({ url, title, text }));
+  }
+
   function requiredBrief(state: ArticleWorkflowState): ResolvedArticleBrief {
     return required(state.brief, "brief");
   }
@@ -692,9 +750,63 @@ export function createArticleGenerationWorkflow(
 
   const workflow = new StateGraph(graphState)
     .addNode(
+      "read_sources",
+      step("read_sources", stepContext, async (state) => {
+        const urls = requiredBrief(state).sources ?? [];
+        const reading = options.sources;
+        if (!reading) {
+          throw new SourceError(
+            "sources_unavailable",
+            "The brief names source pages but no source reader is configured"
+          );
+        }
+        const allowPartial = reading.allowPartial ?? false;
+        // Every page gets an equal share of the total budget, never more than the per-page limit.
+        const maxChars = Math.min(
+          reading.maxCharsPerSource ?? 6000,
+          Math.floor((reading.maxCharsTotal ?? 15000) / urls.length)
+        );
+
+        const documents: SourceDocumentState[] = [];
+        const skipped: Array<z.infer<typeof skippedSourceSchema>> = [];
+        for (const url of urls) {
+          try {
+            documents.push(await reading.reader.read(url, { maxChars }));
+          } catch (error) {
+            const where = new URL(url);
+            const failure = {
+              url,
+              code: errorCode(error),
+              message: `${where.origin}${where.pathname}: ${error instanceof Error ? error.message : String(error)}`
+            };
+            if (!allowPartial) {
+              throw new SourceError(failure.code, failure.message);
+            }
+            logger.warn("Source page skipped", failure);
+            skipped.push(failure);
+          }
+        }
+        if (documents.length === 0) {
+          throw new SourceError("sources_failed", "None of the source pages could be read");
+        }
+
+        logger.info("Source pages read", {
+          read: documents.length,
+          skipped: skipped.length,
+          characters: documents.reduce((total, document) => total + document.text.length, 0)
+        });
+
+        return { sources: documents, ...(skipped.length > 0 ? { skippedSources: skipped } : {}) };
+      })
+    )
+    .addNode(
       "planner",
       step("planner", stepContext, async (state) => {
-        const input = { topic: state.topic, brief: requiredBrief(state) };
+        const input = {
+          topic: state.topic,
+          brief: requiredBrief(state),
+          sources: sourceNotes(state)
+        };
 
         if (memory && state.workflowId) {
           await memory.savePrompt({
@@ -721,6 +833,7 @@ export function createArticleGenerationWorkflow(
           reviewerFeedback: state.reviewerFeedback,
           previousArticle: state.previousArticle,
           brief: requiredBrief(state),
+          sources: sourceNotes(state),
           minWords: requiredBrief(state).minWords,
           maxWords: requiredBrief(state).maxWords
         };
@@ -822,7 +935,10 @@ export function createArticleGenerationWorkflow(
             outline: state.outline,
             seo: state.seoOutput,
             keyword: requiredBrief(state).targetKeyword,
-            language: requiredBrief(state).language
+            language: requiredBrief(state).language,
+            sources: state.sources
+              ? [...new Set(state.sources.flatMap((source) => [source.url, source.finalUrl]))]
+              : undefined
           },
           {
             ...qualityRules,
@@ -946,7 +1062,11 @@ export function createArticleGenerationWorkflow(
         return { publishResult };
       })
     )
-    .addEdge(START, "planner")
+    // A run without sources is exactly the run it was before they existed.
+    .addConditionalEdges(START, (state) =>
+      state.brief?.sources?.length ? "read_sources" : "planner"
+    )
+    .addEdge("read_sources", "planner")
     .addEdge("planner", "writer")
     .addEdge("writer", "editor")
     .addEdge("editor", "seo")
@@ -1368,6 +1488,7 @@ export function createArticleGenerationWorkflow(
       // Only the outline is kept: everything from the writer on is produced again.
       const restored = restoreState(stored.steps);
       const keepOutline = restored.completedSteps?.includes("planner") === true;
+      const keepSources = restored.completedSteps?.includes("read_sources") === true;
       const lastPublish = [...stored.steps]
         .reverse()
         .find((entry) => entry.step === "publisher" && entry.status === "succeeded");
@@ -1391,7 +1512,13 @@ export function createArticleGenerationWorkflow(
               { workflowId },
               stored.metadata?.force === true || allowDuplicates,
               {
-                ...(keepOutline ? { outline: restored.outline, completedSteps: ["planner"] } : {}),
+                ...(keepOutline
+                  ? {
+                      outline: restored.outline,
+                      completedSteps: keepSources ? ["read_sources", "planner"] : ["planner"]
+                    }
+                  : {}),
+                ...(keepSources ? { sources: restored.sources } : {}),
                 reviewerFeedback: feedback,
                 previousArticle: article?.editedMarkdown,
                 ownSlug: sentDraft ? (article?.slug ?? undefined) : undefined

@@ -173,13 +173,17 @@ export async function runCli(options: RunCliOptions = {}): Promise<number> {
                 ...command.brief,
                 topic: candidate.title
               });
+              // The page the candidate was found on grounds the article unless the brief names others.
+              const grounded = brief.success
+                ? { ...brief.data, sources: brief.data.sources ?? [candidate.url] }
+                : undefined;
               if (!brief.success) {
                 throw new BacklogError(
                   "invalid_input",
                   `Invalid brief: ${formatBriefIssues(brief.error)}`
                 );
               }
-              const result = await app.workflow.run({ ...brief.data, force: flags.force });
+              const result = await app.workflow.run({ ...grounded!, force: flags.force });
               if (result.workflowId) {
                 research.markUsed(candidate.id, result.workflowId);
               }

@@ -230,7 +230,7 @@ npm start -- approve <workflowId> --override "reason"   # for an article that fa
 
 ## Article brief
 
-Only the topic is required. A run can also carry a brief: `language` (default `OPENBLOG_CONTENT_LANGUAGE`, `en`), `audience`, `tone`, `targetKeyword`, `secondaryKeywords`, `minWords`, `maxWords` and `notes`. Every agent that can use a field receives it, and the brief is stored with the run, so `resume` follows the same brief. Unknown fields and `minWords > maxWords` are rejected before any provider call (CLI exit code 64, API `400`).
+Only the topic is required. A run can also carry a brief: `language` (default `OPENBLOG_CONTENT_LANGUAGE`, `en`), `audience`, `tone`, `targetKeyword`, `secondaryKeywords`, `minWords`, `maxWords`, `notes` and `sources`. Every agent that can use a field receives it, and the brief is stored with the run, so `resume` follows the same brief. Unknown fields and `minWords > maxWords` are rejected before any provider call (CLI exit code 64, API `400`).
 
 ```bash
 npm start -- generate "Cache invalidation" --audience "backend engineers" --tone "dry and precise" \
@@ -239,6 +239,8 @@ npm start -- generate --brief brief.yaml --tone formal   # flags override the fi
 ```
 
 `brief.yaml` (or `.json`) takes the field names above, for example `topic: ...`, `secondaryKeywords: [ttl, cdn]`. Over HTTP the same fields go in the `POST /runs` body.
+
+`--source <url>` (repeatable, up to 5) grounds the article in those pages: they are read through the safe fetcher, their text goes to the planner and the writer as untrusted reference material, and the article lists them in a references section; links to any other address fail the quality gate. See [Operations](docs/operations.md#grounded-generation).
 
 The writer is asked for the brief's word range, else for `OPENBLOG_QUALITY_MIN_WORDS`-`OPENBLOG_QUALITY_MAX_WORDS`, and the quality gate checks the same range. If you give only one bound, the other comes from the configuration and the pair must still be valid. `--dry-run` and `--json` show the effective brief, including that range.
 

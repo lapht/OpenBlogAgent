@@ -4,6 +4,7 @@ import { DEFAULT_ARTICLE_RULES } from "../quality";
 
 import { briefLines, briefValues, languageLines } from "./brief";
 import { renderPromptTemplate } from "./overrides";
+import { referenceRequirementLines, sourceNoteLines, type SourceNote } from "./sources";
 
 export const WRITER_PROMPT_VERSION = "3";
 
@@ -18,6 +19,8 @@ export interface WriterPromptOptions {
   /** Requested length; defaults to the quality gate's default range. */
   minWords?: number;
   maxWords?: number;
+  /** Text read from the brief's source pages; the article is grounded in it and lists it as references. */
+  sources?: SourceNote[];
   /** Operator override of the style instructions; the requirements the quality gate enforces stay. */
   template?: string;
 }
@@ -27,7 +30,7 @@ export function buildWriterPrompt(
   outline: string[],
   options: WriterPromptOptions = {}
 ): string {
-  const { feedback, brief, reviewerFeedback, previousArticle } = options;
+  const { feedback, brief, reviewerFeedback, previousArticle, sources } = options;
   const minWords = options.minWords ?? DEFAULT_ARTICLE_RULES.minWords;
   const maxWords = options.maxWords ?? DEFAULT_ARTICLE_RULES.maxWords;
 
@@ -42,7 +45,9 @@ export function buildWriterPrompt(
       brief,
       "- Write the whole article in {language}, including headings. Keep code, commands and proper names as they are."
     ),
-    ...briefLines(brief, ["audience", "tone", "keywords", "notes"])
+    ...briefLines(brief, ["audience", "tone", "keywords", "notes"]),
+    ...sourceNoteLines(sources),
+    ...referenceRequirementLines(sources, brief?.language)
   ];
   const head =
     options.template !== undefined

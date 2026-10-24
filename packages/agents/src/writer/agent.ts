@@ -1,6 +1,7 @@
 import type { TextGenerationProvider } from "@openblog/providers";
 import type { ArticleBrief } from "@openblog/types";
 
+import type { SourceNote } from "../prompts/sources";
 import { buildWriterPrompt } from "../prompts/writer";
 import type { StructuredOutputOptions } from "../structured-output";
 
@@ -17,6 +18,8 @@ export interface WriterAgentInput {
   /** Requested word range; defaults to the quality gate's default range. */
   minWords?: number;
   maxWords?: number;
+  /** Text read from the brief's source pages. */
+  sources?: SourceNote[];
 }
 
 export interface WriterAgent {

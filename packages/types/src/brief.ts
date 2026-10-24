@@ -13,6 +13,17 @@ export function primaryLanguage(code: string): string {
   return code.split("-")[0]!.toLowerCase();
 }
 
+/** Source pages one article can be grounded in. */
+export const MAX_BRIEF_SOURCES = 5;
+
+/** An http or https URL, as a source page must be. */
+export const sourceUrlSchema = z
+  .string()
+  .trim()
+  .max(2000)
+  .url()
+  .refine((value) => /^https?:\/\//i.test(value), "must be an http or https URL");
+
 /** Fields of a brief; the workflow input extends this shape with its own run options. */
 export const articleBriefShape = {
   topic: text(500),
@@ -24,7 +35,9 @@ export const articleBriefShape = {
   secondaryKeywords: z.array(text(100)).max(20).optional(),
   minWords: z.number().int().positive().max(20000).optional(),
   maxWords: z.number().int().positive().max(20000).optional(),
-  notes: text(2000).optional()
+  notes: text(2000).optional(),
+  /** Pages the article is grounded in: read before planning, listed as references in the article. */
+  sources: z.array(sourceUrlSchema).min(1).max(MAX_BRIEF_SOURCES).optional()
 };
 
 /** Adds an issue when the word range is inverted; shared by every schema that carries the fields. */
