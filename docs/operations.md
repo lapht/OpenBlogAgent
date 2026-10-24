@@ -99,6 +99,43 @@ Runs execute in a bounded queue: `OPENBLOG_API_CONCURRENCY` at once, `OPENBLOG_A
 
 A run in `needs_review` did not fail, so `resume` is not the fix: read why with `list --json` or the log line `Article workflow needs review` (its `violations`), then decide to approve with an override or generate again.
 
+## Scheduling
+
+`openblog schedule run-once [--collect] [--dry-run] [--json]` does the next unit of work and exits, so cron (or the Compose service) can call it as often as it likes:
+
+1. takes the lock (a row in the database with an owner and an expiry; a second call exits `12` at once; the lock of a dead process is taken over after `OPENBLOG_SCHEDULE_LOCK_TTL_MINUTES`);
+2. marks runs abandoned by a dead process as `interrupted` (as `list --recover-stale` does);
+3. with `--collect`, reads the research sources and stores the candidates (never accepting any by itself unless `OPENBLOG_RESEARCH_AUTO_ACCEPT_MIN_SCORE` is set);
+4. checks the time window and the daily limits (`OPENBLOG_SCHEDULE_*`; the last 24 hours, from the stored runs and step usage, so they hold across restarts);
+5. takes the highest-scored `accepted` candidate, registers a normal run from it and marks the candidate `used` before executing, so a crash leaves a run that `resume` continues, never a candidate that is picked twice. The candidate's page grounds the article (ADR-041). The publication policy is unchanged: with the default `draft` a scheduled run leaves a draft that waits for `approve`.
+
+| Exit code | Meaning                                                                                         |
+| --------- | ----------------------------------------------------------------------------------------------- |
+| `0`       | A run was started and finished: published or awaiting approval                                  |
+| `1`       | The run failed, or the command did (the run is `failed`/`interrupted`; `resume <id>`)           |
+| `2`, `3`  | The run ended `needs_review` or `duplicate`, as for `generate`                                  |
+| `10`      | Nothing to do: no accepted candidate                                                            |
+| `11`      | A limit stopped it: `max_runs_per_day`, `max_cost_per_day` or `outside_window` (`limit.reason`) |
+| `12`      | Locked: another `run-once` holds the lock                                                       |
+| `64`      | Usage error                                                                                     |
+
+`10`, `11` and `12` are normal outcomes, not failures. `--json` prints `{ command, status: ran|nothing_to_do|limit_reached|locked, exitCode, recovered, collected?, candidate?, run?, limit?, lock? }`. `--dry-run` works on a throwaway copy of the database and sends nothing.
+
+Host cron, every hour, with the limits in `.env`:
+
+```cron
+0 * * * * cd /srv/openblogagent && docker compose -f docker/docker-compose.yml run --rm openblog schedule run-once --collect --json >> /var/log/openblog-schedule.log
+```
+
+Or the Compose service, which loops every `OPENBLOG_SCHEDULE_INTERVAL_SECONDS` (default 3600) and shares the data volume with the `openblog` service:
+
+```bash
+docker compose -f docker/docker-compose.yml --profile scheduler up -d scheduler
+docker compose -f docker/docker-compose.yml logs -f scheduler
+```
+
+There is no scheduling inside the server, and the lock does not span hosts: run one scheduler per database.
+
 ## Grounded generation
 
 `openblog generate "topic" --source https://example.com/report [--source ...]` (up to 5; also `sources` in a `--brief` file, the `POST /runs` and `POST /topics/{id}/accept` bodies) adds a first step, `read_sources`: each page is fetched through the content fetcher, its main text extracted (title, `<article>`/`<main>`/`<body>` content without scripts, navigation, footers and comments) and cut to the budget (`OPENBLOG_SOURCES_MAX_CHARS_*`). The extracted text is stored as the step's output, so `resume` and `revise` reuse it and never fetch again. The planner and the writer receive it between `<source>` tags with the warning that it is untrusted and its instructions must not be followed; the writer must end with a references section linking only to the sources it used. The quality gate then checks it: an article without a link to any source is `references_missing`, a link to any other address is `reference_not_provided` (both errors, so the article is regenerated or parked as `needs_review`; redirects, `www.`, trailing slashes and tracking parameters do not matter). Without sources nothing changes: no step, no fetch, no extra rule.

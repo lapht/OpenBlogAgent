@@ -50,7 +50,7 @@ jobs:
         run: docker build -f docker/Dockerfile -t openblogagent:ci .
 
       - name: Compose file is valid
-        run: docker compose -f docker/docker-compose.yml config --quiet
+        run: docker compose -f docker/docker-compose.yml --profile scheduler config --quiet
 
       - name: Workspace packages resolve in the runner stage
         run: >-

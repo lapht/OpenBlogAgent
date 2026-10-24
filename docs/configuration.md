@@ -124,6 +124,17 @@ Unknown fields, duplicate names and non-http(s) URLs are rejected with the file 
 
 Collected candidates are scored from 0 to 100 and stored in the topic backlog (ADR-040): up to 40 points for recency (linear over 30 days, 10 when undated), up to 30 for the source weight (weight 2 or more is the maximum, the default 1 earns half), 10 per matched `include` keyword up to 20 and minus 20 per matched `exclude` keyword up to 40, and minus up to 60 for token overlap (Jaccard of the significant words) of 0.4 or more with an already published or parked article. A title identical to one of those is not stored at all. The breakdown and a one-line motivation are stored with the score.
 
+## Scheduler
+
+Used by `openblog schedule run-once` (see Scheduling in `docs/operations.md`, ADR-042).
+
+| Variable                             | Default | Purpose                                                                                                     |
+| ------------------------------------ | ------- | ----------------------------------------------------------------------------------------------------------- |
+| `OPENBLOG_SCHEDULE_MAX_RUNS_PER_DAY` | none    | No run is started when this many runs were created in the last 24 hours (every run counts, manual ones too) |
+| `OPENBLOG_SCHEDULE_MAX_COST_PER_DAY` | none    | No run is started when the steps finished in the last 24 hours cost this many USD, from the stored usage    |
+| `OPENBLOG_SCHEDULE_ALLOWED_WINDOW`   | none    | Local time window `HH:MM-HH:MM` (it may cross midnight, e.g. `22:00-06:00`) in which a run may be started   |
+| `OPENBLOG_SCHEDULE_LOCK_TTL_MINUTES` | `120`   | After this long the lock of a `run-once` whose process died is taken over; keep it above the longest run    |
+
 ## Grounded generation
 
 | Variable                                | Default | Purpose                                                                                       |
